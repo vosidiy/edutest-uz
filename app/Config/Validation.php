@@ -41,4 +41,68 @@ class Validation extends BaseConfig
     // --------------------------------------------------------------------
     // Rules
     // --------------------------------------------------------------------
+
+    /** @var array<string, array<string, list<string>|string>> */
+    public array $registration = [
+        'display_name' => [
+            'label' => 'EduTest.displayName',
+            'rules' => [
+                'required',
+                'max_length[120]',
+            ],
+        ],
+        'email' => [
+            'label' => 'EduTest.email',
+            'rules' => [
+                'required',
+                'max_length[254]',
+                'valid_email',
+                'is_unique[users.email]',
+            ],
+        ],
+        'phone' => [
+            'label' => 'EduTest.phone',
+            'rules' => [
+                'permit_empty',
+                'regex_match[/^\+?[0-9]{7,15}$/]',
+            ],
+        ],
+        'password' => [
+            'label' => 'EduTest.password',
+            'rules' => [
+                'required',
+                'min_length[6]',
+                'max_byte[72]',
+            ],
+            'errors' => [
+                'max_byte' => 'EduTest.passwordTooLong',
+            ],
+        ],
+        'password_confirm' => [
+            'label' => 'EduTest.passwordConfirm',
+            'rules' => [
+                'required',
+                'matches[password]',
+            ],
+        ],
+    ];
+
+    /** @var array<string, array<string, list<string>|string>> */
+    public array $login = [
+        'email' => [
+            'label' => 'EduTest.email',
+            'rules' => [
+                'required',
+                'max_length[254]',
+                'valid_email',
+            ],
+        ],
+        'password' => [
+            'label' => 'EduTest.password',
+            'rules' => [
+                'required',
+                'max_byte[72]',
+            ],
+        ],
+    ];
 }
