@@ -17,7 +17,7 @@ final class LoginController extends BaseController
     public function index(): string|RedirectResponse
     {
         if (service('auth')->check()) {
-            return redirect()->to('/');
+            return redirect()->route('quizzes');
         }
 
         return view('auth/login');
@@ -62,7 +62,7 @@ final class LoginController extends BaseController
 
         $throttler->remove($rateKey);
 
-        return redirect()->to('/');
+        return redirect()->route('quizzes');
     }
 
     public function logout(): RedirectResponse
@@ -74,7 +74,7 @@ final class LoginController extends BaseController
 
     private function rateKey(string $email): string
     {
-        return 'auth-login:' . hash(
+        return 'auth-login_' . hash(
             'sha256',
             $this->request->getIPAddress() . "\0" . $email,
         );

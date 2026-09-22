@@ -4,6 +4,9 @@ namespace Config;
 
 use App\Models\UserModel;
 use App\Services\AuthService;
+use App\Services\MediaService;
+use App\Services\QuizAuthoringService;
+use App\Services\TeacherQueryService;
 use CodeIgniter\Config\BaseService;
 
 /**
@@ -28,5 +31,32 @@ class Services extends BaseService
         }
 
         return new AuthService(new UserModel(), static::session());
+    }
+
+    public static function media(bool $getShared = true): MediaService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('media');
+        }
+
+        return new MediaService();
+    }
+
+    public static function quizAuthoring(bool $getShared = true): QuizAuthoringService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('quizAuthoring');
+        }
+
+        return new QuizAuthoringService(null, static::media());
+    }
+
+    public static function teacherQueries(bool $getShared = true): TeacherQueryService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('teacherQueries');
+        }
+
+        return new TeacherQueryService();
     }
 }

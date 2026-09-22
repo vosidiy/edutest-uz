@@ -7,6 +7,11 @@
 - Canonical application schema in `docs/schema.sql`.
 - Consolidated CodeIgniter 4 guidance in `docs/SKILL.md`.
 - Project-owned session authentication, teacher registration, and schema-backed application models.
+- Authenticated teacher dashboard and searchable quiz library with real empty states and aggregate metrics.
+- Vue-powered quiz builder with hybrid autosave, optimistic conflicts, preview, all schema-backed settings, question types, and answer editing.
+- Quiz publishing, close/reopen, archive/restore, soft-delete/restore, duplication, and frozen-content enforcement.
+- Private question/option image and audio storage, validated external video URLs, and short-lived signed media delivery.
+- Stable public quiz-information pages for published and closed quizzes.
 
 ### Changed
 
@@ -16,6 +21,9 @@
 - Clarified documentation authority and removed a Shield-specific filter from the generic CI4 route example.
 - Replaced Shield with a single-table email/password authentication design and made `schema.sql` a complete ready-to-import schema.
 - Added optional registration phone numbers, authentication throttling, secure password hashing/rehashing, and reserved recovery fields.
+- Redirected authenticated registration and login flows to the quiz library while retaining the public landing page at `/`.
+- Updated authentication throttling and validation integration for CodeIgniter 4.7 compatibility.
+- Pinned and self-hosted the Vue 3.5.43 production global build for the builder.
 
 ### Removed
 

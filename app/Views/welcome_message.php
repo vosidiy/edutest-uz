@@ -23,7 +23,12 @@
             <a href="#quiz-modes">Quiz modes</a>
             <a href="#use-cases">Use cases</a>
         </div>
-        <a class="button button-small button-outline" href="#how-it-works">How it works</a>
+        <?php if ($authenticated ?? false) : ?>
+            <a class="button button-small button-outline" href="<?= site_url('quizzes') ?>">My quizzes</a>
+        <?php else : ?>
+            <a class="nav-signin" href="<?= site_url('login') ?>">Sign in</a>
+            <a class="button button-small button-outline" href="<?= site_url('register') ?>">Get started</a>
+        <?php endif ?>
     </nav>
 </header>
 

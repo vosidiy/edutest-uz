@@ -49,6 +49,16 @@ Browser state is limited by mode:
 - Assessments store the bearer credential in same-tab `sessionStorage`; the server remains authoritative for answers, progress, and deadlines.
 - Practice stores its progress and review data in the current tab only; clearing tab storage loses the session.
 
+### Implemented teacher authoring
+
+Authenticated teacher pages are server-rendered at `/dashboard` and `/quizzes`. The builder at `/quizzes/{publicId}/edit` uses the locally vendored Vue 3.5.43 global production build and same-origin JSON endpoints under `/api/v1`.
+
+The builder saves one versioned quiz document. Changes autosave after a short delay and may also be saved explicitly; mutations are serialized so regenerated CSRF tokens remain ordered. The service locks the owned quiz, compares its version, and writes quiz, question, and option changes in one transaction. A version mismatch returns `409` and the UI requires the teacher to reload or explicitly overwrite.
+
+Lifecycle changes are service-owned: drafts publish only after full content validation; published quizzes close and closed quizzes reopen; quizzes can be archived, duplicated, soft-deleted, and restored. The first future student start freezes authored content. Frozen quizzes retain policy-only edits and must be duplicated for content changes.
+
+Published and closed quizzes have a stable `/q/{shareToken}` information page. Until the student runner milestone, this page intentionally exposes only safe quiz metadata and an availability notice.
+
 ## Identity and authorization
 
 EduTest owns email/password registration, login, logout, and credential storage. Persistent account, profile, password-hash, and reserved recovery fields live in the single `users` table. The session stores only the authenticated user ID; CI4 file/cache storage holds temporary sessions, CSRF state, and rate-limit buckets.
@@ -95,6 +105,10 @@ Questions and options may reference one image, audio file, or supported external
 
 Validate file size, decoded content/MIME, and ownership. Re-encode images where required, reject unsafe formats, and serve private files only through short-lived signed URLs. A stored private path must never appear in a client response.
 
+The authoring implementation stores random quiz media below `writable/uploads/quiz-media`. JPEG, PNG, and WebP uploads are decoded and re-encoded; supported audio is content-validated and stored with a server-selected extension. YouTube, Vimeo, and direct HTTPS MP4 URLs are normalized rather than accepted as arbitrary embed markup. Question and option media mutations follow the complete ownership chain and increment the quiz version.
+
+Private images and audio are delivered through expiring HMAC-signed `/media/{token}` URLs with range support and `nosniff`/private-cache headers. Signing uses the untracked `encryption.key` environment value; database responses contain a temporary playback URL, never `media_src`.
+
 ## API and errors
 
 Use same-origin JSON under `/api/v1` for interactive operations. Responses use consistent success/error envelopes and UTC timestamps. Serialize large numeric IDs as strings for JavaScript safety.
@@ -106,3 +120,5 @@ Return appropriate 4xx errors for validation, authentication, authorization, mis
 Local development uses MAMP and phpMyAdmin. Production targets cPanel/shared hosting with TLS, SMTP, cron, backups, and `public/` as the preferred document root.
 
 Keep secrets in `.env`, writable data private, production errors hidden, and ordinary logs free of credentials, tokens, signed URLs, and practice bodies. Back up the database and media before applying SQL changes and test restore procedures before launch.
+
+Authoring deployments require an untracked `encryption.key`. To support the documented 20 MiB audio limit, the PHP web runtime must set `upload_max_filesize` above 20 MiB and `post_max_size` above that value; the builder reports a configuration warning when the effective runtime limits are lower.

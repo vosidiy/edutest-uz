@@ -19,25 +19,27 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
 {
     use FeatureTestTrait;
 
-    private BaseConnection $db;
+    private BaseConnection $authDb;
     private Forge $forge;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->db    = Database::connect('tests');
+        $this->authDb = Database::connect('tests');
         $this->forge = Database::forge('tests');
 
-        if ($this->db->tableExists('users')) {
+        if ($this->authDb->tableExists('users')) {
             $this->forge->dropTable('users', true);
         }
 
         $this->createUsersTable();
         service('cache')->clean();
+        Services::resetSingle('throttler');
         service('session')->destroy();
         $_SESSION = [];
         Services::resetSingle('auth');
+        Services::resetSingle('throttler');
     }
 
     protected function tearDown(): void
@@ -46,7 +48,7 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
         service('session')->destroy();
         $_SESSION = [];
 
-        if ($this->db->tableExists('users')) {
+        if ($this->authDb->tableExists('users')) {
             $this->forge->dropTable('users', true);
         }
 
@@ -63,12 +65,12 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
             'password_confirm' => 'secret1',
         ]));
 
-        $result->assertRedirectTo(rtrim(site_url('/'), '/'));
+        $result->assertRedirectTo(site_url('quizzes'));
         $result->assertSessionHas(AuthService::SESSION_KEY);
         $result->assertSessionMissing('password');
         $result->assertSessionMissing('password_confirm');
 
-        $user = $this->db->table('users')->get()->getRowArray();
+        $user = $this->authDb->table('users')->get()->getRowArray();
         $this->assertNotNull($user);
         $this->assertSame('ada@example.test', $user['email']);
         $this->assertSame('Ada Lovelace', $user['display_name']);
@@ -90,7 +92,7 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
 
         $this->withoutGlobalFilters(fn () => $this->post('/register', $data));
 
-        $user = $this->db->table('users')->get()->getRowArray();
+        $user = $this->authDb->table('users')->get()->getRowArray();
         $this->assertNull($user['phone']);
     }
 
@@ -104,7 +106,7 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
         $result->assertRedirect();
         $result->assertSessionHas('errors');
         $result->assertSessionMissing('password');
-        $this->assertSame(0, $this->db->table('users')->countAllResults());
+        $this->assertSame(0, $this->authDb->table('users')->countAllResults());
     }
 
     public static function invalidRegistrationProvider(): iterable
@@ -128,23 +130,23 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
 
         $result->assertRedirect();
         $result->assertSessionHas('errors');
-        $this->assertSame(1, $this->db->table('users')->countAllResults());
+        $this->assertSame(1, $this->authDb->table('users')->countAllResults());
     }
 
     public function testLoginNormalizesEmailUpdatesHashAndStartsSession(): void
     {
         $userId  = $this->insertUser();
-        $oldHash = $this->db->table('users')->where('id', $userId)->get()->getRow('password_hash');
+        $oldHash = $this->authDb->table('users')->where('id', $userId)->get()->getRow('password_hash');
 
         $result = $this->withoutGlobalFilters(fn () => $this->post('/login', [
             'email'    => ' TEACHER@EXAMPLE.TEST ',
             'password' => 'secret1',
         ]));
 
-        $result->assertRedirectTo(rtrim(site_url('/'), '/'));
+        $result->assertRedirectTo(site_url('quizzes'));
         $result->assertSessionHas(AuthService::SESSION_KEY, $userId);
 
-        $user = $this->db->table('users')->where('id', $userId)->get()->getRowArray();
+        $user = $this->authDb->table('users')->where('id', $userId)->get()->getRowArray();
         $this->assertNotNull($user['last_login_at']);
         $this->assertNotSame($oldHash, $user['password_hash']);
         $this->assertTrue(password_verify('secret1', $user['password_hash']));
@@ -188,8 +190,8 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
             fn () => $this->withSession($session)->get('/register'),
         );
 
-        $login->assertRedirectTo(rtrim(site_url('/'), '/'));
-        $register->assertRedirectTo(rtrim(site_url('/'), '/'));
+        $login->assertRedirectTo(site_url('quizzes'));
+        $register->assertRedirectTo(site_url('quizzes'));
     }
 
     public function testPostLogoutClearsTheSession(): void
@@ -301,7 +303,7 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
         bool $deleted = false,
     ): int {
         $now = date('Y-m-d H:i:s');
-        $this->db->table('users')->insert([
+        $this->authDb->table('users')->insert([
             'email'         => $email,
             'password_hash' => password_hash($password, PASSWORD_BCRYPT, ['cost' => 4]),
             'display_name'  => 'Test Teacher',
@@ -316,6 +318,6 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
             'deleted_at'    => $deleted ? $now : null,
         ]);
 
-        return (int) $this->db->insertID();
+        return (int) $this->authDb->insertID();
     }
 }

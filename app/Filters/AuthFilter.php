@@ -13,6 +13,21 @@ final class AuthFilter implements FilterInterface
     public function before(RequestInterface $request, $arguments = null): ?ResponseInterface
     {
         if (! service('auth')->check()) {
+            if (preg_match('~(?:^|/)api/~', $request->getUri()->getPath()) === 1) {
+                return service('response')->setStatusCode(401)->setJSON([
+                    'error' => [
+                        'code'    => 'authentication_required',
+                        'message' => 'Authentication is required.',
+                        'fields'  => (object) [],
+                    ],
+                    'meta' => [
+                        'csrfHeader' => csrf_header(),
+                        'csrfToken'  => csrf_hash(),
+                        'timestamp'  => gmdate(DATE_ATOM),
+                    ],
+                ]);
+            }
+
             return redirect()->route('login');
         }
 

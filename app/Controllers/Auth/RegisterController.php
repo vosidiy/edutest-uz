@@ -18,7 +18,7 @@ final class RegisterController extends BaseController
     public function index(): string|RedirectResponse
     {
         if (service('auth')->check()) {
-            return redirect()->to('/');
+            return redirect()->route('quizzes');
         }
 
         return view('auth/register');
@@ -31,7 +31,7 @@ final class RegisterController extends BaseController
         }
 
         $throttler = service('throttler');
-        $rateKey   = 'auth-register:' . hash('sha256', $this->request->getIPAddress());
+        $rateKey   = 'auth-register_' . hash('sha256', $this->request->getIPAddress());
 
         if (! $throttler->check($rateKey, self::RATE_CAPACITY, self::RATE_SECONDS)) {
             return $this->response
@@ -71,7 +71,7 @@ final class RegisterController extends BaseController
                 ->with('old', $this->safeOldInput($data));
         }
 
-        return redirect()->to('/');
+        return redirect()->route('quizzes');
     }
 
     /** @return array{display_name: string, email: string, phone: string, password: string, password_confirm: string} */
