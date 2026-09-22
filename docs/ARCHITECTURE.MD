@@ -38,8 +38,8 @@ Use explicit routes with automatic routing disabled. Register fixed routes befor
 
 Server-rendered PHP is the default. Pages share accessible layouts, navigation, flash messages, form errors, and responsive CSS.
 
-- Teacher dashboard and reports use server-rendered views with small plain-JavaScript enhancements.
-- The quiz builder may use a pinned local Vue 3 production build without single-file components, Vite, or an SPA router.
+- Teacher dashboard, quiz library, and later reports use server-rendered views with small plain-JavaScript enhancements.
+- The quiz builder uses the pinned local Vue 3.5.43 global production build without single-file components, Vite, or an SPA router.
 - Student assessment and practice pages use plain JavaScript modules and server APIs.
 - Render authored content as escaped plain text. Do not send answer keys or private media paths before policy allows them.
 - Support keyboard use, visible focus, responsive layouts, clear save/retry states, and screen-reader-friendly status updates.
@@ -51,13 +51,21 @@ Browser state is limited by mode:
 
 ### Implemented teacher authoring
 
-Authenticated teacher pages are server-rendered at `/dashboard` and `/quizzes`. The builder at `/quizzes/{publicId}/edit` uses the locally vendored Vue 3.5.43 global production build and same-origin JSON endpoints under `/api/v1`.
+Successful login and registration lead to `/quizzes`; `/dashboard` remains the overview. Authenticated teacher pages are server-rendered at `/dashboard`, `/quizzes`, `/quizzes/archived`, `/quizzes/trash`, and `/quizzes/{publicId}/edit`. They share a responsive teacher layout with overview/library navigation, a deliberately unavailable Results item, profile context, and a CSRF-protected logout form.
 
-The builder saves one versioned quiz document. Changes autosave after a short delay and may also be saved explicitly; mutations are serialized so regenerated CSRF tokens remain ordered. The service locks the owned quiz, compares its version, and writes quiz, question, and option changes in one transaction. A version mismatch returns `409` and the UI requires the teacher to reload or explicitly overwrite.
+The dashboard queries quiz totals, published quizzes, finalized assessment submissions, practice starts, and recently changed quizzes. The library supports title search, status/mode filters, sorting, pagination, and separate active, archived, and trash views. Empty states and metrics always come from stored data.
 
-Lifecycle changes are service-owned: drafts publish only after full content validation; published quizzes close and closed quizzes reopen; quizzes can be archived, duplicated, soft-deleted, and restored. The first future student start freezes authored content. Frozen quizzes retain policy-only edits and must be duplicated for content changes.
+The builder uses the locally vendored Vue 3.5.43 global production build and same-origin JSON endpoints under `/api/v1`. It edits every schema-backed quiz setting and supports single choice, multi-select, short text, and a true/false single-choice preset. Teacher preview renders the current document without grading, starting an attempt, or exposing it publicly.
 
-Published and closed quizzes have a stable `/q/{shareToken}` information page. Until the student runner milestone, this page intentionally exposes only safe quiz metadata and an availability notice.
+The builder saves one versioned quiz document containing settings, questions, options, accepted text answers, and safe media descriptors. Changes autosave one second after the last edit and may also be flushed explicitly; invalid documents enter a visible validation-error state instead of being persisted. Mutations are serialized so regenerated CSRF tokens remain ordered, and navigation warns while changes are pending. The service locks the owned quiz, compares its version, validates the complete aggregate and nested ownership, and writes quiz, question, and option changes in one transaction. A version mismatch returns `409` and pauses saving until the teacher reloads the server document or explicitly overwrites it.
+
+Passcodes use explicit `unchanged`, `set`, and `clear` operations. Only the configured/not-configured state is returned to the client; a passcode value or hash is never returned. IDs, share tokens, and option codes are generated on the server.
+
+Lifecycle changes are service-owned: drafts publish only after full content validation; published quizzes close and closed quizzes reopen; any active quiz may be archived. Unarchiving returns an unfrozen quiz to draft and a frozen quiz to closed. Published quizzes must first be closed or archived before soft deletion, and restoration preserves the stored lifecycle status. Duplication creates an unfrozen, unlisted draft with new identifiers, zero activity, and independent media copies.
+
+The future student-start transaction will set `frozen_at` on the first real start. Once frozen, mode, authored text, timers, questions, answers, explanations, points, and media cannot change. Status, listing, schedule, admission fields, feedback/visibility policy, shuffling, and integrity policy remain editable for future starts.
+
+Published and closed quizzes have a stable `/q/{shareToken}` information page. Draft, archived, deleted, and unknown tokens return 404. Until the student runner milestone, the page exposes only safe quiz metadata, teacher display name, availability/passcode indicators, and a notice that taking the quiz is unavailable; it never exposes questions, answers, hashes, or private paths.
 
 ## Identity and authorization
 
@@ -105,13 +113,17 @@ Questions and options may reference one image, audio file, or supported external
 
 Validate file size, decoded content/MIME, and ownership. Re-encode images where required, reject unsafe formats, and serve private files only through short-lived signed URLs. A stored private path must never appear in a client response.
 
-The authoring implementation stores random quiz media below `writable/uploads/quiz-media`. JPEG, PNG, and WebP uploads are decoded and re-encoded; supported audio is content-validated and stored with a server-selected extension. YouTube, Vimeo, and direct HTTPS MP4 URLs are normalized rather than accepted as arbitrary embed markup. Question and option media mutations follow the complete ownership chain and increment the quiz version.
+The authoring implementation stores random quiz media below `writable/uploads/quiz-media`. JPEG, PNG, and WebP images up to 5 MiB are decoded and re-encoded to strip metadata; supported audio up to 20 MiB is content-validated and stored with a server-selected extension. YouTube, Vimeo, and direct HTTPS MP4 URLs are normalized rather than accepted as arbitrary embed markup. Question and option media mutations require a persisted owned target, follow the complete ownership chain, compare the current quiz version, and increment it transactionally.
+
+Failed media writes remove newly created files. Replaced or deleted files are cleaned after the database commit, while soft-deleted quiz media is retained for restoration. Duplicated quizzes receive physically independent copies of uploaded media.
 
 Private images and audio are delivered through expiring HMAC-signed `/media/{token}` URLs with range support and `nosniff`/private-cache headers. Signing uses the untracked `encryption.key` environment value; database responses contain a temporary playback URL, never `media_src`.
 
 ## API and errors
 
-Use same-origin JSON under `/api/v1` for interactive operations. Responses use consistent success/error envelopes and UTC timestamps. Serialize large numeric IDs as strings for JavaScript safety.
+The implemented authoring API provides CSRF recovery; quiz create/load/save; publish, close, reopen, archive, unarchive, trash, restore, and duplicate actions; and question/option media replacement and removal. All routes require the teacher session and mutation routes remain CSRF-protected.
+
+Responses use `{data, meta}` and `{error, meta}` envelopes with camelCase fields. Timestamps are UTC ISO strings, decimals are exact strings, and numeric database IDs are serialized as strings for JavaScript safety. Authoring services derive ownership only from the authenticated session and ignore submitted ownership identifiers.
 
 Return appropriate 4xx errors for validation, authentication, authorization, missing resources, expired credentials, and version conflicts. Do not expose stack traces, SQL, secrets, or internal filesystem paths.
 

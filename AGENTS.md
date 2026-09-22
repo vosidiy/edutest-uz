@@ -8,7 +8,7 @@ EduTest is a CodeIgniter 4 quiz platform in early development. Keep changes alig
 - `docs/ARCHITECTURE.MD` — frontend/backend design and runtime behavior.
 - `docs/schema.sql` — the only source of truth for database structure.
 - `docs/SKILL.md` — general CodeIgniter 4 implementation guidance.
-- `docs/CHANGELOG.md` — notable changes.
+- `docs/CHANGELOG.md` — notable changes (always need to update whenever new changes made).
 
 The user's current request governs the requested change. Otherwise, use each document for its own domain:
 

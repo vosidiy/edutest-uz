@@ -83,12 +83,12 @@ The aggregate counter represents deduplicated starts, not unique people or compl
 
 ## Delivery milestones
 
-1. Foundation — CI4, project-owned session authentication, profiles, and the canonical SQL schema.
-2. Authoring — quiz lifecycle, builder, media, preview, sharing, and public profiles.
+1. Foundation — CI4, project-owned session authentication/account identity, and the canonical SQL schema.
+2. Authoring — teacher dashboard/library, quiz lifecycle, builder, private media, preview, and the stable public quiz-information page. Public teacher profiles remain deferred.
 3. Assessment — admission, autosave, locking, timers, scoring, feedback, results, and CSV.
 4. Practice — anonymous tickets, stateless grading, review receipts, and start counting.
 5. Launch — integrity events, accessibility, race/load/security tests, backups, and cPanel deployment.
-6. Later — standalone offline quiz export, PDF, validated AI-assisted drafts, question banks, quotas, and monetization.
+6. Later — public teacher profiles, standalone offline quiz export, PDF, validated AI-assisted drafts, question banks, quotas, and monetization.
 
 ## Defaults and exclusions
 
