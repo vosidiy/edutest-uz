@@ -16,6 +16,7 @@
 - Private question/option image and audio storage, content-derived validation, image metadata stripping, validated external video URLs, replacement cleanup, and short-lived signed media delivery with range support.
 - Stable public quiz-information pages for published and closed quizzes with safe metadata and pre-student-runner availability messaging.
 - Isolated authoring and route tests covering ownership, validation, conflicts, lifecycle transitions, practice constraints, frozen policies, private media, unsafe uploads/URLs, signed credentials, and unauthenticated access.
+- Teacher-scoped CSS design-system primitives for buttons, cards, forms, badges, alerts, dialogs, tables, tabs, menus, empty states, and accessibility helpers.
 
 ### Changed
 
@@ -29,6 +30,7 @@
 - Updated the landing page to send authenticated teachers directly to their quiz library.
 - Updated authentication throttling and validation integration for CodeIgniter 4.7 compatibility.
 - Pinned and self-hosted the Vue 3.5.43 production global build for the builder.
+- Refactored the teacher dashboard, quiz library, builder, and dialogs onto a tokenized indigo light theme with a curated reset and composable component classes.
 
 ### Security
 

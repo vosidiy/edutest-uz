@@ -44,6 +44,8 @@ Server-rendered PHP is the default. Pages share accessible layouts, navigation, 
 - Render authored content as escaped plain text. Do not send answer keys or private media paths before policy allows them.
 - Support keyboard use, visible focus, responsive layouts, clear save/retry states, and screen-reader-friendly status updates.
 
+The teacher workspace keeps its light-theme design system in `public/assets/css/teacher.css`: color and typography tokens, a curated reset, accessibility utilities, and reusable button, card, form, badge, alert, dialog, table, tab, menu, empty-state, and toast components. Teacher views compose those primitives with page-specific layout classes. The landing, authentication, public quiz, and framework error pages retain their independent styling until a later shared-design migration.
+
 Browser state is limited by mode:
 
 - Assessments store the bearer credential in same-tab `sessionStorage`; the server remains authoritative for answers, progress, and deadlines.

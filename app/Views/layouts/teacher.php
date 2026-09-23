@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-header" content="<?= esc(csrf_header(), 'attr') ?>">
     <meta name="csrf-token" content="<?= esc(csrf_hash(), 'attr') ?>">
-    <meta name="theme-color" content="#101c2c">
+    <meta name="theme-color" content="#0f172a">
     <title><?= esc($title ?? 'EduTest') ?></title>
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="stylesheet" href="/assets/css/teacher.css">
@@ -42,7 +42,7 @@
             <span class="profile-copy"><strong><?= esc($displayName) ?></strong><small>Teacher workspace</small></span>
             <form action="<?= site_url('logout') ?>" method="post">
                 <?= csrf_field() ?>
-                <button class="logout-button" type="submit" title="Sign out" aria-label="Sign out">↪</button>
+                <button class="btn btn-sm btn-icon sidebar-logout" type="submit" title="Sign out" aria-label="Sign out">↪</button>
             </form>
         </div>
     </aside>
