@@ -48,6 +48,10 @@ final class MediaService
         }
 
         [$mediaType, $extension, $mime] = $this->validateUpload($file);
+        if ($target === 'cover' && $mediaType !== 'image') {
+            throw new AuthoringException('invalid_cover', lang('Player.errors.invalid_cover'), 422);
+        }
+        $targetId = (int) $record['id'];
         $relative = $this->relativePath($userId, (int) $record['quiz_id'], $extension);
         $absolute = $this->absolutePath($relative);
         $directory = dirname($absolute);
@@ -103,6 +107,7 @@ final class MediaService
         }
 
         $normalized = $this->normalizeVideoUrl($url);
+        if ($target === 'cover') throw new AuthoringException('invalid_cover', lang('Player.errors.invalid_cover'), 422);
 
         if ($normalized === null) {
             throw new AuthoringException(
@@ -133,6 +138,7 @@ final class MediaService
         ?int $expectedVersion = null,
     ): array {
         $record = $this->ownedTarget($userId, $quizPublicId, $target, $targetId, true);
+        $targetId = (int) $record['id'];
 
         if ($record['status'] === 'archived') {
             throw new AuthoringException('quiz_archived', 'Restore this quiz from the archive before changing media.', 409);
@@ -159,18 +165,18 @@ final class MediaService
         $target  = $payload['target'] ?? '';
         $id      = isset($payload['id']) ? (int) $payload['id'] : 0;
 
-        if (! in_array($target, ['question', 'option'], true) || $id < 1) {
+        if (! in_array($target, ['question', 'option', 'cover'], true) || $id < 1) {
             throw new AuthoringException('media_not_found', 'Media not found.', 404);
         }
 
-        $table = $target === 'question' ? 'questions' : 'question_options';
+        $table = match ($target) { 'question' => 'questions', 'cover' => 'quizzes', default => 'question_options' };
         $row   = $this->db->table($table)
-            ->select('media_type, media_src')
+            ->select($target === 'cover' ? "'image' AS media_type, cover_src AS media_src" : 'media_type, media_src')
             ->where('id', $id)
             ->get()
             ->getRowArray();
 
-        if ($row === null || ! in_array($row['media_type'], ['image', 'audio'], true)) {
+        if ($row === null || $row['media_src'] === null || ! in_array($row['media_type'], ['image', 'audio'], true)) {
             throw new AuthoringException('media_not_found', 'Media not found.', 404);
         }
 
@@ -284,8 +290,12 @@ final class MediaService
             throw new AuthoringException('media_too_large', "The {$type} must not exceed {$label}.", 422);
         }
 
-        if ($type === 'image' && @getimagesize($file->getTempName()) === false) {
-            throw new AuthoringException('invalid_image', 'The uploaded image could not be decoded.', 422);
+        if ($type === 'image') {
+            $sizeInfo = @getimagesize($file->getTempName());
+            // Bound decoded memory, not just compressed file size, before invoking GD.
+            if ($sizeInfo === false || $sizeInfo[0] * $sizeInfo[1] > 16000000) {
+                throw new AuthoringException('invalid_image', 'The uploaded image could not be safely decoded (maximum 16 megapixels).', 422);
+            }
         }
 
         return [$type, $extension, $mime];
@@ -332,12 +342,16 @@ final class MediaService
         $this->db->transBegin();
 
         try {
-            $sql = 'SELECT version FROM ' . $this->db->prefixTable('quizzes') . ' WHERE id = ?';
+            $sql = 'SELECT version, frozen_at, status, deleted_at FROM ' . $this->db->prefixTable('quizzes') . ' WHERE id = ?';
             if ($this->db->DBDriver !== 'SQLite3') {
                 $sql .= ' FOR UPDATE';
             }
-            $version = (int) $this->db->query($sql, [$record['quiz_id']])->getRow('version');
-            if ($expectedVersion !== null && $version !== $expectedVersion) {
+            $quiz = $this->db->query($sql, [$record['quiz_id']])->getRowArray();
+            if ($quiz === null || $quiz['deleted_at'] !== null) throw new AuthoringException('media_not_found', 'Media target not found.', 404);
+            if ($quiz['frozen_at'] !== null) throw new AuthoringException('quiz_frozen', 'Frozen quiz media cannot be changed.', 409);
+            if ($quiz['status'] === 'archived') throw new AuthoringException('quiz_archived', 'Restore this quiz before changing media.', 409);
+            $version = (int) $quiz['version'];
+            if ($version !== (int) $record['version'] || ($expectedVersion !== null && $version !== $expectedVersion)) {
                 throw new AuthoringException(
                     'version_conflict',
                     'This quiz was changed in another tab.',
@@ -345,12 +359,10 @@ final class MediaService
                     ['version' => (string) $version],
                 );
             }
-            $table = $target === 'question' ? 'questions' : 'question_options';
-            $this->db->table($table)->where('id', $targetId)->update([
-                'media_type' => $type,
-                'media_src'  => $src,
-                'updated_at' => $this->now(),
-            ]);
+            $table = match ($target) { 'question' => 'questions', 'cover' => 'quizzes', default => 'question_options' };
+            if ($this->db->table($table)->where('id', $targetId)->countAllResults() !== 1) throw new AuthoringException('media_not_found', 'Media target not found.', 404);
+            $change = $target === 'cover' ? ['cover_src' => $src] : ['media_type' => $type, 'media_src' => $src];
+            $this->db->table($table)->where('id', $targetId)->update($change + ['updated_at' => $this->now()]);
             $this->db->table('quizzes')->where('id', $record['quiz_id'])->update([
                 'version'    => $version + 1,
                 'updated_at' => $this->now(),
@@ -375,11 +387,15 @@ final class MediaService
         int $targetId,
         bool $lock,
     ): array {
-        if (! in_array($target, ['question', 'option'], true)) {
+        if (! in_array($target, ['question', 'option', 'cover'], true)) {
             throw new AuthoringException('media_not_found', 'Media target not found.', 404);
         }
 
-        if ($target === 'question') {
+        if ($target === 'cover') {
+            $sql = "SELECT z.id, z.id AS quiz_id, CASE WHEN z.cover_src IS NULL THEN NULL ELSE 'image' END AS media_type,
+                    z.cover_src AS media_src, z.version, z.frozen_at, z.status FROM " . $this->db->prefixTable('quizzes') . ' z
+                    WHERE z.public_id = ? AND z.user_id = ? AND z.deleted_at IS NULL';
+        } elseif ($target === 'question') {
             $sql = 'SELECT q.id, q.quiz_id, q.media_type, q.media_src, z.version, z.frozen_at, z.status
                     FROM ' . $this->db->prefixTable('questions') . ' q JOIN ' . $this->db->prefixTable('quizzes') . ' z ON z.id = q.quiz_id
                     WHERE q.id = ? AND z.public_id = ? AND z.user_id = ? AND z.deleted_at IS NULL';
@@ -395,7 +411,7 @@ final class MediaService
             $sql .= ' FOR UPDATE';
         }
 
-        $row = $this->db->query($sql, [$targetId, $quizPublicId, $userId])->getRowArray();
+        $row = $this->db->query($sql, $target === 'cover' ? [$quizPublicId, $userId] : [$targetId, $quizPublicId, $userId])->getRowArray();
 
         if ($row === null) {
             throw new AuthoringException('media_not_found', 'Media target not found.', 404);

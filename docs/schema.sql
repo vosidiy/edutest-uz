@@ -1,6 +1,6 @@
 -- EduTest canonical application schema
 -- Target: MySQL 8.4, InnoDB, utf8mb4
--- Last updated: 2026-09-22
+-- Last updated: 2026-09-26
 --
 -- Fresh-install use in phpMyAdmin:
 --   1. Select the intended empty database.
@@ -52,6 +52,7 @@ CREATE TABLE quizzes (
   title VARCHAR(200) NOT NULL,
   description TEXT NOT NULL,
   instructions TEXT NOT NULL,
+  cover_src VARCHAR(1000) NULL,
   revision INT UNSIGNED NOT NULL DEFAULT 1,
   version INT UNSIGNED NOT NULL DEFAULT 1,
   frozen_at DATETIME(6) NULL,
@@ -214,6 +215,7 @@ CREATE TABLE attempts (
   due_at DATETIME(6) NULL,
   submitted_at DATETIME(6) NULL,
   finish_reason VARCHAR(20) COLLATE utf8mb4_bin NULL,
+  late_sync TINYINT(1) NOT NULL DEFAULT 0,
   score DECIMAL(12,2) NULL,
   max_score DECIMAL(12,2) NOT NULL,
   percent DECIMAL(5,2) NULL,
@@ -237,6 +239,8 @@ CREATE TABLE attempts (
     ),
   CONSTRAINT chk_attempts_max_score
     CHECK (max_score > 0),
+  CONSTRAINT chk_attempts_late_sync
+    CHECK (late_sync IN (0, 1)),
   CONSTRAINT chk_attempts_score
     CHECK (score IS NULL OR (score >= 0 AND score <= max_score)),
   CONSTRAINT chk_attempts_percent

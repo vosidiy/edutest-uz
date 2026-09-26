@@ -35,6 +35,7 @@
         autosaveTimer: null,
         hydrating: true,
         passcodeValue: '',
+        coverUploading: false,
         conflictVersion: null
       };
     },
@@ -224,6 +225,7 @@
         return optionIndex === null ? question : question?.options?.[optionIndex];
       },
       targetEndpoint(questionIndex, optionIndex) {
+        if (questionIndex === -1) return `/api/v1/quizzes/${this.publicId}/cover`;
         const target = this.targetAt(questionIndex, optionIndex);
         if (!target?.id) return null;
         return optionIndex === null
@@ -243,6 +245,7 @@
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/jpeg,image/png,image/webp,audio/mpeg,audio/mp4,audio/ogg,audio/wav';
+        if (questionIndex === -1) input.accept = 'image/jpeg,image/png,image/webp';
         input.addEventListener('change', async () => {
           if (!input.files?.[0]) return;
           const file = input.files[0];
@@ -279,11 +282,13 @@
       },
       async runMedia(endpoint, options, questionIndex, optionIndex) {
         this.globalError = '';
+        if (questionIndex === -1) this.coverUploading = true;
         try {
           const response = await EduTestApi.request(endpoint, options);
           this.hydrating = true;
           this.quiz.version = response.data.version;
-          this.targetAt(questionIndex, optionIndex).media = response.data.media;
+          if (questionIndex === -1) this.quiz.cover = response.data.media;
+          else this.targetAt(questionIndex, optionIndex).media = response.data.media;
           this.lastSavedAt = new Date();
           this.saveState = 'saved';
           this.$nextTick(() => { this.hydrating = false; });
@@ -291,6 +296,7 @@
           this.globalError = error.message;
           this.saveState = error.code === 'version_conflict' ? 'conflict' : 'retry';
         }
+        finally { if (questionIndex === -1) this.coverUploading = false; }
       },
       async lifecycle(action) {
         if (!await this.save(true)) return;

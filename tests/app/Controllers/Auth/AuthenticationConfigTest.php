@@ -43,7 +43,9 @@ final class AuthenticationConfigTest extends CIUnitTestCase
     {
         $filters = new Filters();
 
-        $this->assertContains('csrf', $filters->globals['before']);
+        $this->assertArrayHasKey('csrf', $filters->globals['before']);
+        $this->assertSame(['q/*', 'api/v1/player/*', 'media/*'], $filters->globals['before']['csrf']['except']);
+        $this->assertNotContains('api/v1/quizzes/*', $filters->globals['before']['csrf']['except']);
         $this->assertSame(AuthFilter::class, $filters->aliases['auth']);
         $this->assertSame([], $filters->filters);
     }

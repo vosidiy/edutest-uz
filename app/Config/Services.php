@@ -24,6 +24,12 @@ use CodeIgniter\Config\BaseService;
  */
 class Services extends BaseService
 {
+    public static function player(bool $getShared = true): \App\Services\Player\PlayerRuntime
+    {
+        if ($getShared) return static::getSharedInstance('player');
+        return new \App\Services\Player\PlayerRuntime();
+    }
+
     public static function auth(bool $getShared = true): AuthService
     {
         if ($getShared) {

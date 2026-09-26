@@ -27,13 +27,14 @@ class Filters extends BaseFilters
      */
     public array $aliases = [
         'csrf'          => CSRF::class,
-        'toolbar'       => DebugToolbar::class,
+        'toolbar'       => \App\Filters\PrivateDebugToolbar::class,
         'honeypot'      => Honeypot::class,
         'invalidchars'  => InvalidChars::class,
         'secureheaders' => SecureHeaders::class,
         'cors'          => Cors::class,
         'forcehttps'    => ForceHTTPS::class,
-        'pagecache'     => PageCache::class,
+        'pagecache'     => \App\Filters\PrivatePageCache::class,
+        'player'        => \App\Filters\PlayerRequestFilter::class,
         'performance'   => PerformanceMetrics::class,
         'auth'          => AuthFilter::class,
     ];
@@ -75,7 +76,8 @@ class Filters extends BaseFilters
     public array $globals = [
         'before' => [
             // 'honeypot',
-            'csrf',
+            // Public student pages have no session. Only stateless student API routes are exempt.
+            'csrf' => ['except' => ['q/*', 'api/v1/player/*', 'media/*']],
             // 'invalidchars',
         ],
         'after' => [

@@ -6,7 +6,20 @@ use CodeIgniter\Router\RouteCollection;
 $routes->get('/', 'Home::index');
 
 $routes->get('q/(:segment)', 'PublicSite\QuizController::show/$1', ['as' => 'public-quiz']);
+$routes->get('q/(:segment)/play', 'PublicSite\QuizController::play/$1');
+$routes->get('q/(:segment)/results', 'PublicSite\QuizController::results/$1');
 $routes->get('media/(:segment)', 'PublicSite\MediaController::show/$1', ['as' => 'signed-media']);
+
+$routes->group('api/v1/player', ['namespace' => 'App\Controllers\Student', 'filter' => 'player'], static function (RouteCollection $routes): void {
+    $routes->get('tickets/(:segment)', 'PlayerController::ticket/$1');
+    $routes->post('starts', 'PlayerController::start');
+    $routes->get('assessments/(:segment)', 'PlayerController::show/$1');
+    $routes->post('assessments/(:segment)/sync', 'PlayerController::sync/$1');
+    $routes->get('assessments/(:segment)/results', 'PlayerController::results/$1');
+    $routes->post('assessments/(:segment)/events', 'PlayerController::events/$1');
+    $routes->post('assessments/(:segment)/media', 'PlayerController::assessmentMedia/$1');
+    $routes->post('practice/media', 'PlayerController::practiceMedia');
+});
 
 $routes->group('', ['namespace' => 'App\Controllers\Teacher', 'filter' => 'auth'], static function (RouteCollection $routes): void {
     $routes->get('dashboard', 'DashboardController::index', ['as' => 'dashboard']);
@@ -25,6 +38,8 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api', 'filter' => 'aut
         $routes->post("quizzes/(:segment)/{$action}", "QuizController::transition/$1/{$action}");
     }
     $routes->post('quizzes/(:segment)/duplicate', 'QuizController::duplicate/$1');
+    $routes->post('quizzes/(:segment)/cover', 'MediaController::putCover/$1');
+    $routes->delete('quizzes/(:segment)/cover', 'MediaController::deleteCover/$1');
     $routes->post('quizzes/(:segment)/questions/(:num)/media', 'MediaController::putQuestion/$1/$2');
     $routes->delete('quizzes/(:segment)/questions/(:num)/media', 'MediaController::deleteQuestion/$1/$2');
     $routes->post('quizzes/(:segment)/options/(:num)/media', 'MediaController::putOption/$1/$2');

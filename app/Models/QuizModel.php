@@ -27,6 +27,7 @@ final class QuizModel extends Model
         'title',
         'description',
         'instructions',
+        'cover_src',
         'revision',
         'version',
         'frozen_at',

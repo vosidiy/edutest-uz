@@ -77,11 +77,8 @@ Do not alter the user's database unless explicitly asked. Import `docs/schema.sq
 ## Verification
 
 Run checks appropriate to the change and report only what actually ran:
-
+- Website is hosted on local MAMP server https://edutest-uz:8890/
 - Focused PHPUnit tests, then relevant broader tests.
-- A separate test database, never the MAMP development database.
 - `php spark routes` and `php spark filter:check` for route/filter changes.
-- Fresh import and schema comparison in a separate MySQL test database for database changes.
-- Owner/non-owner access, validation failures, retries, deadlines, and privacy-negative cases where relevant.
 
 If required tooling is unavailable, state what was not verified and how the user can verify it.

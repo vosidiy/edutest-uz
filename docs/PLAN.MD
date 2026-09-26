@@ -12,7 +12,7 @@ EduTest helps independent teachers, education centers acting through a teacher a
 | Identity | Name required; email/phone configurable | Anonymous |
 | Saved on server | Attempts, answers, and results | No individual answers or results |
 | Teacher sees | Results and analytics | Aggregate start count only |
-| Authority | Server controls timing and scoring | Browser progress is non-authoritative |
+| Authority | Server confirms scoring; offline timing is client-enforced | Browser progress and scoring are non-authoritative |
 
 ## Teacher experience
 
@@ -20,7 +20,7 @@ Teachers register with email/password, may provide a phone number, manage a publ
 
 Teachers can create, edit, duplicate, publish, close, archive, and soft-delete quizzes. Each quiz has a private share link and may optionally appear on the teacher's public page.
 
-Quiz settings include title, description, instructions, mode, availability dates, optional timers, shuffle options, feedback timing, and result visibility. Assessments may also require a passcode and collect email or phone.
+Quiz settings include title, description, instructions, an optional cover image, mode, availability dates, optional timers, shuffle options, feedback timing, and result visibility. Assessments may also require a passcode and collect email or phone. Teacher result reports and exports are deferred beyond the student-player milestone.
 
 ## Questions and media
 
@@ -42,9 +42,11 @@ The first real student start freezes authored quiz content. A teacher duplicates
 
 Students see one question at a time with clear progress, applicable timers, accessible controls, and a deliberate submit/skip action. Submitted answers cannot be edited and there is no backward navigation.
 
-Assessment drafts autosave to the server with visible saving, saved, and retry states. Practice progress is saved only in the current browser tab and is clearly labeled that way.
+Assessment drafts synchronize in the background with visible saving, saved, pending, and retry states. A tab-local outbox permits continued answering during a disconnect. Practice progress is saved only in the current browser tab and is clearly labeled that way.
 
 Feedback may appear after each answer or at the end. Correctness is shown at the configured time; score, correct answers, and explanations follow the teacher's visibility settings.
+
+Both modes preload all questions and answer keys at start. Options carry opaque server-generated codes; matching those codes supports instant feedback but does not hide the answers from browser inspection. Visibility settings govern presentation, not secrecy. Assessment results are provisional until server confirmation; practice results are local only.
 
 ## Scoring
 
@@ -65,11 +67,13 @@ Feedback may appear after each answer or at the end. Correctness is shown at the
 - Short text trims leading/trailing Unicode whitespace, collapses repeated internal Unicode whitespace to one space, and lowercases with Unicode-aware handling before exact comparison. Preserve punctuation and diacritics; do not apply accent folding or Unicode canonical normalization in the MVP.
 - Calculate with exact decimal arithmetic. Do not round per-option values; round each final question award half-up to two decimal places, then sum the rounded awards and calculate the percentage.
 
-One server-side scoring implementation must be shared by assessment and practice.
+One PHP scoring engine produces official assessment scores. Its JavaScript counterpart provides provisional assessment feedback and local practice scores; shared fixtures verify identical arithmetic and normalization.
 
 ## Assessment reliability and privacy
 
-Assessment timing uses server timestamps. Question, total, and scheduled closing deadlines are enforced even across retries or disconnections. Retried start/save/submit/continue requests must not create duplicate attempts, overwrite locked answers, or advance twice.
+Assessment start and receipt timestamps are server-generated. Question, total, and captured closing-time countdowns are enforced by the browser, including while disconnected. Late queued work is accepted and flagged, not claimed to have verified timing. Unfinished attempts are not automatically finalized while potentially unsynchronized work exists; abandoned attempts remain incomplete. Retried requests must not create duplicate attempts, overwrite locked answers, or advance twice.
+
+The first successful student start freezes content and media. Availability and policy changes apply to future starts; an existing authorized attempt can finish after a teacher closes, archives, or soft-deletes the quiz. Students can view their own finalized result with their tab-scoped bearer credential.
 
 Before starting, students are told which identity, network, browser, answer, timing, and integrity information the teacher receives. Integrity events are warnings and timeline signals only; they never automatically fail or penalize a student.
 
@@ -77,7 +81,7 @@ Teacher exports include finalized assessment identity/result fields but exclude 
 
 ## Practice privacy
 
-Practice creates no individual database result, identity, IP address, browser-agent record, server-side answer history, or teacher-visible session. The server grades over HTTPS without logging request/response bodies. A short-lived ticket supports the current tab; final review remains in that tab.
+Practice creates no individual database result, identity, IP address, browser-agent record, server-side answer history, or teacher-visible session. All grading and review are local; answers are never submitted. Signed tickets authorize starts/media without a PHP session. Only expiring deduplication keys and the aggregate count are persisted. Application debug/caching facilities must not retain student request/response bodies; deployment access logs require separate redaction.
 
 The aggregate counter represents deduplicated starts, not unique people or completions.
 
@@ -85,8 +89,8 @@ The aggregate counter represents deduplicated starts, not unique people or compl
 
 1. Foundation — CI4, project-owned session authentication/account identity, and the canonical SQL schema.
 2. Authoring — teacher dashboard/library, quiz lifecycle, builder, private media, preview, and the stable public quiz-information page. Public teacher profiles remain deferred.
-3. Assessment — admission, autosave, locking, timers, scoring, feedback, results, and CSV.
-4. Practice — anonymous tickets, stateless grading, review receipts, and start counting.
+3. Student player — assessment admission, background synchronization, offline-friendly timers, official scoring, feedback, and student results; anonymous practice with local grading and start counting.
+4. Teacher reporting — assessment result pages, analytics, and CSV exports (deferred).
 5. Launch — integrity events, accessibility, race/load/security tests, backups, and cPanel deployment.
 6. Later — public teacher profiles, standalone offline quiz export, PDF, validated AI-assisted drafts, question banks, quotas, and monetization.
 

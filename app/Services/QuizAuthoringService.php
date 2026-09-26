@@ -259,6 +259,9 @@ final class QuizAuthoringService
             foreach ($settings as $field) {
                 $update[$field] = $source[$field];
             }
+            if (($source['cover_src'] ?? null) !== null) {
+                $update['cover_src'] = $this->copyMedia('image', $source['cover_src'], $userId, (int) $newQuiz['id'], $copiedPaths);
+            }
             $this->db->table('quizzes')->where('id', $newQuiz['id'])->update($update);
 
             foreach ($sourceDocument['questions'] as $question) {
@@ -365,6 +368,11 @@ final class QuizAuthoringService
             'closesAt'         => $this->utcAtom($row['closes_at']),
             'passcodeRequired' => $row['passcode_hash'] !== null,
             'availability'     => $availability,
+            'shareToken'       => $shareToken,
+            'emailMode'        => (string) $row['email_mode'],
+            'phoneMode'        => (string) $row['phone_mode'],
+            'cheatCheck'       => (bool) $row['cheat_check'],
+            'cover'            => $this->media?->descriptor(($row['cover_src'] ?? null) === null ? null : 'image', $row['cover_src'] ?? null, 'cover', (int) $row['id']),
         ];
     }
 
@@ -785,6 +793,7 @@ final class QuizAuthoringService
             'title'            => (string) $quiz['title'],
             'description'      => (string) $quiz['description'],
             'instructions'     => (string) $quiz['instructions'],
+            'cover'            => $this->media?->descriptor(($quiz['cover_src'] ?? null) === null ? null : 'image', $quiz['cover_src'] ?? null, 'cover', (int) $quiz['id']),
             'timeLimitSec'     => $quiz['time_limit_sec'] === null ? null : (int) $quiz['time_limit_sec'],
             'timezone'         => $timezone,
             'opensAtLocal'     => $this->localValue($quiz['opens_at'], $timezone),

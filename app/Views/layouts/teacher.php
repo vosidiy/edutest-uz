@@ -25,7 +25,7 @@
             <a class="nav-link <?= ($activeNav ?? '') === 'quizzes' ? 'active' : '' ?>" href="<?= site_url('quizzes') ?>">
                 <span aria-hidden="true">▤</span> My quizzes
             </a>
-            <span class="nav-link disabled" aria-disabled="true" title="Results arrive with the assessment milestone">
+            <span class="nav-link disabled" aria-disabled="true" title="<?= esc(lang('Player.ui.teacherReportsLater'), 'attr') ?>">
                 <span aria-hidden="true">▥</span> Results <small>Later</small>
             </span>
         </nav>
@@ -51,7 +51,7 @@
     </main>
 </div>
 <div class="app-toast" id="app-toast" role="status" aria-live="polite"></div>
-<script src="/assets/js/teacher.js"></script>
+<script src="<?= esc(base_url('assets/js/teacher.js') . '?v=' . filemtime(FCPATH . 'assets/js/teacher.js'), 'attr') ?>"></script>
 <?= $this->renderSection('scripts') ?>
 </body>
 </html>

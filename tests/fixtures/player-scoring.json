@@ -1,0 +1,464 @@
+[
+  {
+    "name": "single correct",
+    "question": {
+      "id": "9007199254740993",
+      "type": "single_choice",
+      "points": "2.50",
+      "acceptedAnswers": [],
+      "correctCodes": [
+        "right"
+      ],
+      "options": [
+        {
+          "code": "wrong"
+        },
+        {
+          "code": "right"
+        }
+      ]
+    },
+    "answer": {
+      "answerCodes": [
+        "right"
+      ]
+    },
+    "expected": {
+      "result": "correct",
+      "points": "2.50"
+    }
+  },
+  {
+    "name": "single wrong",
+    "question": {
+      "id": "9007199254740993",
+      "type": "single_choice",
+      "points": "2.50",
+      "acceptedAnswers": [],
+      "correctCodes": [
+        "right"
+      ],
+      "options": [
+        {
+          "code": "wrong"
+        },
+        {
+          "code": "right"
+        }
+      ]
+    },
+    "answer": {
+      "answerCodes": [
+        "wrong"
+      ]
+    },
+    "expected": {
+      "result": "wrong",
+      "points": "0.00"
+    }
+  },
+  {
+    "name": "unanswered",
+    "question": {
+      "id": "9007199254740993",
+      "type": "single_choice",
+      "points": "2.50",
+      "acceptedAnswers": [],
+      "correctCodes": [
+        "right"
+      ],
+      "options": [
+        {
+          "code": "wrong"
+        },
+        {
+          "code": "right"
+        }
+      ]
+    },
+    "answer": {},
+    "expected": {
+      "result": "unanswered",
+      "points": "0.00"
+    }
+  },
+  {
+    "name": "proportional correct",
+    "question": {
+      "id": "2",
+      "type": "multi_select",
+      "points": "10.00",
+      "acceptedAnswers": [],
+      "correctCodes": [
+        "a",
+        "b",
+        "c"
+      ],
+      "options": [
+        {
+          "code": "a"
+        },
+        {
+          "code": "b"
+        },
+        {
+          "code": "c"
+        },
+        {
+          "code": "d"
+        },
+        {
+          "code": "e"
+        }
+      ]
+    },
+    "answer": {
+      "answerCodes": [
+        "a",
+        "b"
+      ]
+    },
+    "expected": {
+      "result": "partial",
+      "points": "6.67"
+    }
+  },
+  {
+    "name": "proportional wrong penalty",
+    "question": {
+      "id": "2",
+      "type": "multi_select",
+      "points": "10.00",
+      "acceptedAnswers": [],
+      "correctCodes": [
+        "a",
+        "b",
+        "c"
+      ],
+      "options": [
+        {
+          "code": "a"
+        },
+        {
+          "code": "b"
+        },
+        {
+          "code": "c"
+        },
+        {
+          "code": "d"
+        },
+        {
+          "code": "e"
+        }
+      ]
+    },
+    "answer": {
+      "answerCodes": [
+        "a",
+        "b",
+        "d"
+      ]
+    },
+    "expected": {
+      "result": "partial",
+      "points": "1.67"
+    }
+  },
+  {
+    "name": "all choices",
+    "question": {
+      "id": "2",
+      "type": "multi_select",
+      "points": "10.00",
+      "acceptedAnswers": [],
+      "correctCodes": [
+        "a",
+        "b",
+        "c"
+      ],
+      "options": [
+        {
+          "code": "a"
+        },
+        {
+          "code": "b"
+        },
+        {
+          "code": "c"
+        },
+        {
+          "code": "d"
+        },
+        {
+          "code": "e"
+        }
+      ]
+    },
+    "answer": {
+      "answerCodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ]
+    },
+    "expected": {
+      "result": "wrong",
+      "points": "0.00"
+    }
+  },
+  {
+    "name": "all correct",
+    "question": {
+      "id": "2",
+      "type": "multi_select",
+      "points": "10.00",
+      "acceptedAnswers": [],
+      "correctCodes": [
+        "a",
+        "b",
+        "c"
+      ],
+      "options": [
+        {
+          "code": "a"
+        },
+        {
+          "code": "b"
+        },
+        {
+          "code": "c"
+        },
+        {
+          "code": "d"
+        },
+        {
+          "code": "e"
+        }
+      ]
+    },
+    "answer": {
+      "answerCodes": [
+        "c",
+        "b",
+        "a"
+      ]
+    },
+    "expected": {
+      "result": "correct",
+      "points": "10.00"
+    }
+  },
+  {
+    "name": "no wrong options",
+    "question": {
+      "id": "2",
+      "type": "multi_select",
+      "points": "10.00",
+      "acceptedAnswers": [],
+      "correctCodes": [
+        "a",
+        "b"
+      ],
+      "options": [
+        {
+          "code": "a"
+        },
+        {
+          "code": "b"
+        }
+      ]
+    },
+    "answer": {
+      "answerCodes": [
+        "a"
+      ]
+    },
+    "expected": {
+      "result": "partial",
+      "points": "5.00"
+    }
+  },
+  {
+    "name": "half-up tiny award",
+    "question": {
+      "id": "2",
+      "type": "multi_select",
+      "points": "0.01",
+      "acceptedAnswers": [],
+      "correctCodes": [
+        "a",
+        "b"
+      ],
+      "options": [
+        {
+          "code": "a"
+        },
+        {
+          "code": "b"
+        }
+      ]
+    },
+    "answer": {
+      "answerCodes": [
+        "a"
+      ]
+    },
+    "expected": {
+      "result": "partial",
+      "points": "0.01"
+    }
+  },
+  {
+    "name": "Unicode whitespace",
+    "question": {
+      "id": "3",
+      "type": "short_text",
+      "points": "1.00",
+      "acceptedAnswers": [
+        "Toshkent shahri",
+        "İSTANBUL",
+        "ΟΣ"
+      ],
+      "correctCodes": [],
+      "options": []
+    },
+    "answer": {
+      "textAnswer": " TOSHKENT  \tSHAHRI"
+    },
+    "expected": {
+      "result": "correct",
+      "points": "1.00"
+    }
+  },
+  {
+    "name": "Unicode dotted capital I",
+    "question": {
+      "id": "3",
+      "type": "short_text",
+      "points": "1.00",
+      "acceptedAnswers": [
+        "Toshkent shahri",
+        "İSTANBUL",
+        "ΟΣ"
+      ],
+      "correctCodes": [],
+      "options": []
+    },
+    "answer": {
+      "textAnswer": "i̇stanbul"
+    },
+    "expected": {
+      "result": "correct",
+      "points": "1.00"
+    }
+  },
+  {
+    "name": "Greek contextual sigma",
+    "question": {
+      "id": "3",
+      "type": "short_text",
+      "points": "1.00",
+      "acceptedAnswers": [
+        "Toshkent shahri",
+        "İSTANBUL",
+        "ΟΣ"
+      ],
+      "correctCodes": [],
+      "options": []
+    },
+    "answer": {
+      "textAnswer": "ος"
+    },
+    "expected": {
+      "result": "correct",
+      "points": "1.00"
+    }
+  },
+  {
+    "name": "punctuation preserved",
+    "question": {
+      "id": "3",
+      "type": "short_text",
+      "points": "1.00",
+      "acceptedAnswers": [
+        "Toshkent shahri",
+        "İSTANBUL",
+        "ΟΣ"
+      ],
+      "correctCodes": [],
+      "options": []
+    },
+    "answer": {
+      "textAnswer": "Toshkent shahri!"
+    },
+    "expected": {
+      "result": "wrong",
+      "points": "0.00"
+    }
+  },
+  {
+    "name": "diacritics preserved",
+    "question": {
+      "id": "3",
+      "type": "short_text",
+      "points": "1.00",
+      "acceptedAnswers": [
+        "café"
+      ],
+      "correctCodes": [],
+      "options": []
+    },
+    "answer": {
+      "textAnswer": "cafe"
+    },
+    "expected": {
+      "result": "wrong",
+      "points": "0.00"
+    }
+  },
+  {
+    "name": "no canonical folding",
+    "question": {
+      "id": "3",
+      "type": "short_text",
+      "points": "1.00",
+      "acceptedAnswers": [
+        "café"
+      ],
+      "correctCodes": [],
+      "options": []
+    },
+    "answer": {
+      "textAnswer": "café"
+    },
+    "expected": {
+      "result": "wrong",
+      "points": "0.00"
+    }
+  },
+  {
+    "name": "whitespace empty",
+    "question": {
+      "id": "3",
+      "type": "short_text",
+      "points": "1.00",
+      "acceptedAnswers": [
+        "Toshkent shahri",
+        "İSTANBUL",
+        "ΟΣ"
+      ],
+      "correctCodes": [],
+      "options": []
+    },
+    "answer": {
+      "textAnswer": " \t\n"
+    },
+    "expected": {
+      "result": "unanswered",
+      "points": "0.00"
+    }
+  }
+]

@@ -9,6 +9,16 @@ use CodeIgniter\HTTP\ResponseInterface;
 
 final class MediaController extends ApiController
 {
+    public function putCover(string $publicId): ResponseInterface
+    {
+        return $this->put($publicId, 'cover', 0);
+    }
+
+    public function deleteCover(string $publicId): ResponseInterface
+    {
+        return $this->delete($publicId, 'cover', 0);
+    }
+
     public function putQuestion(string $publicId, string $questionId): ResponseInterface
     {
         return $this->put($publicId, 'question', (int) $questionId);

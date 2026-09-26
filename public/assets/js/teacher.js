@@ -78,28 +78,120 @@
   });
 
   const createDialog = document.querySelector('#create-quiz-dialog');
+  const createForm = createDialog?.querySelector('[data-create-form]');
+  const createText = JSON.parse(createDialog?.querySelector('[data-create-messages]')?.textContent || '{}');
+  let createBusy = false, coverChecking = false, createdDraft = null, selectedCover = null, coverUrl = null, createOpener = null, coverAttempted = false;
+  const coverInput = createForm?.elements.namedItem('cover');
+  const coverPreview = createForm?.querySelector('[data-cover-preview]');
+
+  function updateCreateControls(message = '') {
+    if (!createForm) return;
+    createForm.setAttribute('aria-busy', String(createBusy || coverChecking));
+    createForm.querySelectorAll('input, button').forEach(control => { control.disabled = createBusy; });
+    createForm.querySelectorAll('[name="title"], [name="mode"]').forEach(control => { control.disabled = createBusy || !!createdDraft; });
+    const submit = createForm.querySelector('[data-create-submit]');
+    submit.disabled = createBusy || coverChecking;
+    submit.textContent = createdDraft ? (selectedCover ? createText.retryCover : createText.continueWithoutCover) : createText.create;
+    createForm.querySelector('[data-remove-cover]').hidden = !selectedCover;
+    createForm.querySelector('[data-continue-create]').hidden = !createdDraft || !selectedCover;
+    createForm.querySelector('[data-created-notice]').hidden = !createdDraft;
+    createForm.querySelector('[data-create-progress]').textContent = message || (coverChecking ? createText.checkingCover : '');
+  }
+
+  function clearCreateCover(resetInput = true) {
+    if (coverUrl) URL.revokeObjectURL(coverUrl);
+    coverUrl = null; selectedCover = null; coverChecking = false;
+    if (resetInput) coverInput.value = '';
+    coverPreview.hidden = true; coverPreview.removeAttribute('src');
+  }
+
   document.querySelectorAll('[data-open-create]').forEach(button => button.addEventListener('click', () => {
+    createOpener = button;
     createDialog?.showModal();
     setTimeout(() => createDialog?.querySelector('input[name="title"]')?.focus(), 0);
   }));
 
-  const createForm = createDialog?.querySelector('[data-create-form]');
-  createForm?.addEventListener('submit', async event => {
-    const submitter = event.submitter;
-    if (submitter?.value === 'cancel') return;
-    event.preventDefault();
-    const error = createForm.querySelector('[data-create-error]');
-    const button = createForm.querySelector('button[type="submit"]');
-    error.textContent = '';
-    button.disabled = true;
+  // Cancel and × submit their own method="dialog" form, not the required-title form.
+  // Native dismissal works even when enhancement code is unavailable.
+  createDialog?.querySelector('[data-dismiss-create]').addEventListener('submit', event => {
+    if (createBusy) event.preventDefault();
+  });
+  createDialog?.addEventListener('cancel', event => { if (createBusy) event.preventDefault(); });
+  createDialog?.addEventListener('close', () => {
+    if (createdDraft) toast(createText.draftRetained);
+    clearCreateCover(); createForm.reset(); createdDraft = null; coverAttempted = false;
+    createForm.querySelector('[data-create-error]').textContent = '';
+    updateCreateControls(); createOpener?.focus();
+  });
+  createForm?.querySelector('[data-remove-cover]').addEventListener('click', () => {
+    clearCreateCover(); createForm.querySelector('[data-create-error]').textContent = ''; updateCreateControls();
+  });
+  coverInput?.addEventListener('change', () => {
+    const file = coverInput.files?.[0];
+    clearCreateCover(false);
+    const error = createForm.querySelector('[data-create-error]'); error.textContent = '';
+    if (!file) { updateCreateControls(); return; }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      clearCreateCover(); error.textContent = createText.invalidCover; updateCreateControls(); return;
+    }
+    selectedCover = file; coverChecking = true;
+    const url = coverUrl = URL.createObjectURL(file);
+    const image = new Image();
+    const invalid = () => {
+      if (coverUrl !== url) return;
+      clearCreateCover(); error.textContent = createText.invalidCover; updateCreateControls();
+    };
+    image.onload = () => {
+      if (coverUrl !== url) return;
+      if (!image.naturalWidth || image.naturalWidth * image.naturalHeight > 16000000) { invalid(); return; }
+      coverChecking = false; coverPreview.src = url; coverPreview.hidden = false; updateCreateControls();
+    };
+    image.onerror = invalid; image.src = url; updateCreateControls();
+  });
+  async function removeUnconfirmedCover() {
+    if (!coverAttempted) return;
+    // A lost upload response may still have attached the image on the server.
+    const endpoint = `/api/v1/quizzes/${createdDraft.publicId}`;
+    const loaded = await request(endpoint);
+    if (loaded.data.quiz.cover) await request(`${endpoint}/cover?version=${loaded.data.quiz.version}`, {method: 'DELETE', body: '{}'});
+    coverAttempted = false;
+  }
+  createForm?.querySelector('[data-continue-create]').addEventListener('click', async () => {
+    if (createBusy || !createdDraft) return;
+    createBusy = true; updateCreateControls(createText.continuing);
     try {
-      const data = new FormData(createForm);
-      const result = await request('/api/v1/quizzes', { method: 'POST', body: JSON.stringify({ title: data.get('title'), mode: data.get('mode') }) });
-      window.location.href = result.data.editUrl;
+      await removeUnconfirmedCover();
+      window.location.href = createdDraft.editUrl;
+    } catch (failure) { createForm.querySelector('[data-create-error]').textContent = failure.message; }
+    finally { createBusy = false; updateCreateControls(); }
+  });
+  createForm?.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (createBusy || coverChecking || !createForm.reportValidity()) return;
+    const error = createForm.querySelector('[data-create-error]');
+    const data = new FormData(createForm);
+    error.textContent = '';
+    createBusy = true;
+    updateCreateControls(createdDraft ? createText.uploading : createText.creating);
+    try {
+      if (!createdDraft) {
+        const result = await request('/api/v1/quizzes', { method: 'POST', body: JSON.stringify({ title: data.get('title'), mode: data.get('mode') }) });
+        createdDraft = result.data;
+      }
+      if (selectedCover) {
+        updateCreateControls(createText.uploading);
+        const endpoint = `/api/v1/quizzes/${createdDraft.publicId}`;
+        const loaded = await request(endpoint);
+        const media = new FormData();
+        media.append('media', selectedCover); media.append('version', String(loaded.data.quiz.version));
+        coverAttempted = true;
+        await request(`${endpoint}/cover`, {method: 'POST', body: media});
+      } else await removeUnconfirmedCover();
+      window.location.href = createdDraft.editUrl;
     } catch (failure) {
       error.textContent = failure.fields?.title || failure.fields?.mode || failure.message;
     } finally {
-      button.disabled = false;
+      createBusy = false; updateCreateControls();
     }
   });
 

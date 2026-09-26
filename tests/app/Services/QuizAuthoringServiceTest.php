@@ -337,6 +337,7 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
             'status' => ['type' => 'VARCHAR', 'constraint' => 12], 'listed' => ['type' => 'INTEGER'],
             'title' => ['type' => 'VARCHAR', 'constraint' => 200], 'description' => ['type' => 'TEXT'],
             'instructions' => ['type' => 'TEXT'], 'revision' => ['type' => 'INTEGER'], 'version' => ['type' => 'INTEGER'],
+            'cover_src' => ['type' => 'TEXT', 'null' => true],
             'frozen_at' => ['type' => 'DATETIME', 'null' => true], 'time_limit_sec' => ['type' => 'INTEGER', 'null' => true],
             'opens_at' => ['type' => 'DATETIME', 'null' => true], 'closes_at' => ['type' => 'DATETIME', 'null' => true],
             'passcode_hash' => ['type' => 'VARCHAR', 'constraint' => 255, 'null' => true],
