@@ -4,6 +4,11 @@
 
 ### Added
 
+- Viewport-height quiz builder with independent desktop panel scrolling and state-preserving Questions/Editor/Settings switching on tablet/mobile.
+- Native Quiz details dialog for staged title/cover edits, cancellable local previews, focus restoration, and retained-cover upload retries.
+- Clear Saved / Save changes / Saving / Resolve conflict controls, serialized aggregate/cover saves, and acknowledgement merging that preserves edits made during requests.
+- Editor-local notices and a collapsed answers/timers disclosure, plus isolated save-flow and Chrome regression coverage for scrolling, dialog behavior, and in-flight edits.
+
 - Unified centered teacher dashboard with account/logout disclosure, six workspace metrics, and one enriched quiz library covering active, archived, deleted, and historical assessment activity.
 - Shared sticky quiz header across Builder, Responses, and attempt review, with contextual actions and archived/deleted restoration guidance.
 - Isolated dashboard/header/redirect regression tests and actual-view Chrome checks at desktop, tablet, and mobile widths.

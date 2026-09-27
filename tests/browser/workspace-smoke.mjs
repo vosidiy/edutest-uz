@@ -10,7 +10,7 @@ const artifacts = await fs.mkdtemp('/private/tmp/edutest-workspace-browser-');
 const chromePath = process.env.PLAYER_CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const php = process.env.PLAYER_PHP || '/Applications/MAMP/bin/php/php8.4.17/bin/php';
 const id = 'a'.repeat(32);
-let origin, writes = 0, conflict = false;
+let origin, writes = 0, conflict = false, coverWrites = 0, failCover = false, saveDelay = 0;
 let saved = {
   publicId: id, title: 'Exploring our world', mode: 'assessment', status: 'published', version: 1, revision: 1,
   hasStarted: true, resultsAvailable: true, resultsUrl: '/results/quizzes/' + id,
@@ -51,10 +51,20 @@ const server = http.createServer(async (request, response) => {
     if (url.pathname === '/favicon.ico') {response.writeHead(204).end();return;}
     if (url.pathname.startsWith('/api/')) {
       const buffers=[]; for await (const chunk of request) buffers.push(chunk);
+      if (url.pathname.endsWith('/cover')) {
+        coverWrites++;
+        if(failCover){failCover=false;response.writeHead(500,{'Content-Type':'application/json'}).end(JSON.stringify({error:{message:'Fixture cover offline'},meta:{}}));return;}
+        saved.version++;
+        saved.cover=request.method==='DELETE'?null:{type:'image',url:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aDgAAAABJRU5ErkJggg=='};
+        response.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({data:{version:saved.version,media:saved.cover},meta:{}}));return;
+      }
       if (request.method === 'PUT') {
         writes++;
         if(conflict) {conflict=false;response.writeHead(409,{'Content-Type':'application/json'}).end(JSON.stringify({error:{code:'version_conflict',message:'Fixture conflict',version:2},meta:{}}));return;}
-        saved={...JSON.parse(Buffer.concat(buffers).toString()),version:saved.version+1};
+        const input=JSON.parse(Buffer.concat(buffers).toString());
+        if(saveDelay) await new Promise(resolve=>setTimeout(resolve,saveDelay));
+        saved={...input,version:saved.version+1,passcode:{configured:input.passcode.action==='set',action:'unchanged'}};
+        saved.questions.forEach((question,index)=>{question.id ||= String(500+index);question.options.forEach((option,optionIndex)=>{option.id ||= String(5000+index*50+optionIndex);});});
         saved.resultsAvailable=saved.mode==='assessment'; saved.resultsUrl=saved.resultsAvailable?'/results/quizzes/'+id:null;
       }
       response.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({data:{quiz:saved},meta:{csrfToken:'fixture-token'}})); return;
@@ -86,7 +96,10 @@ async function screenshot(name) {
   const result = await command('Page.captureScreenshot', {format: 'png', captureBeyondViewport: false});
   await fs.writeFile(path.join(artifacts, name + '.png'), Buffer.from(result.data, 'base64'));
 }
-async function viewport(width, height) { await command('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: width < 600}); }
+async function viewport(width, height) {
+  await command('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: width < 600});
+  await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+}
 
 async function navigate(route) {
   await command('Page.navigate', {url:origin+route});
@@ -199,8 +212,93 @@ try {
   assert.equal(await evaluate('!!document.querySelector(".builder-view-nav")'),false);
   await command('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
   assert.equal(await evaluate('matchMedia("(prefers-reduced-motion: reduce)").matches'),true);
+  // Independent panes and retained scroll state, using large actual-view fixtures.
+  saved={...saved,mode:'assessment',status:'published',resultsAvailable:true,resultsUrl:'/results/quizzes/'+id};
+  const template=structuredClone(saved.questions[0]);
+  saved.questions=Array.from({length:35},(_,index)=>({...structuredClone(template),id:String(index+1),content:'Question '+(index+1)+' about our world',
+    options:Array.from({length:12},(_,optionIndex)=>({id:String(1000+index*20+optionIndex),code:'choice'+optionIndex,content:'Answer '+optionIndex,isCorrect:optionIndex===0,media:null}))}));
+  await viewport(1440,800);await navigate('/quizzes/'+id+'/edit');
+  await until(()=>evaluate('document.querySelectorAll(".question-item").length === 35'),'long quiz');
+  assert.equal(await evaluate('document.body.classList.contains("builder-page")'),true);
+  assert.equal(await evaluate('document.documentElement.scrollHeight <= innerHeight + 1'),true);
+  await evaluate('document.querySelectorAll(".settings-content details").forEach(item=>item.open=true)');
+  await evaluate('document.querySelector(".question-list").scrollTop=150;document.querySelector(".settings-content").scrollTop=120;document.querySelector(".editor-canvas").scrollTop=250');
+  assert.deepEqual(await evaluate('[document.querySelector(".question-list").scrollTop,document.querySelector(".settings-content").scrollTop,document.querySelector(".editor-canvas").scrollTop,scrollY]'),[150,120,250,0]);
+  await screenshot('independent-desktop');
+  await evaluate('document.querySelectorAll(".question-item")[10].click()');
+  assert.equal(await evaluate('document.querySelector(".editor-canvas").scrollTop'),0);
+  await viewport(390,700);
+  await evaluate('document.querySelector("[aria-controls=builder-settings]").click()');
+  assert.equal(await evaluate('document.querySelector(".settings-content").scrollTop'),120);
+  await evaluate('document.querySelector(".settings-content").scrollTop=240;document.querySelector("[aria-controls=builder-questions]").click()');
+  assert.equal(await evaluate('document.querySelector(".question-list").scrollTop'),150);
+  await evaluate('document.querySelector("[aria-controls=builder-settings]").click()');
+  assert.equal(await evaluate('document.querySelector(".settings-content").scrollTop'),240);
+  await evaluate('document.querySelector("[aria-controls=builder-editor]").click();document.querySelector(".editor-canvas").focus()');
+  await command('Input.dispatchKeyEvent',{type:'rawKeyDown',key:'PageDown',code:'PageDown',windowsVirtualKeyCode:34});
+  await command('Input.dispatchKeyEvent',{type:'keyUp',key:'PageDown',code:'PageDown',windowsVirtualKeyCode:34});
+  await until(()=>evaluate('document.querySelector(".editor-canvas").scrollTop > 0'),'keyboard panel scroll');
+  for(const [width,height]of [[1440,500],[768,500],[390,420],[320,400]]){
+    await viewport(width,height);await noOverflow();
+    assert.equal(await evaluate('document.documentElement.scrollHeight <= innerHeight + 1'),true);
+    assert.equal(await evaluate('document.querySelector(".editor-canvas").clientHeight > 80'),true);
+    await screenshot('panels-'+width+'x'+height);
+  }
+  await viewport(390,700);
+  // Native dialog cancellation and validation do not mutate the draft or call an API.
+  const beforeDetails=writes;
+  await evaluate('document.querySelector(".builder-edit-title").click()');
+  await until(()=>evaluate('document.querySelector(".quiz-details-dialog").open'),'details dialog');
+  await evaluate('(async()=>{const input=document.querySelector(".quiz-details-dialog input:not([type=file])");input.value="   ";input.dispatchEvent(new Event("input",{bubbles:true}));document.querySelector(".quiz-details-dialog button[type=submit]").click()})()');
+  await until(()=>evaluate('document.querySelector(".quiz-details-dialog").textContent.includes("Enter a title")'),'title validation');
+  await evaluate('document.querySelector(".quiz-details-dialog .dialog-actions button").click()');
+  await until(()=>evaluate('document.activeElement.matches(".builder-edit-title")'),'details focus restored');
+  assert.equal(writes,beforeDetails);
+  await evaluate('document.querySelector(".builder-edit-title").click()');
+  await command('Input.dispatchKeyEvent',{type:'rawKeyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  await command('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  await until(()=>evaluate('!document.querySelector(".quiz-details-dialog").open'),'details Escape');
+  await evaluate('document.querySelector(".builder-edit-title").click()');
+  await evaluate('(async()=>{const transfer=new DataTransfer();transfer.items.add(new File(["invalid"],"bad.png",{type:"image/png"}));const input=document.querySelector(".quiz-details-dialog input[type=file]");input.files=transfer.files;input.dispatchEvent(new Event("change",{bubbles:true}))})()');
+  await until(()=>evaluate('document.querySelector(".quiz-details-dialog").textContent.includes("Choose a valid")'),'invalid image');
+  await evaluate('(async()=>{const canvas=document.createElement("canvas");canvas.width=40;canvas.height=30;canvas.getContext("2d").fillRect(0,0,40,30);const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/png"));const transfer=new DataTransfer();transfer.items.add(new File([blob],"cover.png",{type:"image/png"}));const input=document.querySelector(".quiz-details-dialog input[type=file]");input.files=transfer.files;input.dispatchEvent(new Event("change",{bubbles:true}))})()');
+  await until(()=>evaluate('!!document.querySelector(".details-cover-preview") && !document.querySelector(".quiz-details-dialog button[type=submit]").disabled'),'valid image preview');
+  await screenshot('details-cover-mobile');
+  const blobUrl=await evaluate('document.querySelector(".details-cover-preview").src');
+  await evaluate('(async()=>{const input=document.querySelector(".quiz-details-dialog input:not([type=file])");input.value="Applied title";input.dispatchEvent(new Event("input",{bubbles:true}));document.querySelector(".quiz-details-dialog button[type=submit]").click()})()');
+  await until(()=>evaluate('!document.querySelector(".quiz-details-dialog").open'),'apply dialog');
+  assert.equal(writes,beforeDetails);assert.equal(coverWrites,0);
+  assert.equal(await evaluate('document.querySelector("[data-save-quiz]").classList.contains("btn-primary")'),true);
+  await evaluate('document.querySelector(".builder-edit-title").click()');
+  assert.equal(await evaluate('document.querySelector(".details-cover-preview").src'),blobUrl);
+  await evaluate('document.querySelector(".quiz-details-dialog .dialog-actions button").click()');
+  failCover=true;
+  await evaluate('document.querySelector("[data-save-quiz]").click()');
+  await until(()=>evaluate('document.querySelector(".builder-notices").textContent.includes("cover change could not")'),'partial failure');
+  assert.equal(writes,beforeDetails+1);assert.equal(coverWrites,1);
+  await evaluate('document.querySelector("[data-save-quiz]").click()');
+  await until(()=>evaluate('document.querySelector("[data-save-quiz]").textContent === "Saved"'),'cover retry');
+  assert.equal(writes,beforeDetails+1);assert.equal(coverWrites,2);
+  assert.equal(saved.title,'Applied title');
+  // Delayed response may acknowledge old text but must not discard newer typing.
+  saveDelay=600;
+  await evaluate('(async()=>{const input=document.querySelector(".question-editor textarea");input.value="Sent first";input.dispatchEvent(new Event("input",{bubbles:true}))})()');
+  await evaluate('document.querySelector("[data-save-quiz]").click()');
+  await until(()=>evaluate('document.querySelector("[data-save-quiz]").textContent === "Saving…"'),'saving button');
+  await evaluate('(async()=>{const input=document.querySelector(".question-editor textarea");input.value="Typed during save";input.dispatchEvent(new Event("input",{bubbles:true}))})()');
+  await until(()=>evaluate('document.querySelector("[data-save-quiz]").textContent === "Save changes"'),'newer draft kept');
+  assert.equal(await evaluate('document.querySelector(".question-editor textarea").value'),'Typed during save');
+  saveDelay=0;await evaluate('document.querySelector("[data-save-quiz]").click()');
+  await until(()=>evaluate('document.querySelector("[data-save-quiz]").textContent === "Saved"'),'save newer draft');
+  saved.status='draft';await navigate('/quizzes/'+id+'/edit');
+  await until(()=>evaluate('document.querySelector(".builder-title small").textContent === "Draft loaded"'),'draft loaded');
+  const beforeAutosave=writes;
+  await evaluate('(async()=>{document.querySelector(".builder-edit-title").click();const input=document.querySelector(".quiz-details-dialog input:not([type=file])");input.value="Autosaved title";input.dispatchEvent(new Event("input",{bubbles:true}));document.querySelector(".quiz-details-dialog button[type=submit]").click()})()');
+  await until(()=>writes===beforeAutosave+1,'draft autosave');
+  await until(()=>evaluate('document.querySelector("[data-save-quiz]").textContent === "Saved"'),'autosave acknowledged');
+  assert.equal(saved.title,'Autosaved title');
   assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({passed:true,widths:[1440,1024,850,768,390,320],checks:['actual PHP views','shared headers','empty states','dialog cancel/close/Escape/focus','account Escape','lifecycle menus','attempt review','response tables','conflict dialog','manual save','dirty navigation warning','Practice tabs','overflow','reduced motion'],artifacts},null,2));
+  console.log(JSON.stringify({passed:true,widths:[1440,1024,850,768,390,320],checks:['actual PHP views','shared headers','empty states','dialog cancel/close/Escape/focus','account Escape','lifecycle menus','attempt review','response tables','conflict dialog','manual save','dirty navigation warning','Practice tabs','overflow','reduced motion','independent desktop scrolling','retained narrow panel scroll','keyboard panel scrolling','short viewports','staged title and cover','partial cover failure and retry','edits during save','draft autosave'],artifacts},null,2));
 } catch(error) {
   console.error(JSON.stringify({error:error.message,errors,networkFailures,artifacts},null,2));
   if(socket) await screenshot('failure').catch(()=>{});

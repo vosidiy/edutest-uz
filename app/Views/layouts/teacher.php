@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="<?= esc(base_url('assets/css/teacher.css') . '?v=' . filemtime(FCPATH . 'assets/css/teacher.css'), 'attr') ?>">
     <?= $this->renderSection('head') ?>
 </head>
-<body class="<?= esc(($quizWorkspace ?? false) ? 'quiz-workspace ' . ($bodyClass ?? '') : 'dashboard-page', 'attr') ?>">
+<body class="<?= esc(($quizWorkspace ?? false) ? 'quiz-workspace' . (($builderHeader ?? false) ? ' builder-page' : '') : 'dashboard-page', 'attr') ?>">
 <a class="skip-link" href="#main-content">Skip to content</a>
 <div class="teacher-shell">
     <?php if (! ($quizWorkspace ?? false)) : ?>

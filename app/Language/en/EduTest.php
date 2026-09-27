@@ -4,6 +4,33 @@ declare(strict_types=1);
 
 return [
     'builder' => [
+        'workspace' => [
+            'panels' => 'Builder panels',
+            'questions' => 'Questions',
+            'editor' => 'Editor',
+            'settings' => 'Settings',
+            'about' => 'About answers & timers',
+            'editDetails' => 'Edit quiz title and cover',
+            'detailsTitle' => 'Quiz details',
+            'title' => 'Title',
+            'cover' => 'Cover image (optional)',
+            'coverHelp' => 'JPEG, PNG or WebP, up to 5 MiB and 16 megapixels.',
+            'removeCover' => 'Remove cover',
+            'coverPreview' => 'Quiz cover preview',
+            'cancel' => 'Cancel',
+            'close' => 'Close quiz details',
+            'apply' => 'Apply changes',
+            'stagedHint' => 'Apply changes to the editor. Drafts autosave; published quizzes need Save changes.',
+            'invalidTitle' => 'Enter a title between 1 and 200 characters.',
+            'invalidCover' => 'Choose a valid JPEG, PNG or WebP up to 5 MiB and 16 megapixels.',
+            'checkingCover' => 'Checking image…',
+            'saved' => 'Saved',
+            'saveChanges' => 'Save changes',
+            'saving' => 'Saving…',
+            'resolveConflict' => 'Resolve conflict',
+            'coverFailed' => 'Submitted quiz content is saved, but the cover change could not be saved. Your cover change is retained. Try Save changes again.',
+            'unsavedMedia' => 'Newer edits are still unsaved. Save them before changing question media.',
+        ],
         'existingAttemptsNotice' => 'Saved content and mode changes apply to future starts. Existing runs keep the mode and paper revision they received.',
         'navigation' => [
             'builder' => 'Quiz builder',

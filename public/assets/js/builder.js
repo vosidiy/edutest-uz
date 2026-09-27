@@ -2,6 +2,21 @@
   'use strict';
 
   const BuilderRules = Object.freeze({
+    editable(quiz, passcodeValue = '') {
+      if (!quiz) return '';
+      const fields = ['title', 'description', 'instructions', 'mode', 'listed', 'timeLimitMinutes', 'opensAtLocal', 'closesAtLocal',
+        'emailMode', 'phoneMode', 'shuffleQuestions', 'shuffleOptions', 'feedback', 'showScore', 'showAnswers', 'showExplain', 'cheatCheck'];
+      const value = Object.fromEntries(fields.map(key => [key, quiz[key]]));
+      value.passcode = {action: quiz.passcode?.action || 'unchanged', value: quiz.passcode?.action === 'set' ? passcodeValue : ''};
+      value.questions = (quiz.questions || []).map(q => ({id:q.id, type:q.type, content:q.content, explanation:q.explanation,
+        textAnswers:q.textAnswers, options:q.options.map(o => ({id:o.id, content:o.content, isCorrect:o.isCorrect}))}));
+      return JSON.stringify(value);
+    },
+    saveButton(state, busy, dirty) {
+      if (busy) return {label:'saving', disabled:true, primary:false};
+      if (state === 'conflict') return {label:'resolveConflict', disabled:false, primary:true};
+      return {label:dirty ? 'saveChanges' : 'saved', disabled:!dirty, primary:dirty};
+    },
     shouldAutosave(quiz) { return quiz?.status === 'draft'; },
     modeTransition(currentMode, nextMode, confirmChange) {
       if (!['assessment', 'practice'].includes(nextMode) || nextMode === currentMode) {
@@ -71,19 +86,37 @@
         autosaveTimer: null,
         hydrating: true,
         passcodeValue: '',
-        coverUploading: false,
+        savedFingerprint: '',
+        savePromise: null,
+        mediaBusy: false,
+        activePanel: 'editor',
+        pendingCover: null,
+        detailsOpen: false,
+        detailsTitle: '',
+        detailsCover: null,
+        detailsChecking: false,
+        detailsError: '',
+        coverUrls: new Set(),
+        workspaceMessages: JSON.parse(root.dataset.workspaceMessages || '{}'),
         conflictVersion: null,
         publicationMessages: JSON.parse(root.dataset.publicationMessages || '{}'),
         modeMessages: JSON.parse(root.dataset.modeMessages || '{}')
       };
     },
     computed: {
+      editableFingerprint() { return BuilderRules.editable(this.quiz, this.passcodeValue); },
+      hasChanges() { return !!this.quiz && (this.editableFingerprint !== this.savedFingerprint || this.pendingCover !== null); },
+      saveButton() { return BuilderRules.saveButton(this.saveState, this.saving || this.mediaBusy, this.hasChanges); },
+      detailsCoverUrl() {
+        if (this.detailsCover?.action === 'remove') return null;
+        return this.detailsCover?.url || this.quiz?.cover?.url || null;
+      },
       selectedQuestion() { return this.quiz?.questions?.[this.selectedIndex] || null; },
       publicationIssues() { return BuilderRules.publicationIssues(this.quiz, this.publicationMessages); },
       publishReady() { return this.publicationIssues.length === 0; },
       publishReadinessMessage() { return this.publicationIssues[0] || ''; },
       saveLabel() {
-        if (this.saveState === 'saving') return 'Saving…';
+        if (this.saving || this.mediaBusy) return this.workspaceMessages.saving;
         if (this.saveState === 'dirty') return 'Unsaved changes';
         if (this.saveState === 'retry') return 'Save failed — retry';
         if (this.saveState === 'validation') return 'Fix validation errors';
@@ -93,13 +126,10 @@
       }
     },
     watch: {
-      quiz: {
-        deep: true,
-        handler() {
-          if (this.hydrating || this.loading || !this.quiz) return;
-          this.markDirty();
-        }
-      }
+      editableFingerprint() {
+        if (!this.hydrating && !this.loading) this.markDirty();
+      },
+      globalError(value) { if (value) this.revealError(); }
     },
     async mounted() {
       window.addEventListener('beforeunload', this.beforeUnload);
@@ -108,15 +138,21 @@
     beforeUnmount() {
       window.removeEventListener('beforeunload', this.beforeUnload);
       clearTimeout(this.autosaveTimer);
+      for (const url of this.coverUrls) URL.revokeObjectURL(url);
     },
     methods: {
       async load() {
         this.loading = true;
         this.fatalError = '';
         try {
-          const response = await EduTestApi.request(`/api/v1/quizzes/${this.publicId}`);
+          const response = await EduTestApi.request('/api/v1/quizzes/' + this.publicId);
+          this.pendingCover = null;
+          this.cleanCoverUrls();
           this.applyServerQuiz(response.data.quiz);
           this.saveState = 'saved';
+          this.conflictVersion = null;
+          this.fieldErrors = {};
+          this.globalError = '';
         } catch (error) {
           this.fatalError = error.message;
         } finally {
@@ -128,56 +164,134 @@
         clearTimeout(this.autosaveTimer);
         this.hydrating = true;
         this.quiz = quiz;
+        this.savedFingerprint = BuilderRules.editable(quiz);
         this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, quiz.questions.length - 1));
         this.passcodeValue = '';
         this.$nextTick(() => { this.hydrating = false; });
       },
-      markDirty() {
-        if (this.saveState === 'conflict') return;
-        this.saveState = 'dirty';
-        this.globalError = '';
+      scheduleAutosave() {
         clearTimeout(this.autosaveTimer);
-        if (BuilderRules.shouldAutosave(this.quiz)) {
+        if (!this.saving && !this.mediaBusy && this.hasChanges && this.saveState === 'dirty' && BuilderRules.shouldAutosave(this.quiz)) {
           this.autosaveTimer = setTimeout(() => this.save(false), 1000);
         }
       },
-      async save(manual = false, overwrite = false) {
-        if (!this.quiz || (this.saveState === 'saved' && !manual && !overwrite)) return true;
+      markDirty() {
+        if (this.saveState === 'conflict') return;
+        if (!this.saving) this.saveState = this.hasChanges ? 'dirty' : 'saved';
+        this.globalError = '';
+        this.scheduleAutosave();
+      },
+      async acceptSaved(server, sent, references, sentPasscode) {
+        // Keep the same reactive row objects: a new ID must follow its row even if reordered/deleted during the request.
+        this.hydrating = true;
+        const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+        for (const key of Object.keys(server)) {
+          if (['questions', 'passcode'].includes(key)) continue;
+          if (['version', 'revision', 'status', 'resultsAvailable', 'resultsUrl', 'updatedAt', 'hasStarted'].includes(key) || same(this.quiz[key], sent[key])) this.quiz[key] = server[key];
+        }
+        if (same(this.quiz.passcode, sent.passcode) && this.passcodeValue === sentPasscode) {
+          this.quiz.passcode = server.passcode;
+          this.passcodeValue = '';
+        } else {
+          this.quiz.passcode.configured = server.passcode.configured;
+        }
+        references.forEach(({question, options}, index) => {
+          const remote = server.questions[index], before = sent.questions[index];
+          if (!remote || !this.quiz.questions.includes(question)) return;
+          question.id = remote.id;
+          for (const key of ['type', 'content', 'explanation', 'textAnswers', 'media']) {
+            if (same(question[key], before[key])) question[key] = remote[key];
+          }
+          options.forEach((option, optionIndex) => {
+            const remoteOption = remote.options[optionIndex], beforeOption = before.options[optionIndex];
+            if (!remoteOption || !question.options.includes(option)) return;
+            option.id = remoteOption.id;
+            option.code = remoteOption.code;
+            for (const key of ['content', 'isCorrect', 'media']) {
+              if (same(option[key], beforeOption[key])) option[key] = remoteOption[key];
+            }
+          });
+        });
+        this.savedFingerprint = BuilderRules.editable(server);
+        await this.$nextTick();
+        this.hydrating = false;
+      },
+      save(manual = false, overwrite = false) {
+        if (this.savePromise) return this.savePromise;
+        if (this.mediaBusy) return Promise.resolve(false);
+        if (this.saveState === 'conflict' && !overwrite) {
+          if (manual) this.openConflict();
+          return Promise.resolve(false);
+        }
+        if (!this.quiz || (!this.hasChanges && !overwrite)) return Promise.resolve(true);
+        this.savePromise = this.performSave(overwrite).finally(() => { this.savePromise = null; });
+        return this.savePromise;
+      },
+      async performSave(overwrite) {
         clearTimeout(this.autosaveTimer);
         this.saving = true;
         this.saveState = 'saving';
         this.globalError = '';
         this.fieldErrors = {};
-        const payload = JSON.parse(JSON.stringify(this.quiz));
-        payload.passcode = { ...payload.passcode, value: this.passcodeValue };
+        const sent = JSON.parse(JSON.stringify(this.quiz));
+        const sentPasscode = this.passcodeValue;
+        const references = this.quiz.questions.map(question => ({question, options:[...question.options]}));
+        const cover = this.pendingCover;
+        let contentSaved = this.editableFingerprint === this.savedFingerprint;
         try {
-          const suffix = overwrite ? '?overwrite=1' : '';
-          const response = await EduTestApi.request(`/api/v1/quizzes/${this.publicId}${suffix}`, { method: 'PUT', body: JSON.stringify(payload) });
-          this.applyServerQuiz(response.data.quiz);
-          this.lastSavedAt = new Date();
-          this.saveState = 'saved';
-          return true;
-        } catch (error) {
-          if (error.code === 'version_conflict') {
-            this.saveState = 'conflict';
-            this.conflictVersion = Number(error.fields?.version || 0);
-            this.$refs.conflictDialog?.showModal();
-          } else if (error.status === 422) {
-            this.fieldErrors = error.fields || {};
-            this.globalError = error.message;
-            this.saveState = 'validation';
-          } else {
-            this.globalError = error.message;
-            this.saveState = 'retry';
+          if (!contentSaved || overwrite) {
+            const payload = {...sent, passcode:{...sent.passcode, value:sentPasscode}};
+            const response = await EduTestApi.request('/api/v1/quizzes/' + this.publicId + (overwrite ? '?overwrite=1' : ''), {method:'PUT', body:JSON.stringify(payload)});
+            await this.acceptSaved(response.data.quiz, sent, references, sentPasscode);
+            contentSaved = true;
           }
+          if (cover && this.pendingCover === cover) {
+            const endpoint = '/api/v1/quizzes/' + this.publicId + '/cover';
+            let options, url = endpoint;
+            if (cover.action === 'remove') {
+              url += '?version=' + this.quiz.version;
+              options = {method:'DELETE', body:'{}'};
+            } else {
+              const form = new FormData();
+              form.append('media', cover.file);
+              form.append('version', String(this.quiz.version));
+              options = {method:'POST', body:form};
+            }
+            const response = await EduTestApi.request(url, options);
+            this.quiz.version = response.data.version;
+            this.quiz.cover = response.data.media;
+            if (this.pendingCover === cover) this.pendingCover = null;
+            if (this.detailsCover === cover) this.detailsCover = null;
+            this.cleanCoverUrls();
+          }
+          this.lastSavedAt = new Date();
+          this.saveState = this.hasChanges ? 'dirty' : 'saved';
+          return !this.hasChanges;
+        } catch (error) {
+          this.handleSaveError(error);
+          if (cover && contentSaved && error.code !== 'version_conflict') this.globalError = this.workspaceMessages.coverFailed + ' ' + error.message;
           return false;
         } finally {
           this.saving = false;
+          this.scheduleAutosave();
         }
+      },
+      handleSaveError(error) {
+        this.globalError = error.message;
+        if (error.code === 'version_conflict') {
+          this.saveState = 'conflict';
+          this.conflictVersion = Number(error.fields?.version || 0);
+          this.openConflict();
+        } else {
+          this.fieldErrors = error.fields || {};
+          this.saveState = error.status === 422 ? 'validation' : 'retry';
+        }
+      },
+      openConflict() {
+        if (!this.$refs.conflictDialog?.open) this.$refs.conflictDialog?.showModal();
       },
       async reloadConflict() {
         this.$refs.conflictDialog?.close();
-        this.conflictVersion = null;
         await this.load();
       },
       async overwriteConflict() {
@@ -186,9 +300,90 @@
         await this.save(true, true);
       },
       beforeUnload(event) {
-        if (!['dirty', 'saving', 'retry', 'validation', 'conflict'].includes(this.saveState)) return;
+        if (!this.hasChanges && !this.saving && !this.mediaBusy && this.saveState !== 'conflict') return;
         event.preventDefault();
         event.returnValue = '';
+      },
+      showPanel(panel, focus = true) {
+        this.activePanel = panel;
+        if (focus) this.$nextTick(() => this.$refs[panel + 'Panel']?.focus({preventScroll:true}));
+      },
+      selectQuestion(index) {
+        this.selectedIndex = index;
+        this.showPanel('editor');
+        this.$nextTick(() => { if (this.$refs.editorPanel) this.$refs.editorPanel.scrollTop = 0; });
+      },
+      revealError() {
+        this.showPanel('editor', false);
+        this.$nextTick(() => { if (this.$refs.editorPanel) this.$refs.editorPanel.scrollTop = 0; });
+      },
+      openDetails() {
+        this.detailsTitle = this.quiz.title;
+        this.detailsCover = this.pendingCover;
+        this.detailsError = '';
+        this.detailsChecking = false;
+        this.detailsOpen = true;
+        this.cleanCoverUrls();
+        this.$refs.detailsDialog.showModal();
+        this.$nextTick(() => this.$refs.detailsTitle.focus());
+      },
+      closeDetails() { this.$refs.detailsDialog?.close(); },
+      detailsClosed() {
+        // Native close events are queued: a quick reopen must not clear the new dialog state.
+        if (this.$refs.detailsDialog?.open) return;
+        this.detailsOpen = false;
+        this.detailsCover = null;
+        this.detailsChecking = false;
+        this.cleanCoverUrls();
+        this.$refs.editTitle?.focus();
+      },
+      cleanCoverUrls() {
+        const retained = [this.pendingCover?.url, this.detailsOpen ? this.detailsCover?.url : null];
+        for (const url of this.coverUrls) {
+          if (!retained.includes(url)) { URL.revokeObjectURL(url); this.coverUrls.delete(url); }
+        }
+      },
+      async pickDetailsCover(event) {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        this.detailsError = '';
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+          this.detailsError = this.workspaceMessages.invalidCover;
+          return;
+        }
+        const url = URL.createObjectURL(file);
+        this.coverUrls.add(url);
+        const candidate = {action:'upload', file, url};
+        const previous = this.detailsCover;
+        this.detailsCover = candidate;
+        this.detailsChecking = true;
+        const image = new Image();
+        const valid = await new Promise(resolve => {
+          image.onload = () => resolve(image.naturalWidth > 0 && image.naturalHeight > 0 && image.naturalWidth * image.naturalHeight <= 16000000);
+          image.onerror = () => resolve(false);
+          image.src = url;
+        });
+        if (this.detailsOpen && this.detailsCover?.url === candidate.url) {
+          this.detailsChecking = false;
+          if (!valid) { this.detailsCover = previous; this.detailsError = this.workspaceMessages.invalidCover; }
+        }
+        this.cleanCoverUrls();
+      },
+      removeDetailsCover() {
+        this.detailsCover = this.quiz.cover || this.saving ? {action:'remove'} : null;
+        this.detailsChecking = false;
+        this.detailsError = '';
+        this.cleanCoverUrls();
+      },
+      applyDetails() {
+        const title = this.detailsTitle.trim();
+        if (!title || [...title].length > 200) { this.detailsError = this.workspaceMessages.invalidTitle; return; }
+        if (this.detailsChecking) return;
+        this.quiz.title = title;
+        this.pendingCover = this.detailsCover;
+        this.markDirty();
+        this.closeDetails();
       },
       typeLabel(type) {
         return { single_choice: 'Single choice', multi_select: 'Multi-select', short_text: 'Short text' }[type] || 'Question';
@@ -211,7 +406,7 @@
       addQuestion() {
         const options = [{ id: null, content: '', isCorrect: true, media: null }, { id: null, content: '', isCorrect: false, media: null }];
         this.quiz.questions.push({ id: null, position: this.quiz.questions.length + 1, type: 'single_choice', content: '', explanation: '', textAnswers: [], media: null, options });
-        this.selectedIndex = this.quiz.questions.length - 1;
+        this.selectQuestion(this.quiz.questions.length - 1);
         this.preview = false;
       },
       removeQuestion() {
@@ -289,7 +484,8 @@
           : `/api/v1/quizzes/${this.publicId}/options/${target.id}/media`;
       },
       async prepareMedia(questionIndex, optionIndex) {
-        if (!await this.save(true)) return null;
+        if (this.mediaBusy || !await this.save(true)) return null;
+        if (this.hasChanges) { this.globalError = this.workspaceMessages.unsavedMedia; return null; }
         const endpoint = this.targetEndpoint(questionIndex, optionIndex);
         if (!endpoint) {
           this.globalError = 'Save the question before adding media.';
@@ -338,23 +534,23 @@
       },
       async runMedia(endpoint, options, questionIndex, optionIndex) {
         this.globalError = '';
-        if (questionIndex === -1) this.coverUploading = true;
+        if (this.mediaBusy) return;
+        this.mediaBusy = true;
+        clearTimeout(this.autosaveTimer);
+        const target = this.targetAt(questionIndex, optionIndex);
         try {
           const response = await EduTestApi.request(endpoint, options);
-          this.hydrating = true;
           this.quiz.version = response.data.version;
-          if (questionIndex === -1) this.quiz.cover = response.data.media;
-          else this.targetAt(questionIndex, optionIndex).media = response.data.media;
+          if (target) target.media = response.data.media;
           this.lastSavedAt = new Date();
-          this.saveState = 'saved';
-          this.$nextTick(() => { this.hydrating = false; });
+          this.saveState = this.hasChanges ? 'dirty' : 'saved';
         } catch (error) {
-          this.globalError = error.message;
-          this.saveState = error.code === 'version_conflict' ? 'conflict' : 'retry';
+          this.handleSaveError(error);
         }
-        finally { if (questionIndex === -1) this.coverUploading = false; }
+        finally { this.mediaBusy = false; this.scheduleAutosave(); }
       },
       async lifecycle(action) {
+        if (this.mediaBusy || this.saving) return;
         if (action === 'publish' && !this.publishReady) {
           this.globalError = this.publishReadinessMessage;
           this.saveState = 'validation';
@@ -362,14 +558,23 @@
         }
         if (!await this.save(true)) return;
         if (!window.confirm(action === 'publish' ? 'Publish this quiz and activate its stable share page?' : `${action} this quiz?`)) return;
+        const sent = JSON.parse(JSON.stringify(this.quiz));
+        const sentPasscode = this.passcodeValue;
+        const references = this.quiz.questions.map(question => ({question, options:[...question.options]}));
+        this.mediaBusy = true;
+        clearTimeout(this.autosaveTimer);
         try {
           const response = await EduTestApi.request(`/api/v1/quizzes/${this.publicId}/${action}`, { method: 'POST', body: '{}' });
-          this.applyServerQuiz(response.data.quiz);
+          await this.acceptSaved(response.data.quiz, sent, references, sentPasscode);
+          this.saveState = this.hasChanges ? 'dirty' : 'saved';
           EduTestApi.toast(action === 'publish' ? 'Quiz published.' : 'Quiz updated.');
         } catch (error) {
           this.fieldErrors = error.fields || {};
           this.globalError = error.message;
           this.saveState = error.status === 422 ? 'validation' : 'retry';
+        } finally {
+          this.mediaBusy = false;
+          this.scheduleAutosave();
         }
       },
       async copyShare() {

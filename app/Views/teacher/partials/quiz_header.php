@@ -1,14 +1,14 @@
 <?php if ($builderHeader ?? false) : ?>
         <header class="builder-bar">
-            <div class="builder-title"><a class="btn btn-default btn-icon" href="<?= site_url('dashboard') ?>" aria-label="<?= esc(lang('Workspace.backDashboard'), 'attr') ?>">←</a><span><strong>{{ quiz.title || 'Untitled quiz' }}</strong><small role="status" aria-live="polite" :class="saveState">{{ saveLabel }}</small></span></div>
+            <div class="builder-title"><a class="btn btn-default btn-icon" href="<?= site_url('dashboard') ?>" aria-label="<?= esc(lang('Workspace.backDashboard'), 'attr') ?>">←</a><span><button class="builder-edit-title" type="button" ref="editTitle" @click="openDetails" aria-label="<?= esc(lang('EduTest.builder.workspace.editDetails'), 'attr') ?>"><strong>{{ quiz.title || 'Untitled quiz' }}</strong><span aria-hidden="true">✎</span></button><small role="status" aria-live="polite" :class="saveState">{{ saveLabel }}</small></span></div>
             <nav v-if="quiz.resultsAvailable && quiz.resultsUrl" class="builder-view-nav" aria-label="<?= esc(lang('Workspace.quizWorkspace'), 'attr') ?>">
                 <a class="active" href="<?= esc(site_url('quizzes/' . $quiz['publicId'] . '/edit'), 'attr') ?>" aria-current="page"><?= esc(lang('EduTest.builder.navigation.builder')) ?></a>
                 <a :href="quiz.resultsUrl"><?= esc(lang('EduTest.builder.navigation.responses')) ?></a>
             </nav>
             <div class="builder-actions">
                 <button class="btn btn-neutral" type="button" @click="preview = !preview">{{ preview ? 'Edit' : 'Preview' }}</button>
-                <button class="btn btn-default" type="button" @click="save(true)" :disabled="saving">{{ quiz.status === 'draft' ? 'Save draft' : 'Save changes' }}</button>
-                <button v-if="quiz.status === 'draft'" class="btn btn-primary" type="button" @click="lifecycle('publish')" :disabled="saving || !publishReady" :aria-describedby="!publishReady ? 'publish-readiness' : null" :title="publishReadinessMessage">Publish</button>
+                <button class="btn" :class="saveButton.primary ? 'btn-primary' : 'btn-default'" type="button" data-save-quiz @click="save(true)" :disabled="saveButton.disabled">{{ workspaceMessages[saveButton.label] }}</button>
+                <button v-if="quiz.status === 'draft'" class="btn btn-primary" type="button" @click="lifecycle('publish')" :disabled="saving || mediaBusy || !publishReady" :aria-describedby="!publishReady ? 'publish-readiness' : null" :title="publishReadinessMessage">Publish</button>
                 <button v-else-if="quiz.status === 'published'" class="btn btn-default" type="button" @click="copyShare">Copy link</button>
             </div>
         </header>
