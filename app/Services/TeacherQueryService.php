@@ -119,7 +119,7 @@ final class TeacherQueryService
             'title'         => trim((string) $quiz['title']) === '' ? 'Untitled quiz' : (string) $quiz['title'],
             'mode'          => (string) $quiz['mode'],
             'status'        => (string) $quiz['status'],
-            'frozen'        => $quiz['frozen_at'] !== null,
+            'hasStarted'     => $quiz['first_started_at'] !== null,
             'questionCount' => $questionCount,
             'responseCount' => $quiz['mode'] === 'practice' ? (int) $quiz['practice_starts'] : $attemptCount,
             'updatedAt'     => $this->utcAtom($quiz['updated_at']),

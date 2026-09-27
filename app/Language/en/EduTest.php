@@ -3,6 +3,10 @@
 declare(strict_types=1);
 
 return [
+    'builder' => [
+        'existingAttemptsNotice' => 'Saved changes apply to future starts. Existing attempts keep the paper revision they received.',
+        'modeLocked' => 'Quiz mode is locked after the first student start.',
+    ],
     'createQuiz' => [
         'eyebrow' => 'New draft',
         'title' => 'Create a quiz',

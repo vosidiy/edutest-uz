@@ -25,9 +25,9 @@
             <a class="nav-link <?= ($activeNav ?? '') === 'quizzes' ? 'active' : '' ?>" href="<?= site_url('quizzes') ?>">
                 <span aria-hidden="true">▤</span> My quizzes
             </a>
-            <span class="nav-link disabled" aria-disabled="true" title="<?= esc(lang('Player.ui.teacherReportsLater'), 'attr') ?>">
-                <span aria-hidden="true">▥</span> Results <small>Later</small>
-            </span>
+            <a class="nav-link <?= ($activeNav ?? '') === 'results' ? 'active' : '' ?>" href="<?= site_url('results') ?>">
+                <span aria-hidden="true">▥</span> <?= esc(lang('Results.nav')) ?>
+            </a>
         </nav>
         <div class="sidebar-profile">
             <?php

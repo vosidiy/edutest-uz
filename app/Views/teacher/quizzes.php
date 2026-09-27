@@ -27,7 +27,7 @@
                 <article class="quiz-row" data-quiz-id="<?= esc($quiz['publicId'], 'attr') ?>">
                     <a class="quiz-main" href="<?= $library['view'] === 'active' ? esc($quiz['editUrl'], 'attr') : '#' ?>" <?= $library['view'] === 'active' ? '' : 'aria-disabled="true" tabindex="-1"' ?>>
                         <span class="quiz-symbol" aria-hidden="true">▤</span>
-                        <span><strong><?= esc($quiz['title']) ?></strong><small><?= esc((string) $quiz['questionCount']) ?> questions · <?= esc(ucfirst($quiz['mode'])) ?><?php if ($quiz['frozen']) : ?> · Frozen<?php endif ?></small></span>
+                        <span><strong><?= esc($quiz['title']) ?></strong><small><?= esc((string) $quiz['questionCount']) ?> questions · <?= esc(ucfirst($quiz['mode'])) ?><?php if ($quiz['hasStarted']) : ?> · Has starts<?php endif ?></small></span>
                     </a>
                     <span class="badge status <?= esc($quiz['status'], 'attr') ?>"><?= esc(ucfirst($quiz['status'])) ?></span>
                     <span class="quiz-count"><strong><?= esc((string) $quiz['responseCount']) ?></strong><small><?= $quiz['mode'] === 'practice' ? 'starts' : 'submissions' ?></small></span>

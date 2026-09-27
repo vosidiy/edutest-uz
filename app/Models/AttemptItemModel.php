@@ -20,7 +20,6 @@ final class AttemptItemModel extends Model
         'choice_order',
         'status',
         'started_at',
-        'due_at',
         'locked_at',
         'lock_reason',
         'answer_codes',
@@ -30,7 +29,7 @@ final class AttemptItemModel extends Model
         'submit_key',
         'submit_hash',
         'result',
-        'points',
+        'credit',
     ];
     protected bool $allowEmptyInserts = false;
     protected bool $updateOnlyChanged = true;
@@ -42,7 +41,6 @@ final class AttemptItemModel extends Model
         'pos'           => 'int',
         'choice_order'  => 'json-array',
         'started_at'    => '?datetime',
-        'due_at'        => '?datetime',
         'locked_at'     => '?datetime',
         'answer_codes'  => '?json-array',
         'save_ver'      => 'int',

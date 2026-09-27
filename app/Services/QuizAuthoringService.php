@@ -19,7 +19,7 @@ final class QuizAuthoringService
 
     private readonly BaseConnection $db;
 
-    public function __construct(?BaseConnection $db = null, private readonly ?MediaService $media = null)
+    public function __construct(?BaseConnection $db = null, private readonly ?MediaService $media = null, private readonly ?QuizPaperService $papers = null)
     {
         $this->db = $db ?? Database::connect();
     }
@@ -54,7 +54,7 @@ final class QuizAuthoringService
             'instructions'      => '',
             'revision'          => 1,
             'version'           => 1,
-            'frozen_at'         => null,
+            'first_started_at'  => null,
             'time_limit_sec'    => null,
             'opens_at'          => null,
             'closes_at'         => null,
@@ -123,21 +123,32 @@ final class QuizAuthoringService
                 );
             }
 
+            $paperFingerprint = $this->paperFingerprint($quiz);
             $normalized = $this->normalizeDocument($payload, $quiz);
 
-            if ($quiz['frozen_at'] !== null) {
-                $this->assertFrozenContentUnchanged($quiz, $normalized);
+            if ($quiz['first_started_at'] !== null && $normalized['quiz']['mode'] !== $quiz['mode']) {
+                throw new AuthoringException('mode_locked', 'Quiz mode cannot change after the first student start.', 409, [
+                    'mode' => 'Assessment/practice mode is locked after the first start.',
+                ]);
             }
 
             $newVersion = (int) $quiz['version'] + 1;
             $quizUpdate = $normalized['quiz'];
-            $quizUpdate['version']    = $newVersion;
+            $quizUpdate['version'] = $newVersion;
+            $quizUpdate['revision'] = (int) $quiz['revision'];
             $quizUpdate['updated_at'] = $this->now();
 
             $this->db->table('quizzes')->where('id', $quiz['id'])->update($quizUpdate);
+            $orphanedMedia = $this->syncQuestions((int) $quiz['id'], $normalized['questions']);
 
-            if ($quiz['frozen_at'] === null) {
-                $orphanedMedia = $this->syncQuestions((int) $quiz['id'], $normalized['questions']);
+            $updated = $this->db->table('quizzes')->where('id', $quiz['id'])->get()->getRowArray();
+            if ($updated === null) throw new AuthoringException('save_failed', 'The quiz could not be reloaded.', 500);
+            if ($quiz['status'] === 'published') {
+                $this->assertPublishable($updated);
+            }
+            if ($paperFingerprint !== $this->paperFingerprint($updated)) {
+                $updated['revision'] = (int) $quiz['revision'] + 1;
+                $this->db->table('quizzes')->where('id', $quiz['id'])->update(['revision' => $updated['revision']]);
             }
 
             if ($this->db->transStatus() === false || ! $this->db->transCommit()) {
@@ -204,7 +215,7 @@ final class QuizAuthoringService
                     if ($quiz['status'] !== 'archived' || $quiz['deleted_at'] !== null) {
                         $this->invalidTransition('Only an archived quiz can be restored.');
                     }
-                    $changes['status'] = $quiz['frozen_at'] === null ? 'draft' : 'closed';
+                    $changes['status'] = $quiz['first_started_at'] === null ? 'draft' : 'closed';
                     break;
 
                 case 'trash':
@@ -281,8 +292,6 @@ final class QuizAuthoringService
                     'media_type'     => $question['media']['type'] ?? null,
                     'media_src'      => $questionMedia,
                     'explanation'    => $question['explanation'] === '' ? null : $question['explanation'],
-                    'points'         => $question['points'],
-                    'time_limit_sec' => $question['timeLimitSec'],
                     'text_answers'   => $question['type'] === 'short_text'
                         ? json_encode($question['textAnswers'], JSON_THROW_ON_ERROR)
                         : null,
@@ -363,7 +372,7 @@ final class QuizAuthoringService
             'status'           => (string) $row['status'],
             'teacher'          => (string) $row['display_name'],
             'questionCount'    => $questionCount,
-            'timeLimitSec'     => $row['time_limit_sec'] === null ? null : (int) $row['time_limit_sec'],
+            'timeLimitMinutes' => $this->minutesFromSeconds($row['time_limit_sec']),
             'opensAt'          => $this->utcAtom($row['opens_at']),
             'closesAt'         => $this->utcAtom($row['closes_at']),
             'passcodeRequired' => $row['passcode_hash'] !== null,
@@ -391,7 +400,7 @@ final class QuizAuthoringService
         $title = $this->text($payload, 'title', 200, $fields);
         $description = $this->text($payload, 'description', 65535, $fields);
         $instructions = $this->text($payload, 'instructions', 65535, $fields);
-        $timeLimit = $this->nullableInt($payload['timeLimitSec'] ?? null, 1, 86400, 'timeLimitSec', $fields);
+        $timeLimit = $this->minutesToSeconds($payload['timeLimitMinutes'] ?? null, 'timeLimitMinutes', $fields);
         $timezone = $this->userTimezone((int) $quiz['user_id']);
         $opensAt  = $this->localDate($payload['opensAtLocal'] ?? null, $timezone, 'opensAtLocal', $fields);
         $closesAt = $this->localDate($payload['closesAtLocal'] ?? null, $timezone, 'closesAtLocal', $fields);
@@ -502,8 +511,6 @@ final class QuizAuthoringService
             if (mb_strlen($explanation) > 65535) {
                 $fields[$prefix . '.explanation'] = 'Explanation text is too long.';
             }
-            $points = $this->decimal($question['points'] ?? null, $prefix . '.points', $fields);
-            $time   = $this->nullableInt($question['timeLimitSec'] ?? null, 1, 86400, $prefix . '.timeLimitSec', $fields);
             $id     = $this->nullableId($question['id'] ?? null, $prefix . '.id', $fields);
 
             $answers = [];
@@ -551,8 +558,6 @@ final class QuizAuthoringService
                 'type'         => $type,
                 'content'      => $content,
                 'explanation'  => $explanation,
-                'points'       => $points,
-                'timeLimitSec' => $time,
                 'textAnswers'  => $type === 'short_text' ? $answers : [],
                 'options'      => $type === 'short_text' ? [] : $options,
             ];
@@ -598,8 +603,6 @@ final class QuizAuthoringService
                     'type'           => $question['type'],
                     'content'        => $question['content'],
                     'explanation'    => $question['explanation'] === '' ? null : $question['explanation'],
-                    'points'         => $question['points'],
-                    'time_limit_sec' => $question['timeLimitSec'],
                     'text_answers'   => $question['type'] === 'short_text'
                         ? json_encode($question['textAnswers'], JSON_THROW_ON_ERROR)
                         : null,
@@ -622,8 +625,6 @@ final class QuizAuthoringService
                 'media_type'     => null,
                 'media_src'      => null,
                 'explanation'    => $question['explanation'] === '' ? null : $question['explanation'],
-                'points'         => $question['points'],
-                'time_limit_sec' => $question['timeLimitSec'],
                 'text_answers'   => $question['type'] === 'short_text'
                     ? json_encode($question['textAnswers'], JSON_THROW_ON_ERROR)
                     : null,
@@ -767,8 +768,6 @@ final class QuizAuthoringService
                 'type'         => (string) $question['type'],
                 'content'      => (string) $question['content'],
                 'explanation'  => (string) ($question['explanation'] ?? ''),
-                'points'       => number_format((float) $question['points'], 2, '.', ''),
-                'timeLimitSec' => $question['time_limit_sec'] === null ? null : (int) $question['time_limit_sec'],
                 'textAnswers'  => is_array($answers) ? array_values($answers) : [],
                 'media'        => $this->media?->descriptor(
                     $question['media_type'],
@@ -788,13 +787,14 @@ final class QuizAuthoringService
             'mode'             => (string) $quiz['mode'],
             'status'           => (string) $quiz['status'],
             'deleted'          => $quiz['deleted_at'] !== null,
-            'frozen'           => $quiz['frozen_at'] !== null,
+            'hasStarted'        => $quiz['first_started_at'] !== null,
+            'modeLocked'        => $quiz['first_started_at'] !== null,
             'listed'           => (bool) $quiz['listed'],
             'title'            => (string) $quiz['title'],
             'description'      => (string) $quiz['description'],
             'instructions'     => (string) $quiz['instructions'],
             'cover'            => $this->media?->descriptor(($quiz['cover_src'] ?? null) === null ? null : 'image', $quiz['cover_src'] ?? null, 'cover', (int) $quiz['id']),
-            'timeLimitSec'     => $quiz['time_limit_sec'] === null ? null : (int) $quiz['time_limit_sec'],
+            'timeLimitMinutes' => $this->minutesFromSeconds($quiz['time_limit_sec']),
             'timezone'         => $timezone,
             'opensAtLocal'     => $this->localValue($quiz['opens_at'], $timezone),
             'closesAtLocal'    => $this->localValue($quiz['closes_at'], $timezone),
@@ -819,6 +819,14 @@ final class QuizAuthoringService
     }
 
     /** @param array<string, mixed> $quiz */
+    /** Enforces that an already-published quiz remains startable after a related mutation. */
+    public function assertPublishedReady(array $quiz): void
+    {
+        if (($quiz['status'] ?? null) === 'published') {
+            $this->assertPublishable($quiz);
+        }
+    }
+
     private function assertPublishable(array $quiz): void
     {
         $document = $this->serializeDocument($quiz);
@@ -862,43 +870,6 @@ final class QuizAuthoringService
         }
     }
 
-    /** @param array<string, mixed> $quiz
-     *  @param array{quiz: array<string, mixed>, questions: list<array<string, mixed>>} $normalized
-     */
-    private function assertFrozenContentUnchanged(array $quiz, array $normalized): void
-    {
-        $lockedQuiz = [
-            'mode'           => 'mode',
-            'title'          => 'title',
-            'description'    => 'description',
-            'instructions'   => 'instructions',
-            'time_limit_sec' => 'time_limit_sec',
-        ];
-        foreach ($lockedQuiz as $current => $incoming) {
-            if ((string) ($quiz[$current] ?? '') !== (string) ($normalized['quiz'][$incoming] ?? '')) {
-                throw new AuthoringException('quiz_frozen', 'Duplicate this quiz to change frozen content.', 409);
-            }
-        }
-
-        $current = $this->serializeDocument($quiz)['questions'];
-        $incoming = $normalized['questions'];
-        $strip = static function (array $questions): array {
-            return array_map(static function (array $question): array {
-                unset($question['position'], $question['media']);
-                $question['id'] = (string) ($question['id'] ?? '');
-                $question['options'] = array_map(static function (array $option): array {
-                    unset($option['position'], $option['media'], $option['code']);
-                    $option['id'] = (string) ($option['id'] ?? '');
-                    return $option;
-                }, $question['options']);
-                return $question;
-            }, $questions);
-        };
-        if ($strip($current) !== $strip($incoming)) {
-            throw new AuthoringException('quiz_frozen', 'Duplicate this quiz to change frozen questions.', 409);
-        }
-    }
-
     /** @return array<string, mixed> */
     private function ownedQuiz(int $userId, string $publicId, bool $withDeleted = false, bool $lock = false): array
     {
@@ -939,19 +910,6 @@ final class QuizAuthoringService
         return $value;
     }
 
-    /** @param array<string, string> $fields */
-    private function nullableInt(mixed $value, int $min, int $max, string $key, array &$fields): ?int
-    {
-        if ($value === null || $value === '') {
-            return null;
-        }
-        $filtered = filter_var($value, FILTER_VALIDATE_INT);
-        if ($filtered === false || $filtered < $min || $filtered > $max) {
-            $fields[$key] = "Enter a whole number from {$min} to {$max}.";
-            return null;
-        }
-        return $filtered;
-    }
 
     /** @param array<string, string> $fields */
     private function nullableId(mixed $value, string $key, array &$fields): ?int
@@ -972,15 +930,31 @@ final class QuizAuthoringService
     }
 
     /** @param array<string, string> $fields */
-    private function decimal(mixed $value, string $key, array &$fields): string
+    private function minutesToSeconds(mixed $value, string $key, array &$fields): ?int
     {
-        $value = trim((string) $value);
-        if (! preg_match('/^(?:[0-9]{1,4}|10000)(?:\.[0-9]{1,2})?$/', $value)
-            || (float) $value <= 0 || (float) $value > 10000) {
-            $fields[$key] = 'Points must be from 0.01 to 10000 with at most two decimals.';
-            return '1.00';
+        if ($value === null || $value === '') {
+            return null;
         }
-        return number_format((float) $value, 2, '.', '');
+        $text = trim((string) $value);
+        if (! preg_match('/^(?:0|[1-9][0-9]{0,3})(?:\.5)?$/D', $text)) {
+            $fields[$key] = 'Use half-minute steps from 0.5 to 1440 minutes.';
+            return null;
+        }
+        $halves = (int) round((float) $text * 2);
+        if ($halves < 1 || $halves > 2880) {
+            $fields[$key] = 'Use half-minute steps from 0.5 to 1440 minutes.';
+            return null;
+        }
+        return $halves * 30;
+    }
+
+    private function minutesFromSeconds(mixed $seconds): ?string
+    {
+        if ($seconds === null) {
+            return null;
+        }
+        $halves = intdiv((int) $seconds, 30);
+        return intdiv($halves, 2) . ($halves % 2 === 1 ? '.5' : '');
     }
 
     private function bool(mixed $value): bool
@@ -1057,6 +1031,37 @@ final class QuizAuthoringService
             'k' => (int) ($number * 1024),
             default => (int) $number,
         };
+    }
+
+    private function paperFingerprint(array $quiz): string
+    {
+        $definition = [];
+        foreach ([
+            'title', 'description', 'instructions', 'mode', 'cover_src', 'time_limit_sec',
+            'opens_at', 'closes_at', 'email_mode', 'phone_mode', 'shuffle_questions',
+            'shuffle_options', 'feedback', 'show_score', 'show_answers', 'show_explain', 'cheat_check',
+        ] as $field) {
+            $definition[$field] = $quiz[$field] ?? null;
+        }
+        $definition['passcode_hash'] = ($quiz['passcode_hash'] ?? null) === null
+            ? null : bin2hex((string) $quiz['passcode_hash']);
+        $definition['questions'] = [];
+        foreach ($this->db->table('questions')->where('quiz_id', $quiz['id'])->orderBy('pos')->get()->getResultArray() as $question) {
+            $row = [];
+            foreach (['id', 'pos', 'type', 'content', 'media_type', 'media_src', 'explanation', 'text_answers'] as $field) {
+                $row[$field] = $question[$field] ?? null;
+            }
+            $row['options'] = [];
+            foreach ($this->db->table('question_options')->where('question_id', $question['id'])->orderBy('pos')->get()->getResultArray() as $option) {
+                $item = [];
+                foreach (['id', 'pos', 'code', 'content', 'media_type', 'media_src', 'is_correct'] as $field) {
+                    $item[$field] = $option[$field] ?? null;
+                }
+                $row['options'][] = $item;
+            }
+            $definition['questions'][] = $row;
+        }
+        return hash('sha256', json_encode($definition, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     }
 
     private function rawMediaSource(string $table, int $id): ?string

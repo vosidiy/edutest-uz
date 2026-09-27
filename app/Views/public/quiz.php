@@ -8,7 +8,7 @@
         <?php if ($quiz['description'] !== '') : ?><p class="player-description"><?= nl2br(esc($quiz['description'])) ?></p><?php endif ?>
         <dl class="player-facts">
             <div><dt><?= esc(lang('Player.ui.questions')) ?></dt><dd><?= esc((string) $quiz['questionCount']) ?></dd></div>
-            <div><dt><?= esc(lang('Player.ui.timeLimit')) ?></dt><dd><?= $quiz['timeLimitSec'] === null ? esc(lang('Player.ui.noLimit')) : esc($quiz['timeLimitSec'] . ' ' . lang('Player.ui.seconds')) ?></dd></div>
+            <div><dt><?= esc(lang('Player.ui.timeLimit')) ?></dt><dd><?= $quiz['timeLimitMinutes'] === null ? esc(lang('Player.ui.noLimit')) : esc($quiz['timeLimitMinutes'] . ' ' . lang('Player.ui.minutes')) ?></dd></div>
             <div><dt><?= esc(lang('Player.ui.access')) ?></dt><dd><?= esc(lang($quiz['passcodeRequired'] ? 'Player.ui.passcode' : 'Player.ui.privateLink')) ?></dd></div>
         </dl>
         <?php foreach (['opensAt' => 'opens', 'closesAt' => 'closes'] as $field => $label) : ?>

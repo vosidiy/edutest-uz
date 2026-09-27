@@ -1,6 +1,6 @@
 -- EduTest canonical application schema
 -- Target: MySQL 8.4, InnoDB, utf8mb4
--- Last updated: 2026-09-26
+-- Last updated: 2026-09-27
 --
 -- Fresh-install use in phpMyAdmin:
 --   1. Select the intended empty database.
@@ -55,7 +55,7 @@ CREATE TABLE quizzes (
   cover_src VARCHAR(1000) NULL,
   revision INT UNSIGNED NOT NULL DEFAULT 1,
   version INT UNSIGNED NOT NULL DEFAULT 1,
-  frozen_at DATETIME(6) NULL,
+  first_started_at DATETIME(6) NULL,
   time_limit_sec INT UNSIGNED NULL,
   opens_at DATETIME(6) NULL,
   closes_at DATETIME(6) NULL,
@@ -133,8 +133,6 @@ CREATE TABLE questions (
   media_type VARCHAR(8) COLLATE utf8mb4_bin NULL,
   media_src VARCHAR(1000) NULL,
   explanation TEXT NULL,
-  points DECIMAL(8,2) NOT NULL DEFAULT 1.00,
-  time_limit_sec INT UNSIGNED NULL,
   text_answers JSON NULL,
   created_at DATETIME(6) NOT NULL,
   updated_at DATETIME(6) NOT NULL,
@@ -146,10 +144,6 @@ CREATE TABLE questions (
     CHECK (type IN ('single_choice', 'multi_select', 'short_text')),
   CONSTRAINT chk_questions_pos
     CHECK (pos > 0),
-  CONSTRAINT chk_questions_points
-    CHECK (points > 0 AND points <= 10000),
-  CONSTRAINT chk_questions_time_limit
-    CHECK (time_limit_sec IS NULL OR time_limit_sec BETWEEN 1 AND 86400),
   CONSTRAINT chk_questions_media_type
     CHECK (media_type IS NULL OR media_type IN ('image', 'audio', 'video')),
   CONSTRAINT chk_questions_media_pair
@@ -181,7 +175,7 @@ CREATE TABLE question_options (
   CONSTRAINT chk_question_options_correct
     CHECK (is_correct IN (0, 1)),
   CONSTRAINT chk_question_options_media_type
-    CHECK (media_type IS NULL OR media_type IN ('image', 'audio', 'video')),
+    CHECK (media_type IS NULL OR media_type = 'image'),
   CONSTRAINT chk_question_options_media_pair
     CHECK (
       (media_type IS NULL AND media_src IS NULL)
@@ -191,10 +185,27 @@ CREATE TABLE question_options (
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_0900_ai_ci;
 
+CREATE TABLE quiz_papers (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  quiz_id BIGINT UNSIGNED NOT NULL,
+  public_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  revision INT UNSIGNED NOT NULL,
+  definition JSON NOT NULL,
+  created_at DATETIME(6) NOT NULL,
+  CONSTRAINT fk_quiz_papers_quiz
+    FOREIGN KEY (quiz_id) REFERENCES quizzes(id),
+  CONSTRAINT uq_quiz_papers_public_id UNIQUE (public_id),
+  CONSTRAINT uq_quiz_papers_quiz_revision UNIQUE (quiz_id, revision),
+  CONSTRAINT uq_quiz_papers_id_quiz UNIQUE (id, quiz_id),
+  CONSTRAINT chk_quiz_papers_revision CHECK (revision > 0)
+) ENGINE=InnoDB
+  DEFAULT CHARACTER SET utf8mb4
+  COLLATE utf8mb4_0900_ai_ci;
+
 CREATE TABLE attempts (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   quiz_id BIGINT UNSIGNED NOT NULL,
-  revision INT UNSIGNED NOT NULL,
+  paper_id BIGINT UNSIGNED NOT NULL,
   public_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   token_hash BINARY(32) NOT NULL,
   start_key CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
@@ -222,6 +233,8 @@ CREATE TABLE attempts (
   updated_at DATETIME(6) NOT NULL,
   CONSTRAINT fk_attempts_quiz
     FOREIGN KEY (quiz_id) REFERENCES quizzes(id),
+  CONSTRAINT fk_attempts_paper
+    FOREIGN KEY (paper_id, quiz_id) REFERENCES quiz_papers(id, quiz_id),
   CONSTRAINT uq_attempts_public_id UNIQUE (public_id),
   CONSTRAINT uq_attempts_token_hash UNIQUE (token_hash),
   CONSTRAINT uq_attempts_quiz_start_key UNIQUE (quiz_id, start_key),
@@ -258,7 +271,6 @@ CREATE TABLE attempt_items (
   choice_order JSON NOT NULL,
   status VARCHAR(8) COLLATE utf8mb4_bin NOT NULL DEFAULT 'pending',
   started_at DATETIME(6) NULL,
-  due_at DATETIME(6) NULL,
   locked_at DATETIME(6) NULL,
   lock_reason VARCHAR(20) COLLATE utf8mb4_bin NULL,
   answer_codes JSON NULL,
@@ -268,15 +280,12 @@ CREATE TABLE attempt_items (
   submit_key CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,
   submit_hash BINARY(32) NULL,
   result VARCHAR(12) COLLATE utf8mb4_bin NULL,
-  points DECIMAL(8,2) NULL,
+  credit DECIMAL(3,2) NULL,
   CONSTRAINT fk_attempt_items_attempt
     FOREIGN KEY (attempt_id, quiz_id) REFERENCES attempts(id, quiz_id),
-  CONSTRAINT fk_attempt_items_question
-    FOREIGN KEY (question_id, quiz_id) REFERENCES questions(id, quiz_id),
   CONSTRAINT uq_attempt_items_attempt_pos UNIQUE (attempt_id, pos),
   CONSTRAINT uq_attempt_items_attempt_question UNIQUE (attempt_id, question_id),
   CONSTRAINT uq_attempt_items_attempt_submit_key UNIQUE (attempt_id, submit_key),
-  INDEX ix_item_due (status, due_at),
   CONSTRAINT chk_attempt_items_pos
     CHECK (pos > 0),
   CONSTRAINT chk_attempt_items_status
@@ -284,12 +293,12 @@ CREATE TABLE attempt_items (
   CONSTRAINT chk_attempt_items_lock_reason
     CHECK (
       lock_reason IS NULL
-      OR lock_reason IN ('answered', 'skipped', 'question_timeout', 'attempt_timeout')
+      OR lock_reason IN ('answered', 'skipped', 'attempt_timeout')
     ),
   CONSTRAINT chk_attempt_items_result
     CHECK (result IS NULL OR result IN ('correct', 'partial', 'wrong', 'unanswered')),
-  CONSTRAINT chk_attempt_items_points
-    CHECK (points IS NULL OR points >= 0),
+  CONSTRAINT chk_attempt_items_credit
+    CHECK (credit IS NULL OR credit BETWEEN 0.00 AND 1.00),
   CONSTRAINT chk_attempt_items_submit_pair
     CHECK (
       (submit_key IS NULL AND submit_hash IS NULL)
@@ -330,12 +339,15 @@ CREATE TABLE cheat_events (
 
 CREATE TABLE practice_keys (
   quiz_id BIGINT UNSIGNED NOT NULL,
+  paper_id BIGINT UNSIGNED NOT NULL,
   request_key CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   expires_at DATETIME(6) NOT NULL,
   CONSTRAINT pk_practice_keys PRIMARY KEY (quiz_id, request_key),
   INDEX ix_practice_expiry (expires_at),
   CONSTRAINT fk_practice_keys_quiz
-    FOREIGN KEY (quiz_id) REFERENCES quizzes(id)
+    FOREIGN KEY (quiz_id) REFERENCES quizzes(id),
+  CONSTRAINT fk_practice_keys_paper
+    FOREIGN KEY (paper_id, quiz_id) REFERENCES quiz_papers(id, quiz_id)
 ) ENGINE=InnoDB
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_0900_ai_ci;

@@ -154,16 +154,19 @@
         return `${Math.floor(Number(bytes) / 1048576)} MiB`;
       },
       fieldError(path) { return this.fieldErrors?.[path] || ''; },
-      addQuestion(type) {
-        let storedType = type;
-        let options = [];
-        if (type === 'true_false') {
-          storedType = 'single_choice';
-          options = [{ id: null, content: 'True', isCorrect: true, media: null }, { id: null, content: 'False', isCorrect: false, media: null }];
-        } else if (type !== 'short_text') {
-          options = [{ id: null, content: '', isCorrect: true, media: null }, { id: null, content: '', isCorrect: false, media: null }];
+      optionLetter(index) {
+        let value = index + 1;
+        let label = '';
+        while (value > 0) {
+          value--;
+          label = String.fromCharCode(65 + (value % 26)) + label;
+          value = Math.floor(value / 26);
         }
-        this.quiz.questions.push({ id: null, position: this.quiz.questions.length + 1, type: storedType, content: '', explanation: '', points: '1.00', timeLimitSec: null, textAnswers: type === 'short_text' ? [''] : [], media: null, options });
+        return label;
+      },
+      addQuestion() {
+        const options = [{ id: null, content: '', isCorrect: true, media: null }, { id: null, content: '', isCorrect: false, media: null }];
+        this.quiz.questions.push({ id: null, position: this.quiz.questions.length + 1, type: 'single_choice', content: '', explanation: '', textAnswers: [], media: null, options });
         this.selectedIndex = this.quiz.questions.length - 1;
         this.preview = false;
       },
@@ -182,7 +185,6 @@
       changeQuestionType(type) {
         const question = this.selectedQuestion;
         if (!question || type === question.type) return;
-        if (!window.confirm('Changing the answer type will reset its answers and attached answer media. Continue?')) return;
         question.type = type;
         if (type === 'short_text') {
           question.options = [];
@@ -198,9 +200,11 @@
         if (option?.media && !window.confirm('Delete this answer and its attached media?')) return;
         this.selectedQuestion.options.splice(index, 1);
       },
-      toggleCorrect(index) {
-        if (this.selectedQuestion.type === 'single_choice') this.selectedQuestion.options.forEach((option, i) => { option.isCorrect = i === index; });
-        else this.selectedQuestion.options[index].isCorrect = !this.selectedQuestion.options[index].isCorrect;
+      setCorrect(index, checked) {
+        if (this.selectedQuestion.type === 'single_choice') {
+          if (!checked) return;
+          this.selectedQuestion.options.forEach((option, i) => { option.isCorrect = i === index; });
+        } else this.selectedQuestion.options[index].isCorrect = checked;
       },
       changeMode(mode) {
         if (mode === this.quiz.mode) return;
@@ -244,8 +248,8 @@
       chooseFile(questionIndex, optionIndex) {
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = 'image/jpeg,image/png,image/webp,audio/mpeg,audio/mp4,audio/ogg,audio/wav';
-        if (questionIndex === -1) input.accept = 'image/jpeg,image/png,image/webp';
+        const imageOnly = questionIndex === -1 || optionIndex !== null;
+        input.accept = imageOnly ? 'image/jpeg,image/png,image/webp' : 'image/jpeg,image/png,image/webp,audio/mpeg,audio/mp4,audio/ogg,audio/wav';
         input.addEventListener('change', async () => {
           if (!input.files?.[0]) return;
           const file = input.files[0];

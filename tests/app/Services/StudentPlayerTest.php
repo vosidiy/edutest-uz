@@ -10,7 +10,7 @@ use Tests\Support\PlayerTestCase;
 
 final class StudentPlayerTest extends PlayerTestCase
 {
-    public function testStartFreezesAndRetryRecoversSameAttempt(): void
+    public function testStartCreatesOnePaperAndRetryRecoversSameAttempt(): void
     {
         $quiz = $this->quiz();
         $ticket = $this->player->admission->ticket($quiz['share']);
@@ -19,12 +19,18 @@ final class StudentPlayerTest extends PlayerTestCase
         $this->assertSame($first, $this->player->admission->start($body));
         $this->assertSame($ticket['credential'], $first['credential']);
         $this->assertSame(1, $this->db->table('attempts')->countAllResults());
-        $frozen = $this->authoring->document($quiz['owner'], $quiz['publicId']);
-        $this->assertTrue($frozen['frozen']);
-        $this->assertSame($quiz['document']['version'] + 1, $frozen['version']);
+        $started = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        $this->assertTrue($started['hasStarted']);
+        $this->assertTrue($started['modeLocked']);
+        $this->assertSame($quiz['document']['version'], $started['version']);
+        $this->assertSame(1, $this->db->table('quiz_papers')->countAllResults());
         $attempt = $this->db->table('attempts')->get()->getRowArray();
         $this->assertSame(hash('sha256', $first['credential'], true), $attempt['token_hash']);
         $this->assertSame('Student', $attempt['name']);
+
+        $second = $this->startQuiz($quiz);
+        $this->assertNotSame($first['attemptId'], $second['attemptId']);
+        $this->assertSame(1, $this->db->table('quiz_papers')->countAllResults());
     }
 
     public function testPreloadUsesCodesWithoutOptionCorrectnessOrPrivatePaths(): void
@@ -39,13 +45,33 @@ final class StudentPlayerTest extends PlayerTestCase
         $this->assertIsString($question['id']);
     }
 
+    public function testPaperMediaKeysAreOpaqueAndNotLiveRecordIdentifiers(): void
+    {
+        $quiz = $this->quiz();
+        $quizRow = $this->db->table('quizzes')->where('public_id', $quiz['publicId'])->get()->getRowArray();
+        $question = $this->db->table('questions')->where('quiz_id', $quizRow['id'])->orderBy('pos')->get()->getRowArray();
+        $this->db->table('questions')->where('id', $question['id'])->update([
+            'media_type' => 'video',
+            'media_src' => 'https://vimeo.com/123456789',
+        ]);
+
+        $this->startQuiz($quiz);
+        $paper = $this->db->table('quiz_papers')->get()->getRowArray();
+        $definition = json_decode((string) $paper['definition'], true, 512, JSON_THROW_ON_ERROR);
+        $key = $definition['questions'][0]['media']['key'];
+
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{32}$/D', $key);
+        $this->assertNotSame('question:' . $question['id'], $key);
+    }
+
+
     public function testOrderedSyncScoresOnServerAndReplaysWithoutIncrement(): void
     {
         $attempt = $this->startQuiz($this->quiz(settings: ['showAnswers' => true]));
         $payload = ['version' => $attempt['version'], 'items' => [$this->submission($attempt, 0), $this->submission($attempt, 1)], 'finishReason' => 'completed', 'score' => '999.99'];
         $saved = $this->player->assessment->sync($attempt['attemptId'], $attempt['credential'], $payload);
         $this->assertSame('submitted', $saved['status']);
-        $this->assertSame('5.00', $saved['result']['score']);
+        $this->assertSame('2.00', $saved['result']['score']);
         $this->assertSame('100.00', $saved['result']['percent']);
         $again = $this->player->assessment->sync($attempt['attemptId'], $attempt['credential'], $payload);
         $this->assertSame($saved['version'], $again['version']);
@@ -80,24 +106,76 @@ final class StudentPlayerTest extends PlayerTestCase
 
     public function testLateWorkIsAcceptedAndFlagged(): void
     {
-        $attempt = $this->startQuiz($this->quiz(settings: ['timeLimitSec' => 1]));
+        $attempt = $this->startQuiz($this->quiz(settings: ['timeLimitMinutes' => '0.5']));
         $this->db->table('attempts')->where('public_id', $attempt['attemptId'])->update(['total_due_at' => '2000-01-01 00:00:00.000000']);
         $this->assertSame('in_progress', $this->player->assessment->load($attempt['attemptId'], $attempt['credential'])['status']);
         $saved = $this->player->assessment->sync($attempt['attemptId'], $attempt['credential'], ['version' => 1, 'items' => [$this->submission($attempt, 0), $this->submission($attempt, 1)], 'finishReason' => 'completed']);
         $this->assertTrue($saved['lateSync']);
-        $this->assertSame('5.00', $saved['result']['score']);
+        $this->assertSame('2.00', $saved['result']['score']);
     }
 
     public function testTimerFinishLeavesRemainingQuestionsUnanswered(): void
     {
-        $attempt = $this->startQuiz($this->quiz(settings: ['timeLimitSec' => 1]));
+        $attempt = $this->startQuiz($this->quiz(settings: ['timeLimitMinutes' => '0.5']));
         $saved = $this->player->assessment->sync($attempt['attemptId'], $attempt['credential'], ['version' => 1, 'items' => [$this->submission($attempt, 0)], 'finishReason' => 'total_timeout']);
         $this->assertSame('expired', $saved['status']);
         $this->assertSame('unanswered', $saved['result']['items'][1]['result']);
-        $this->assertSame('2.50', $saved['result']['score']);
+        $this->assertSame('1.00', $saved['result']['score']);
     }
 
-    public function testFrozenPolicyChangesAndClosureDoNotChangeStartedAttempt(): void
+    public function testInvalidPublishedEditRollsBackAndDoesNotDisruptStarts(): void
+    {
+        $quiz = $this->quiz();
+        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        $revision = $document['revision'];
+        $document['questions'] = [];
+        try {
+            $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
+            $this->fail('An invalid published edit must not commit.');
+        } catch (AuthoringException $error) {
+            $this->assertSame('not_publishable', $error->errorCode);
+        }
+        $server = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        $this->assertSame($revision, $server['revision']);
+        $this->assertCount(2, $server['questions']);
+        $this->assertCount(2, $this->startQuiz($quiz)['quiz']['questions']);
+    }
+
+    public function testEditingAndDeletingLiveQuestionsCreatesANewPaperWithoutChangingOldGrading(): void
+    {
+        $quiz = $this->quiz();
+        $old = $this->startQuiz($quiz);
+        $quizRow = $this->db->table('quizzes')->where('public_id', $quiz['publicId'])->get()->getRowArray();
+        $oldRevision = (int) $this->db->table('quiz_papers')->where('quiz_id', $quizRow['id'])->get()->getRowArray()['revision'];
+
+        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        $document['title'] = 'Revised live quiz';
+        array_shift($document['questions']);
+        $document['questions'][0]['content'] = 'Revised question for future students';
+        $document['questions'][0]['options'][0]['isCorrect'] = true;
+        $document['questions'][0]['options'][1]['isCorrect'] = false;
+        $saved = $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
+
+        $this->assertGreaterThan((int) $oldRevision, $saved['revision']);
+        $this->assertSame(1, $this->db->table('questions')->where('quiz_id', $quizRow['id'])->countAllResults());
+        $oldReloaded = $this->player->assessment->load($old['attemptId'], $old['credential']);
+        $this->assertSame('Capital cities', $oldReloaded['quiz']['title']);
+        $this->assertCount(2, $oldReloaded['quiz']['questions']);
+        $graded = $this->player->assessment->sync($old['attemptId'], $old['credential'], [
+            'version' => 1,
+            'items' => [$this->submission($old, 0), $this->submission($old, 1)],
+            'finishReason' => 'completed',
+        ]);
+        $this->assertSame('2.00', $graded['result']['score']);
+
+        $new = $this->startQuiz($quiz);
+        $this->assertSame('Revised live quiz', $new['quiz']['title']);
+        $this->assertCount(1, $new['quiz']['questions']);
+        $this->assertSame('Revised question for future students', $new['quiz']['questions'][0]['content']);
+        $this->assertSame(2, $this->db->table('quiz_papers')->countAllResults());
+    }
+
+    public function testLiveChangesDoNotChangeStartedAttemptPaper(): void
     {
         $quiz = $this->quiz(settings: ['feedback' => 'after_each', 'shuffleQuestions' => true, 'shuffleOptions' => true]);
         $attempt = $this->startQuiz($quiz);
@@ -122,7 +200,7 @@ final class StudentPlayerTest extends PlayerTestCase
             try { $this->player->admission->start(['ticket' => $ticket['ticket']] + $identity); $this->fail(); }
             catch (PlayerException) { $this->assertSame(0, $this->db->table('attempts')->countAllResults()); }
         }
-        $this->assertFalse($this->authoring->document($quiz['owner'], $quiz['publicId'])['frozen']);
+        $this->assertFalse($this->authoring->document($quiz['owner'], $quiz['publicId'])['hasStarted']);
         $this->player->admission->start(['ticket' => $ticket['ticket'], 'name' => 'Student', 'email' => 'student@example.test', 'phone' => 'ignored', 'passcode' => 'open-sesame']);
         $this->assertNull($this->db->table('attempts')->get()->getRow('phone'));
     }
@@ -149,6 +227,7 @@ final class StudentPlayerTest extends PlayerTestCase
         $saved = $this->player->assessment->sync($attempt['attemptId'], $attempt['credential'], ['version' => 1, 'items' => [$this->submission($attempt, 0)], 'finishReason' => 'completed']);
         $this->assertArrayNotHasKey('score', $saved['result']);
         $this->assertArrayNotHasKey('points', $saved['result']['items'][0]);
+        $this->assertArrayNotHasKey('credit', $saved['result']['items'][0]);
         $this->expectException(PlayerException::class);
         $this->player->assessment->load($attempt['attemptId'], str_repeat('0', 64));
     }

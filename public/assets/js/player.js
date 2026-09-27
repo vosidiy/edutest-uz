@@ -19,6 +19,16 @@ const t = (key, values = {}) => Object.entries(values).reduce((text, [name, valu
 const node = (tag, className = '', text = null) => { const element = document.createElement(tag); element.className = className; if (text !== null) element.textContent = text; return element; };
 const button = (label, action, variant = 'btn-primary') => { const item = node('button', `btn ${variant}`, label); item.type = 'button'; item.addEventListener('click', action); return item; };
 const notify = text => { announcer.textContent = ''; requestAnimationFrame(() => { announcer.textContent = text; }); };
+const optionLetter = index => {
+  let value = index + 1;
+  let label = '';
+  while (value > 0) {
+    value--;
+    label = String.fromCharCode(65 + (value % 26)) + label;
+    value = Math.floor(value / 26);
+  }
+  return label;
+};
 
 function readStorage(key) {
   try { return JSON.parse(sessionStorage.getItem(key) || 'null'); }
@@ -212,12 +222,15 @@ function renderQuestion() {
     input.addEventListener('input', () => { editAnswer(state, {textAnswer: input.value}); submitButton.disabled = !valid(); changed(); });
     answers.append(input);
   } else {
-    for (const option of question.options) {
+    for (const [optionIndex, option] of question.options.entries()) {
+      const letter = optionLetter(optionIndex);
       const label = node('label', `player-option${item.answerCodes.includes(option.code) ? ' is-selected' : ''}`);
       const input = node('input'); input.type = question.type === 'single_choice' ? 'radio' : 'checkbox'; input.name = 'answer'; input.value = option.code; input.checked = item.answerCodes.includes(option.code);
-      const copy = node('span'); copy.append(node('span', 'player-option-copy', option.content)); appendMedia(copy, `o:${option.id}`, option.media);
+      const copy = node('span', 'player-option-content');
+      copy.append(node('span', 'player-option-letter', `${letter})`), node('span', 'player-option-copy', option.content));
+      appendMedia(copy, `o:${option.id}`, option.media);
       // Media-only choices still need an accessible option label.
-      input.setAttribute('aria-label', option.content || `${t('yourAnswer')} ${question.options.indexOf(option) + 1}`);
+      input.setAttribute('aria-label', `${letter}) ${option.content || t('mediaImage')}`);
       input.addEventListener('change', () => {
         const selected = [...answers.querySelectorAll('input:checked')].map(element => element.value);
         editAnswer(state, {answerCodes: selected});
@@ -242,18 +255,24 @@ function renderQuestion() {
 }
 
 function answerText(question, item) {
-  return question.type === 'short_text' ? item.textAnswer || t('unanswered') : question.options.filter(option => item.answerCodes.includes(option.code)).map(option => option.content || t('mediaImage')).join('; ') || t('unanswered');
+  return question.type === 'short_text'
+    ? item.textAnswer || t('unanswered')
+    : question.options
+      .map((option, index) => ({option, index}))
+      .filter(({option}) => item.answerCodes.includes(option.code))
+      .map(({option, index}) => `${optionLetter(index)}) ${option.content || t('mediaImage')}`)
+      .join('; ') || t('unanswered');
 }
 function feedback(question, item, result) {
   const settings = state.quiz.settings;
   const box = node('section', `player-feedback ${result.result}`);
   box.append(node('h3', '', t(result.result)), node('p', '', `${t('yourAnswer')}: ${answerText(question, item)}`));
-  if (settings.showScore) box.append(node('p', '', `${result.points} / ${question.points} ${t('points')}`));
   if (settings.showAnswers) {
     box.append(node('strong', '', t(question.type === 'short_text' ? 'acceptedAnswers' : 'correctAnswer')));
     if (question.type === 'short_text') box.append(node('p', '', question.acceptedAnswers.join(' / ')));
-    else for (const option of question.options.filter(option => question.correctCodes.includes(option.code))) {
-      const answer = node('p', '', option.content); box.append(answer); appendMedia(box, `o:${option.id}`, option.media);
+    else for (const [index, option] of question.options.entries()) {
+      if (!question.correctCodes.includes(option.code)) continue;
+      const answer = node('p', '', `${optionLetter(index)}) ${option.content || t('mediaImage')}`); box.append(answer); appendMedia(box, `o:${option.id}`, option.media);
     }
     if (settings.showExplain && question.explanation) box.append(node('strong', '', t('explanation')), node('p', '', question.explanation));
   }
@@ -266,7 +285,7 @@ function renderResults() {
   const card = node('section', 'card player-results-header');
   const icon = node('span', 'player-completion-icon', '✓'); icon.setAttribute('aria-hidden', 'true'); card.append(icon);
   const heading = node('h1', '', t('complete')); heading.tabIndex = -1; card.append(heading, node('p', '', state.quiz.title));
-  if (state.quiz.settings.showScore) card.append(node('div', 'player-score', `${result.percent}%`), node('p', '', `${result.score} / ${result.maxScore} ${t('points')}`));
+  if (state.quiz.settings.showScore) card.append(node('div', 'player-score', `${result.percent}%`), node('p', '', `${result.score} / ${result.maxScore} ${t('questionsScore')}`));
   else card.append(node('p', '', t('hiddenScore')));
   card.append(node('p', 'player-help', t(state.mode === 'practice' ? 'practiceResult' : state.result ? 'confirmed' : 'provisional')));
   if (state.result?.lateSync) card.append(node('p', 'alert alert-warning', t('lateSync')));
@@ -308,8 +327,7 @@ function tick() {
   if (!due) return;
   if (due.at - now <= 30000 && warnedDeadline !== `${due.at}`) { warnedDeadline = `${due.at}`; notify(t('timeWarning')); }
   if (now < due.at) return;
-  if (due.reason === 'question_timeout') { submit('question_timeout'); notify(t('questionTimeout')); }
-  else { finishTimed(state, due.reason); changed(true); render(); notify(t(due.reason)); }
+  finishTimed(state, due.reason); changed(true); render(); notify(t(due.reason));
 }
 
 function getMedia(key) {

@@ -15,14 +15,14 @@ const token = 'a'.repeat(64);
 let mode = 'assessment', feedback = 'after_each', visibility = true, official = null, forceConflict = false, loseStartResponse = false, starts = 0;
 const requests = [];
 const quiz = () => ({title: 'A little curiosity goes a long way', description: 'Explore geography in three quick questions. Take your time, trust what you know, and learn something new.',
-  instructions: 'Choose your answer, then submit it. You cannot return to a submitted question.', teacher: 'Sarah Williams', questionCount: 3, timeLimitSec: 600,
+  instructions: 'Choose your answer, then submit it. You cannot return to a submitted question.', teacher: 'Sarah Williams', questionCount: 3, timeLimitMinutes: '10',
   opensAt: null, closesAt: null, passcodeRequired: false, availability: 'available', shareToken: token, emailMode: 'optional', phoneMode: 'hidden', cheatCheck: false, cover: null, mode});
 const questions = () => [
-  {id: '9007199254740993', type: 'single_choice', content: 'What is the capital of France?', points: '2.50', timeLimitSec: 120, media: null, explanation: 'Paris has been the political and cultural centre of France for centuries.', acceptedAnswers: [], correctCodes: ['paris'],
+  {id: '9007199254740993', type: 'single_choice', content: 'What is the capital of France?', media: null, explanation: 'Paris has been the political and cultural centre of France for centuries.', acceptedAnswers: [], correctCodes: ['paris'],
     options: [{id: '11', code: 'berlin', content: 'Berlin', media: null}, {id: '12', code: 'paris', content: 'Paris', media: null}, {id: '13', code: 'rome', content: 'Rome', media: null}, {id: '14', code: 'madrid', content: 'Madrid', media: null}]},
-  {id: '2', type: 'multi_select', content: 'Which of these are continents?', points: '2.00', timeLimitSec: null, media: null, explanation: 'Asia and Africa are continents. Paris is a city.', acceptedAnswers: [], correctCodes: ['asia', 'africa'],
+  {id: '2', type: 'multi_select', content: 'Which of these are continents?', media: null, explanation: 'Asia and Africa are continents. Paris is a city.', acceptedAnswers: [], correctCodes: ['asia', 'africa'],
     options: [{id: '21', code: 'asia', content: 'Asia', media: null}, {id: '22', code: 'africa', content: 'Africa', media: null}, {id: '23', code: 'city', content: 'Paris', media: null}]},
-  {id: '3', type: 'short_text', content: 'What is the capital of Uzbekistan?', points: '1.50', timeLimitSec: null, media: null, explanation: 'Tashkent is the capital and largest city of Uzbekistan.', acceptedAnswers: ['Tashkent', 'Toshkent'], correctCodes: [], options: []}
+  {id: '3', type: 'short_text', content: 'What is the capital of Uzbekistan?', media: null, explanation: 'Tashkent is the capital and largest city of Uzbekistan.', acceptedAnswers: ['Tashkent', 'Toshkent'], correctCodes: [], options: []}
 ];
 const json = (response, data, status = 200) => { response.writeHead(status, {'Content-Type': 'application/json', 'Cache-Control': 'no-store'}); response.end(JSON.stringify({data, meta: {timestamp: new Date().toISOString()}})); };
 let origin;
@@ -126,6 +126,7 @@ try {
   await command('Page.enable'); await command('Runtime.enable'); await command('Network.enable');
   await viewport(1280, 1000); await navigate(); await screenshot('intro-desktop');
   await startQuiz(); await screenshot('question-desktop');
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".player-option-letter")].map(node => node.textContent)'), ['A)', 'B)', 'C)', 'D)']);
   await command('Input.dispatchKeyEvent', {type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9});
   await command('Input.dispatchKeyEvent', {type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9});
   assert.equal(await evaluate('document.activeElement.tagName'), 'INPUT');
@@ -144,6 +145,7 @@ try {
   await evaluate('window.dispatchEvent(new Event("online"))');
   await until(() => evaluate('document.querySelector(".player-results-header").textContent.includes("Result confirmed")'), 'online confirmation');
   assert.equal(await evaluate('document.querySelector(".player-score").textContent'), '100.00%'); await screenshot('results-mobile');
+  assert.equal(await evaluate('document.querySelector(".player-results-header").textContent.includes("3.00 / 3.00 questions")'), true);
   assert.equal(starts, 1);
   // Anonymous at-end mode with every result-visibility toggle off.
   await evaluate('sessionStorage.clear()'); official = null; mode = 'practice'; feedback = 'at_end'; visibility = false;
@@ -175,7 +177,7 @@ try {
     feedback = timing; visibility = {showScore, showAnswers, showExplain}; official = null;
     await navigate(); await startQuiz(); await evaluate('document.querySelector("input[value=paris]").click()'); await clickText('Submit answer');
     if (timing === 'after_each') {
-      assert.equal(await evaluate('document.querySelector(".player-feedback").textContent.includes("2.50 / 2.50")'), showScore);
+      assert.equal(await evaluate('document.querySelector(".player-feedback").textContent.includes("points")'), false);
       assert.equal(await evaluate('document.querySelector(".player-feedback").textContent.includes("Correct answer")'), showAnswers);
       assert.equal(await evaluate('document.querySelector(".player-feedback").textContent.includes("Explanation")'), showExplain);
       await clickText('Next question');

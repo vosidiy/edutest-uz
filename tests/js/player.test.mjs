@@ -9,11 +9,11 @@ const cases = JSON.parse(fs.readFileSync(new URL('../fixtures/player-scoring.jso
 for (const fixture of cases) test(fixture.name, () => assert.deepEqual(grade(fixture.question, fixture.answer), fixture.expected));
 const startedAt = '2026-09-26T10:00:00.000000Z';
 const data = () => ({mode: 'assessment', attemptId: 'attempt', credential: 'test-only', version: 1, startedAt, totalDueAt: '2026-09-26T10:02:00Z', closeAt: null,
-  quiz: {shareToken: 'quiz', title: 'Quiz', settings: {feedback: 'after_each'}, questions: [{...cases[0].question, timeLimitSec: 30}, {...cases[0].question, id: 'second', timeLimitSec: 15}]}});
+  quiz: {shareToken: 'quiz', title: 'Quiz', settings: {feedback: 'after_each'}, questions: [cases[0].question, {...cases[0].question, id: 'second'}]}});
 const fresh = () => createState(data(), startedAt, Date.parse(startedAt));
 const clone = value => JSON.parse(JSON.stringify(value));
 
-test('submissions lock immediately offline and next starts a fresh question timer', () => {
+test('submissions lock immediately offline and advancement keeps the total deadline', () => {
   const state = fresh();
   editAnswer(state, {answerCodes: ['right']});
   assert.equal(submitAnswer(state, 'answered', 'a'.repeat(32)), true);
@@ -21,7 +21,7 @@ test('submissions lock immediately offline and next starts a fresh question time
   assert.equal(deadlines(state).length, 1);
   assert.equal(nextQuestion(state, '2026-09-26T10:00:10Z'), true);
   assert.equal(state.index, 1);
-  assert.equal(deadlines(state)[0].at, Date.parse('2026-09-26T10:00:25Z'));
+  assert.equal(deadlines(state)[0].at, Date.parse('2026-09-26T10:02:00Z'));
   assert.equal(nextQuestion(state, startedAt), false);
   assert.equal(hasPending(state), true);
 });
@@ -32,21 +32,18 @@ test('total timeout keeps current draft and leaves later answers unanswered', ()
   finishTimed(state, 'total_timeout', 'a'.repeat(32));
   assert.equal(state.finishReason, 'total_timeout');
   assert.equal(state.items[0].reason, 'attempt_timeout');
-  assert.equal(summarize(state.quiz.questions, state.items).score, '2.50');
+  assert.equal(summarize(state.quiz.questions, state.items).score, '1.00');
   assert.equal(summarize(state.quiz.questions, state.items).items[1].result, 'unanswered');
 });
 
-test('question timeout evaluates the draft, while explicit skip clears it', () => {
+test('explicit skip clears a draft answer', () => {
   const state = fresh(); editAnswer(state, {answerCodes: ['right']});
-  submitAnswer(state, 'question_timeout', 'a'.repeat(32));
-  assert.equal(grade(state.quiz.questions[0], state.items[0]).result, 'correct');
-  assert.equal(state.items[0].reason, 'question_timeout');
-  nextQuestion(state, '2026-09-26T10:00:31Z');
-  editAnswer(state, {answerCodes: ['right']}); submitAnswer(state, 'skipped', 'b'.repeat(32));
-  assert.equal(grade(state.quiz.questions[1], state.items[1]).result, 'unanswered');
+  submitAnswer(state, 'skipped', 'b'.repeat(32));
+  assert.equal(grade(state.quiz.questions[0], state.items[0]).result, 'unanswered');
+  assert.equal(state.items[0].reason, 'skipped');
 });
 
-test('captured schedule continues through feedback and overall deadlines win ties', () => {
+test('captured schedule continues through feedback and wins over a later total deadline', () => {
   const state = fresh(); state.closeAt = '2026-09-26T10:00:30Z';
   assert.equal(deadlines(state)[0].reason, 'scheduled_close');
   submitAnswer(state, 'skipped', 'a'.repeat(32));

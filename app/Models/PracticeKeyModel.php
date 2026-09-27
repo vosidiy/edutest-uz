@@ -29,10 +29,11 @@ final class PracticeKeyModel
             ->countAllResults() > 0;
     }
 
-    public function insert(int|string $quizId, string $requestKey, string $expiresAt): bool
+    public function insert(int|string $quizId, int|string $paperId, string $requestKey, string $expiresAt): bool
     {
         return $this->db->table(self::TABLE)->insert([
             'quiz_id'     => $quizId,
+            'paper_id'    => $paperId,
             'request_key' => $requestKey,
             'expires_at'  => $expiresAt,
         ]);

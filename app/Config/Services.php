@@ -6,7 +6,9 @@ use App\Models\UserModel;
 use App\Services\AuthService;
 use App\Services\MediaService;
 use App\Services\QuizAuthoringService;
+use App\Services\QuizPaperService;
 use App\Services\TeacherQueryService;
+use App\Services\TeacherResultsService;
 use CodeIgniter\Config\BaseService;
 
 /**
@@ -48,13 +50,19 @@ class Services extends BaseService
         return new MediaService();
     }
 
+    public static function quizPapers(bool $getShared = true): QuizPaperService
+    {
+        if ($getShared) return static::getSharedInstance('quizPapers');
+        return new QuizPaperService(null, static::media());
+    }
+
     public static function quizAuthoring(bool $getShared = true): QuizAuthoringService
     {
         if ($getShared) {
             return static::getSharedInstance('quizAuthoring');
         }
 
-        return new QuizAuthoringService(null, static::media());
+        return new QuizAuthoringService(null, static::media(), static::quizPapers());
     }
 
     public static function teacherQueries(bool $getShared = true): TeacherQueryService
@@ -64,5 +72,14 @@ class Services extends BaseService
         }
 
         return new TeacherQueryService();
+    }
+
+    public static function teacherResults(bool $getShared = true): TeacherResultsService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('teacherResults');
+        }
+
+        return new TeacherResultsService(null, static::media(), static::quizPapers());
     }
 }

@@ -23,8 +23,6 @@ final class QuestionModel extends Model
         'media_type',
         'media_src',
         'explanation',
-        'points',
-        'time_limit_sec',
         'text_answers',
     ];
     protected bool $allowEmptyInserts = false;
@@ -33,7 +31,6 @@ final class QuestionModel extends Model
         'id'             => 'int',
         'quiz_id'        => 'int',
         'pos'            => 'int',
-        'time_limit_sec' => '?int',
         'text_answers'   => '?json-array',
         'created_at'     => 'datetime',
         'updated_at'     => 'datetime',

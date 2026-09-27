@@ -11,6 +11,7 @@ use App\Models\PracticeKeyModel;
 use App\Models\QuestionModel;
 use App\Models\QuestionOptionModel;
 use App\Models\QuizModel;
+use App\Models\QuizPaperModel;
 use App\Models\UserModel;
 use CodeIgniter\Model;
 use CodeIgniter\Test\CIUnitTestCase;
@@ -53,6 +54,7 @@ final class ModelConfigurationTest extends CIUnitTestCase
             QuizModel::class           => ['quizzes', true, true],
             QuestionModel::class       => ['questions', true, false],
             QuestionOptionModel::class => ['question_options', true, false],
+            QuizPaperModel::class      => ['quiz_papers', false, false],
             AttemptModel::class        => ['attempts', false, false],
             AttemptItemModel::class    => ['attempt_items', false, false],
             CheatEventModel::class     => ['cheat_events', false, false],
@@ -74,13 +76,16 @@ final class ModelConfigurationTest extends CIUnitTestCase
         $this->assertSame('int-bool', $this->casts(new QuizModel())['listed']);
         $this->assertSame('?json-array', $this->casts(new QuestionModel())['text_answers']);
         $this->assertSame('int-bool', $this->casts(new QuestionOptionModel())['is_correct']);
+        $this->assertSame('json-array', $this->casts(new QuizPaperModel())['definition']);
         $this->assertSame('json-array', $this->casts(new AttemptModel())['settings']);
         $this->assertSame('json-array', $this->casts(new AttemptItemModel())['choice_order']);
         $this->assertSame('json-array', $this->casts(new CheatEventModel())['data']);
 
         $this->assertArrayNotHasKey('score', $this->casts(new AttemptModel()));
-        $this->assertArrayNotHasKey('points', $this->casts(new AttemptItemModel()));
-        $this->assertArrayNotHasKey('points', $this->casts(new QuestionModel()));
+        $this->assertArrayNotHasKey('credit', $this->casts(new AttemptItemModel()));
+        $this->assertNotContains('points', $this->property(new AttemptItemModel(), 'allowedFields'));
+        $this->assertNotContains('points', $this->property(new QuestionModel(), 'allowedFields'));
+        $this->assertNotContains('time_limit_sec', $this->property(new QuestionModel(), 'allowedFields'));
     }
 
     public function testPracticeKeysDeclareTheirCompositeIdentity(): void

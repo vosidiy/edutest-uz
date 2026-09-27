@@ -57,10 +57,7 @@ export function deadlines(state) {
   const values = [];
   if (state.totalDueAt) values.push({at: Date.parse(state.totalDueAt), reason: 'total_timeout', label: 'quizTimer'});
   if (state.closeAt) values.push({at: Date.parse(state.closeAt), reason: 'scheduled_close', label: 'closingTimer'});
-  const question = state.quiz.questions[state.index];
-  const item = state.items[state.index];
-  if (item.status === 'active' && question.timeLimitSec != null) values.push({at: Date.parse(item.startedAt) + question.timeLimitSec * 1000, reason: 'question_timeout', label: 'questionTimer'});
-  // An overall timeout wins ties with the question timer.
+  // The earliest total or scheduled-close deadline wins.
   return values.sort((a, b) => a.at - b.at);
 }
 

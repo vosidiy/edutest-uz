@@ -12,7 +12,7 @@ use Tests\Support\PlayerTestCase;
 
 final class StudentMediaTest extends PlayerTestCase
 {
-    public function testCoverFormatsReplacementDuplicationAndFreeze(): void
+    public function testCoverReplacementAfterStartRetainsPaperMedia(): void
     {
         $quiz = $this->quiz(count: 1);
         $version = $quiz['document']['version'];
@@ -39,30 +39,38 @@ final class StudentMediaTest extends PlayerTestCase
         $copyFile = $this->media->resolveSigned(basename($copyDoc['cover']['url']))['path'];
         $this->assertNotSame($previous, $copyFile);
         $this->assertSame(file_get_contents($previous), file_get_contents($copyFile));
+
         $attempt = $this->startQuiz($quiz);
-        $this->assertNotNull($attempt['quiz']['cover']);
-        try { $this->media->remove($quiz['owner'], $quiz['publicId'], 'cover', 0); $this->fail(); }
-        catch (AuthoringException $error) { $this->assertSame('quiz_frozen', $error->errorCode); }
+        $paperCover = $attempt['quiz']['cover'];
+        $this->assertNotNull($paperCover);
+        $paperFile = $this->media->resolveSigned(basename($paperCover['url']))['path'];
+        $this->media->remove($quiz['owner'], $quiz['publicId'], 'cover', 0, $version);
+        $this->assertNull($this->authoring->document($quiz['owner'], $quiz['publicId'])['cover']);
+        $this->assertFileExists($paperFile);
+        $this->assertSame($paperFile, $this->media->resolveSigned(basename($paperCover['url']))['path']);
+
         $this->media->remove($quiz['owner'], $copy['publicId'], 'cover', 0, $copyDoc['version']);
         $this->assertFileDoesNotExist($copyFile);
         $this->assertFileExists($previous);
     }
 
-    public function testFirstStartDuringUploadFailsClosedAndCleansNewFile(): void
+    public function testFirstStartDuringUploadKeepsOldPaperAndAppliesCoverToFutureStarts(): void
     {
         $quiz = $this->quiz();
         $path = tempnam(sys_get_temp_dir(), 'player-race-');
         file_put_contents($path, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='));
         $upload = new PlayerUpload($path, 'cover.png', null, filesize($path), UPLOAD_ERR_OK);
-        $upload->onMime = function () use ($quiz): void { $this->startQuiz($quiz); };
+        $firstAttempt = null;
+        $upload->onMime = function () use ($quiz, &$firstAttempt): void { $firstAttempt = $this->startQuiz($quiz); };
         try {
-            $this->media->attachFile($quiz['owner'], $quiz['publicId'], 'cover', 0, $upload, $quiz['document']['version']);
-            $this->fail('A first start during decode must block replacement.');
-        } catch (AuthoringException $error) { $this->assertSame('quiz_frozen', $error->errorCode); }
-        finally { unlink($path); }
-        $this->assertNull($this->authoring->document($quiz['owner'], $quiz['publicId'])['cover']);
-        $files = is_dir($this->mediaRoot) ? iterator_to_array(new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($this->mediaRoot, \FilesystemIterator::SKIP_DOTS))) : [];
-        $this->assertCount(0, array_filter($files, static fn ($file): bool => $file->isFile()));
+            $result = $this->media->attachFile($quiz['owner'], $quiz['publicId'], 'cover', 0, $upload, $quiz['document']['version']);
+        } finally { unlink($path); }
+        $this->assertNull($firstAttempt['quiz']['cover']);
+        $this->assertNotNull($result['media']);
+        $this->assertNotNull($this->authoring->document($quiz['owner'], $quiz['publicId'])['cover']);
+        $next = $this->startQuiz($quiz);
+        $this->assertNotNull($next['quiz']['cover']);
+        $this->assertSame(2, $this->db->table('quiz_papers')->countAllResults());
     }
 
     public function testInvalidCoverAndNonOwnerAreRejected(): void

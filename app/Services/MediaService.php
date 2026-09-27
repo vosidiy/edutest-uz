@@ -43,13 +43,13 @@ final class MediaService
         if ($record['status'] === 'archived') {
             throw new AuthoringException('quiz_archived', 'Restore this quiz from the archive before changing media.', 409);
         }
-        if ($record['frozen_at'] !== null) {
-            throw new AuthoringException('quiz_frozen', 'Frozen quiz media cannot be changed.', 409);
-        }
 
         [$mediaType, $extension, $mime] = $this->validateUpload($file);
         if ($target === 'cover' && $mediaType !== 'image') {
             throw new AuthoringException('invalid_cover', lang('Player.errors.invalid_cover'), 422);
+        }
+        if ($target === 'option' && $mediaType !== 'image') {
+            throw new AuthoringException('invalid_option_media', lang('Player.errors.invalid_option_media'), 422);
         }
         $targetId = (int) $record['id'];
         $relative = $this->relativePath($userId, (int) $record['quiz_id'], $extension);
@@ -102,12 +102,10 @@ final class MediaService
         if ($record['status'] === 'archived') {
             throw new AuthoringException('quiz_archived', 'Restore this quiz from the archive before changing media.', 409);
         }
-        if ($record['frozen_at'] !== null) {
-            throw new AuthoringException('quiz_frozen', 'Frozen quiz media cannot be changed.', 409);
-        }
 
         $normalized = $this->normalizeVideoUrl($url);
         if ($target === 'cover') throw new AuthoringException('invalid_cover', lang('Player.errors.invalid_cover'), 422);
+        if ($target === 'option') throw new AuthoringException('invalid_option_media', lang('Player.errors.invalid_option_media'), 422);
 
         if ($normalized === null) {
             throw new AuthoringException(
@@ -143,9 +141,6 @@ final class MediaService
         if ($record['status'] === 'archived') {
             throw new AuthoringException('quiz_archived', 'Restore this quiz from the archive before changing media.', 409);
         }
-        if ($record['frozen_at'] !== null) {
-            throw new AuthoringException('quiz_frozen', 'Frozen quiz media cannot be changed.', 409);
-        }
 
         $result = $this->replaceReference($record, $target, $targetId, null, null, $expectedVersion);
 
@@ -162,32 +157,37 @@ final class MediaService
     public function resolveSigned(string $token): array
     {
         $payload = $this->verifyToken($token);
-        $target  = $payload['target'] ?? '';
-        $id      = isset($payload['id']) ? (int) $payload['id'] : 0;
+        $target = (string) ($payload['target'] ?? '');
 
-        if (! in_array($target, ['question', 'option', 'cover'], true) || $id < 1) {
-            throw new AuthoringException('media_not_found', 'Media not found.', 404);
+        if ($target === 'paper') {
+            $paperId = (string) ($payload['paper'] ?? '');
+            $key = (string) ($payload['key'] ?? '');
+            if (! preg_match('/^[a-f0-9]{32}$/D', $paperId)
+                || ! preg_match('/^[a-f0-9]{32}$/D', $key)) {
+                throw new AuthoringException('media_not_found', 'Media not found.', 404);
+            }
+            $paper = $this->db->table('quiz_papers')->select('definition')->where('public_id', $paperId)->get()->getRowArray();
+            $definition = $paper === null ? null : json_decode((string) $paper['definition'], true);
+            $row = is_array($definition) ? $this->findPaperMedia($definition, $key) : null;
+        } else {
+            $id = isset($payload['id']) ? (int) $payload['id'] : 0;
+            if (! in_array($target, ['question', 'option', 'cover'], true) || $id < 1) {
+                throw new AuthoringException('media_not_found', 'Media not found.', 404);
+            }
+            $table = match ($target) { 'question' => 'questions', 'cover' => 'quizzes', default => 'question_options' };
+            $row = $this->db->table($table)
+                ->select($target === 'cover' ? "'image' AS media_type, cover_src AS media_src" : 'media_type, media_src')
+                ->where('id', $id)->get()->getRowArray();
         }
 
-        $table = match ($target) { 'question' => 'questions', 'cover' => 'quizzes', default => 'question_options' };
-        $row   = $this->db->table($table)
-            ->select($target === 'cover' ? "'image' AS media_type, cover_src AS media_src" : 'media_type, media_src')
-            ->where('id', $id)
-            ->get()
-            ->getRowArray();
-
-        if ($row === null || $row['media_src'] === null || ! in_array($row['media_type'], ['image', 'audio'], true)) {
+        if ($row === null || ($row['media_src'] ?? null) === null || ! in_array($row['media_type'] ?? null, ['image', 'audio'], true)) {
             throw new AuthoringException('media_not_found', 'Media not found.', 404);
         }
-
         $path = $this->absolutePath((string) $row['media_src']);
-
         if (! is_file($path)) {
             throw new AuthoringException('media_not_found', 'Media not found.', 404);
         }
-
         $mime = (string) (mime_content_type($path) ?: 'application/octet-stream');
-
         return ['path' => $path, 'mime' => $mime, 'size' => (int) filesize($path)];
     }
 
@@ -211,6 +211,23 @@ final class MediaService
         return [
             'type'      => $type,
             'url'       => site_url('media/' . $this->signToken($target, $id, $expires)),
+            'expiresAt' => gmdate(DATE_ATOM, $expires),
+        ];
+    }
+
+    /** @return array<string, string>|null */
+    public function paperDescriptor(string $type, string $src, string $paperPublicId, string $key): ?array
+    {
+        if ($type === 'video') {
+            return ['type' => 'video', 'url' => $src, 'embedUrl' => $this->embedUrl($src)];
+        }
+        if (! in_array($type, ['image', 'audio'], true)) {
+            return null;
+        }
+        $expires = time() + self::SIGNED_TTL;
+        return [
+            'type' => $type,
+            'url' => site_url('media/' . $this->signPaperToken($paperPublicId, $key, $expires)),
             'expiresAt' => gmdate(DATE_ATOM, $expires),
         ];
     }
@@ -245,6 +262,9 @@ final class MediaService
 
     public function deleteStoredReference(string $relative): void
     {
+        if ($this->storedReferenceInPaper($relative) || $this->storedReferenceInLive($relative)) {
+            return;
+        }
         try {
             $path = $this->absolutePath($relative);
         } catch (AuthoringException) {
@@ -254,6 +274,53 @@ final class MediaService
         if (is_file($path) && ! @unlink($path)) {
             log_message('warning', 'An orphaned quiz media file could not be removed.');
         }
+    }
+
+    private function storedReferenceInLive(string $relative): bool
+    {
+        if ($this->db->table('quizzes')->where('cover_src', $relative)->countAllResults() > 0) return true;
+        if ($this->db->table('questions')->where('media_src', $relative)->countAllResults() > 0) return true;
+        return $this->db->table('question_options')->where('media_src', $relative)->countAllResults() > 0;
+    }
+
+    private function storedReferenceInPaper(string $relative): bool
+    {
+        foreach ($this->db->table('quiz_papers')->select('definition')->get()->getResultArray() as $row) {
+            $definition = json_decode((string) $row['definition'], true);
+            if (is_array($definition) && $this->paperContainsSource($definition, $relative)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function paperContainsSource(array $value, string $relative): bool
+    {
+        foreach ($value as $key => $child) {
+            if ($key === 'src' && $child === $relative) return true;
+            if (is_array($child) && $this->paperContainsSource($child, $relative)) return true;
+        }
+        return false;
+    }
+
+    /** @return array{media_type: string, media_src: string}|null */
+    private function findPaperMedia(array $value, string $key): ?array
+    {
+        if (($value['key'] ?? null) === $key && is_string($value['type'] ?? null) && is_string($value['src'] ?? null)) {
+            return ['media_type' => $value['type'], 'media_src' => $value['src']];
+        }
+        foreach ($value as $child) {
+            if (is_array($child) && ($found = $this->findPaperMedia($child, $key)) !== null) return $found;
+        }
+        return null;
+    }
+
+    private function signPaperToken(string $paperPublicId, string $key, int $expires): string
+    {
+        $payload = $this->base64UrlEncode(json_encode([
+            'target' => 'paper', 'paper' => $paperPublicId, 'key' => $key, 'exp' => $expires,
+        ], JSON_THROW_ON_ERROR));
+        return $payload . '.' . $this->base64UrlEncode(hash_hmac('sha256', $payload, $this->signingKey(), true));
     }
 
     /** @return array{0: string, 1: string, 2: string} */
@@ -342,13 +409,12 @@ final class MediaService
         $this->db->transBegin();
 
         try {
-            $sql = 'SELECT version, frozen_at, status, deleted_at FROM ' . $this->db->prefixTable('quizzes') . ' WHERE id = ?';
+            $sql = 'SELECT * FROM ' . $this->db->prefixTable('quizzes') . ' WHERE id = ?';
             if ($this->db->DBDriver !== 'SQLite3') {
                 $sql .= ' FOR UPDATE';
             }
             $quiz = $this->db->query($sql, [$record['quiz_id']])->getRowArray();
             if ($quiz === null || $quiz['deleted_at'] !== null) throw new AuthoringException('media_not_found', 'Media target not found.', 404);
-            if ($quiz['frozen_at'] !== null) throw new AuthoringException('quiz_frozen', 'Frozen quiz media cannot be changed.', 409);
             if ($quiz['status'] === 'archived') throw new AuthoringException('quiz_archived', 'Restore this quiz before changing media.', 409);
             $version = (int) $quiz['version'];
             if ($version !== (int) $record['version'] || ($expectedVersion !== null && $version !== $expectedVersion)) {
@@ -363,8 +429,10 @@ final class MediaService
             if ($this->db->table($table)->where('id', $targetId)->countAllResults() !== 1) throw new AuthoringException('media_not_found', 'Media target not found.', 404);
             $change = $target === 'cover' ? ['cover_src' => $src] : ['media_type' => $type, 'media_src' => $src];
             $this->db->table($table)->where('id', $targetId)->update($change + ['updated_at' => $this->now()]);
+            (new QuizAuthoringService($this->db, $this))->assertPublishedReady($quiz);
             $this->db->table('quizzes')->where('id', $record['quiz_id'])->update([
                 'version'    => $version + 1,
+                'revision'   => (int) $quiz['revision'] + 1,
                 'updated_at' => $this->now(),
             ]);
 
@@ -393,14 +461,14 @@ final class MediaService
 
         if ($target === 'cover') {
             $sql = "SELECT z.id, z.id AS quiz_id, CASE WHEN z.cover_src IS NULL THEN NULL ELSE 'image' END AS media_type,
-                    z.cover_src AS media_src, z.version, z.frozen_at, z.status FROM " . $this->db->prefixTable('quizzes') . ' z
+                    z.cover_src AS media_src, z.version, z.first_started_at, z.status FROM " . $this->db->prefixTable('quizzes') . ' z
                     WHERE z.public_id = ? AND z.user_id = ? AND z.deleted_at IS NULL';
         } elseif ($target === 'question') {
-            $sql = 'SELECT q.id, q.quiz_id, q.media_type, q.media_src, z.version, z.frozen_at, z.status
+            $sql = 'SELECT q.id, q.quiz_id, q.media_type, q.media_src, z.version, z.first_started_at, z.status
                     FROM ' . $this->db->prefixTable('questions') . ' q JOIN ' . $this->db->prefixTable('quizzes') . ' z ON z.id = q.quiz_id
                     WHERE q.id = ? AND z.public_id = ? AND z.user_id = ? AND z.deleted_at IS NULL';
         } else {
-            $sql = 'SELECT o.id, q.quiz_id, o.media_type, o.media_src, z.version, z.frozen_at, z.status
+            $sql = 'SELECT o.id, q.quiz_id, o.media_type, o.media_src, z.version, z.first_started_at, z.status
                     FROM ' . $this->db->prefixTable('question_options') . ' o
                     JOIN ' . $this->db->prefixTable('questions') . ' q ON q.id = o.question_id
                     JOIN ' . $this->db->prefixTable('quizzes') . ' z ON z.id = q.quiz_id

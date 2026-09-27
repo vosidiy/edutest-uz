@@ -11,7 +11,7 @@ EduTest helps independent teachers, education centers acting through a teacher a
 | Purpose | Teacher evaluates students | Visitor checks knowledge |
 | Identity | Name required; email/phone configurable | Anonymous |
 | Saved on server | Attempts, answers, and results | No individual answers or results |
-| Teacher sees | Results and analytics | Aggregate start count only |
+| Teacher sees | Results and basic totals | Aggregate start count only |
 | Authority | Server confirms scoring; offline timing is client-enforced | Browser progress and scoring are non-authoritative |
 
 ## Teacher experience
@@ -20,27 +20,29 @@ Teachers register with email/password, may provide a phone number, manage a publ
 
 Teachers can create, edit, duplicate, publish, close, archive, and soft-delete quizzes. Each quiz has a private share link and may optionally appear on the teacher's public page.
 
-Quiz settings include title, description, instructions, an optional cover image, mode, availability dates, optional timers, shuffle options, feedback timing, and result visibility. Assessments may also require a passcode and collect email or phone. Teacher result reports and exports are deferred beyond the student-player milestone.
+Quiz settings include title, description, instructions, an optional cover image, mode, availability dates, an optional total timer entered in half-minute increments, shuffle options, feedback timing, and result visibility. Assessments may also require a passcode and collect email or phone.
+
+Teacher assessment reporting is implemented as a read-only workspace. It includes historical active, archived, and soft-deleted assessment quizzes; basic workspace and per-quiz totals; filtered attempt lists; complete answer and integrity-event review; and filtered CSV exports. Practice quizzes remain absent from individual reports because practice stores only an aggregate start count.
 
 ## Questions and media
 
 The MVP supports:
 
 - Single-choice questions.
-- Multi-select questions with partial scoring.
+- Multi-select questions with proportional partial credit.
 - Short-text questions with accepted answers.
-- Optional explanations and per-question timers.
-- JPEG, PNG, and WebP images up to 5 MiB.
-- MP3, M4A, OGG, and WAV audio up to 20 MiB.
-- Validated YouTube/Vimeo links or direct HTTPS MP4 links.
+- Optional explanations.
+- JPEG, PNG, and WebP question or answer-choice images up to 5 MiB.
+- MP3, M4A, OGG, and WAV question audio up to 20 MiB.
+- Validated YouTube/Vimeo or direct HTTPS MP4 question video links.
 
-True/false is a single-choice preset. Uploaded video, arbitrary embeds, question banks, ordering, fill-in-the-blank, essays, speaking responses, and manual grading are outside the MVP.
+Answer-choice media is image-only. Uploaded video, arbitrary embeds, question banks, fill-in-the-blank, essays, speaking responses, and manual grading are outside the MVP.
 
-The first real student start freezes authored quiz content. A teacher duplicates a frozen quiz to make content changes without altering existing sessions or results.
+Each real student start binds the run to one immutable paper for the current quiz revision. Teachers may continue editing live content; existing attempts and results remain tied to the exact paper they received. Quiz mode alone locks after the first start.
 
 ## Student experience
 
-Students see one question at a time with clear progress, applicable timers, accessible controls, and a deliberate submit/skip action. Submitted answers cannot be edited and there is no backward navigation.
+Students see one question at a time with clear progress, optional total/closing timers, accessible controls, and a deliberate submit/skip action. Submitted answers cannot be edited and there is no backward navigation.
 
 Assessment drafts synchronize in the background with visible saving, saved, pending, and retry states. A tab-local outbox permits continued answering during a disconnect. Practice progress is saved only in the current browser tab and is clearly labeled that way.
 
@@ -50,30 +52,32 @@ Both modes preload all questions and answer keys at start. Options carry opaque 
 
 ## Scoring
 
-- Single choice earns full points only for the correct option.
-- Multi-select uses proportional right-minus-wrong scoring:
+Every question has equal maximum credit of `1.00`; teachers do not configure question weights.
+
+- Single choice earns `1.00` for the correct option or `0.00`.
+- Multi-select uses proportional right-minus-wrong credit, clamped from `0.00` to `1.00`:
 
   ```text
-  award = max(0, question points × (
+  credit = max(0,
       correct selected / total correct
       − incorrect selected / total incorrect
-  ))
+  )
   ```
 
-  Each correct option therefore contributes `question points / total correct`; each incorrect option subtracts `question points / total incorrect`. When `total incorrect` is zero, treat the incorrect fraction and penalty as zero rather than dividing by zero. A question must have at least one correct option; reject invalid authoring data on the server and mirror that validation in the UI. Duplicate or foreign option codes are invalid submissions.
+  When there are no incorrect options, the incorrect fraction is zero. A question must have at least one correct option. Duplicate or foreign option codes are invalid submissions.
 
-  Example: a 10-point question with three correct and two incorrect options awards `6.67` for two correct selections, `1.67` for two correct plus one incorrect, and `0.00` when every option is selected.
+  Example: with three correct and two incorrect options, two correct selections earn `0.67`, two correct plus one incorrect earn `0.17`, and selecting every option earns `0.00`.
 
-- Short text trims leading/trailing Unicode whitespace, collapses repeated internal Unicode whitespace to one space, and lowercases with Unicode-aware handling before exact comparison. Preserve punctuation and diacritics; do not apply accent folding or Unicode canonical normalization in the MVP.
-- Calculate with exact decimal arithmetic. Do not round per-option values; round each final question award half-up to two decimal places, then sum the rounded awards and calculate the percentage.
+- Short text earns `1.00` or `0.00`. Matching trims leading/trailing Unicode whitespace, collapses repeated internal Unicode whitespace to one space, and lowercases with Unicode-aware handling before exact comparison. Punctuation and diacritics are preserved; accent folding and Unicode canonical normalization are not applied in the MVP.
+- Calculate with exact decimal arithmetic. Round each multi-select credit half-up to two decimal places, sum question credits, and calculate the percentage from the number of questions. Results use wording such as `7.50 / 10 questions`, never points.
 
 One PHP scoring engine produces official assessment scores. Its JavaScript counterpart provides provisional assessment feedback and local practice scores; shared fixtures verify identical arithmetic and normalization.
 
 ## Assessment reliability and privacy
 
-Assessment start and receipt timestamps are server-generated. Question, total, and captured closing-time countdowns are enforced by the browser, including while disconnected. Late queued work is accepted and flagged, not claimed to have verified timing. Unfinished attempts are not automatically finalized while potentially unsynchronized work exists; abandoned attempts remain incomplete. Retried requests must not create duplicate attempts, overwrite locked answers, or advance twice.
+Assessment start and receipt timestamps are server-generated. Optional total and captured closing-time countdowns are enforced by the browser, including while disconnected. Late queued work is accepted and flagged, not claimed to have verified timing. Unfinished attempts are not automatically finalized while potentially unsynchronized work exists; abandoned attempts remain incomplete. Retried requests must not create duplicate attempts, overwrite locked answers, or advance twice.
 
-The first successful student start freezes content and media. Availability and policy changes apply to future starts; an existing authorized attempt can finish after a teacher closes, archives, or soft-deletes the quiz. Students can view their own finalized result with their tab-scoped bearer credential.
+Each successful student start captures or reuses an immutable paper for the current revision. Later authored changes apply to future starts; an existing authorized attempt can finish from its paper after the teacher edits, closes, archives, or soft-deletes the live quiz. Students can view their own finalized result with their tab-scoped bearer credential.
 
 Before starting, students are told which identity, network, browser, answer, timing, and integrity information the teacher receives. Integrity events are warnings and timeline signals only; they never automatically fail or penalize a student.
 
@@ -90,12 +94,12 @@ The aggregate counter represents deduplicated starts, not unique people or compl
 1. Foundation — CI4, project-owned session authentication/account identity, and the canonical SQL schema.
 2. Authoring — teacher dashboard/library, quiz lifecycle, builder, private media, preview, and the stable public quiz-information page. Public teacher profiles remain deferred.
 3. Student player — assessment admission, background synchronization, offline-friendly timers, official scoring, feedback, and student results; anonymous practice with local grading and start counting.
-4. Teacher reporting — assessment result pages, analytics, and CSV exports (deferred).
+4. Teacher reporting — assessment result pages, basic totals, attempt review, and CSV exports (implemented).
 5. Launch — integrity events, accessibility, race/load/security tests, backups, and cPanel deployment.
 6. Later — public teacher profiles, standalone offline quiz export, PDF, validated AI-assisted drafts, question banks, quotas, and monetization.
 
 ## Defaults and exclusions
 
-Defaults: assessment mode, unlisted quiz, disabled public profile, English translation-ready UI, `Asia/Tashkent` timezone, required name, optional email, hidden phone, no timers/shuffle/integrity monitoring, feedback at end, score visible, and correct answers/explanations hidden.
+Defaults: assessment mode, unlisted quiz, disabled public profile, English translation-ready UI, `Asia/Tashkent` timezone, required name, optional email, hidden phone, no total timer/shuffle/integrity monitoring, feedback at end, score visible, and correct answers/explanations hidden.
 
 The MVP excludes organizations/workspaces, team roles, student accounts, per-person attempt limits, global discovery, leaderboards, certificates, surveillance, billing, uploaded video, and offline result imports.

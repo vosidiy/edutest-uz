@@ -14,7 +14,7 @@ final class AttemptModel extends Model
     protected $useTimestamps = false;
     protected $allowedFields = [
         'quiz_id',
-        'revision',
+        'paper_id',
         'public_id',
         'token_hash',
         'start_key',
@@ -46,7 +46,7 @@ final class AttemptModel extends Model
     protected array $casts = [
         'id'            => 'int',
         'quiz_id'       => 'int',
-        'revision'      => 'int',
+        'paper_id'      => 'int',
         'current_pos'   => '?int',
         'version'       => 'int',
         'late_sync'     => 'int-bool',

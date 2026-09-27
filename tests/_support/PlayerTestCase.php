@@ -7,6 +7,7 @@ namespace Tests\Support;
 use App\Services\MediaService;
 use App\Services\Player\PlayerRuntime;
 use App\Services\QuizAuthoringService;
+use App\Services\QuizPaperService;
 use CodeIgniter\Database\BaseConnection;
 use CodeIgniter\Test\CIUnitTestCase;
 use Config\Database;
@@ -42,8 +43,9 @@ abstract class PlayerTestCase extends CIUnitTestCase
         }
         $this->mediaRoot = WRITEPATH . 'testing/player-' . bin2hex(random_bytes(6));
         $this->media = new MediaService($this->db, $this->mediaRoot);
-        $this->authoring = new QuizAuthoringService($this->db, $this->media);
-        $this->player = new PlayerRuntime($this->db, $this->media);
+        $papers = new QuizPaperService($this->db, $this->media);
+        $this->authoring = new QuizAuthoringService($this->db, $this->media, $papers);
+        $this->player = new PlayerRuntime($this->db, $this->media, $papers);
     }
 
     protected function tearDown(): void
@@ -67,8 +69,8 @@ abstract class PlayerTestCase extends CIUnitTestCase
         $doc = array_replace($this->authoring->document($owner, $created['publicId']), $settings);
         $doc['questions'] = [];
         for ($i = 0; $i < $count; $i++) {
-            $doc['questions'][] = ['id' => null, 'type' => 'single_choice', 'content' => 'Capital of France? ' . $i, 'points' => '2.50',
-                'timeLimitSec' => null, 'explanation' => 'Paris is the capital of France.', 'textAnswers' => [],
+            $doc['questions'][] = ['id' => null, 'type' => 'single_choice', 'content' => 'Capital of France? ' . $i,
+                'explanation' => 'Paris is the capital of France.', 'textAnswers' => [],
                 'options' => [['id' => null, 'content' => 'Berlin', 'isCorrect' => false], ['id' => null, 'content' => 'Paris', 'isCorrect' => true]]];
         }
         $this->authoring->save($owner, $created['publicId'], $doc);

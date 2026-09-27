@@ -5,11 +5,17 @@ declare(strict_types=1);
 namespace App\Services\Player;
 
 use App\Exceptions\PlayerException;
+use App\Services\QuizPaperService;
 
 final class AdmissionService
 {
-    public function __construct(private readonly PlayerStore $store, private readonly Credentials $credentials,
-        private readonly DefinitionService $definitions, private readonly PracticeService $practice) {}
+    public function __construct(
+        private readonly PlayerStore $store,
+        private readonly Credentials $credentials,
+        private readonly DefinitionService $definitions,
+        private readonly PracticeService $practice,
+        private readonly QuizPaperService $papers,
+    ) {}
 
     public function ticket(string $shareToken): array
     {
@@ -20,7 +26,6 @@ final class AdmissionService
             'startKey' => bin2hex(random_bytes(16)), 'attemptId' => bin2hex(random_bytes(16)), 'seed' => bin2hex(random_bytes(16)),
             'settings' => $this->definitions->settings($quiz)];
         return ['ticket' => $this->credentials->sign('admission', $claims, 900), 'mode' => $quiz['mode'],
-            // Store before POST: a lost start response can be recovered with the bearer, even after admission expiry.
             'attemptId' => $quiz['mode'] === 'assessment' ? $claims['attemptId'] : null,
             'credential' => $quiz['mode'] === 'assessment' ? $this->credentials->attemptToken($claims['attemptId'], $claims['startKey']) : null];
     }
@@ -29,11 +34,13 @@ final class AdmissionService
     {
         if (! is_string($input['ticket'] ?? null)) throw new PlayerException('invalid_credential', 401);
         $claims = $this->credentials->verify($input['ticket'], 'admission');
-        return $this->store->transaction(function () use ($input, $claims, $ip, $agent): array {
+        $result = $this->store->transaction(function () use ($input, $claims, $ip, $agent): array {
             $quiz = $this->store->lock('quizzes', $claims['quizId']);
             $db = $this->store->db;
             $now = PlayerStore::now();
             $isPractice = $claims['settings']['mode'] === 'practice';
+            $identity = [];
+            $hash = null;
             if ($isPractice) {
                 if (array_diff(array_keys($input), ['ticket']) !== []) throw new PlayerException('practice_anonymous');
                 $existing = $db->table('practice_keys')->where('quiz_id', $quiz['id'])->where('request_key', $claims['startKey'])->get()->getRowArray();
@@ -46,6 +53,7 @@ final class AdmissionService
                     return ['mode' => 'assessment', 'attemptId' => $existing['public_id'], 'credential' => $this->credentials->attemptToken($existing['public_id'], $claims['startKey'])];
                 }
             }
+
             if ($existing === null) {
                 $this->available($quiz);
                 if ((int) $quiz['version'] !== $claims['version']) throw new PlayerException('quiz_changed', 409);
@@ -53,25 +61,30 @@ final class AdmissionService
                     && (! is_string($input['passcode'] ?? null) || strlen($input['passcode']) > 72 || ! password_verify($input['passcode'], $quiz['passcode_hash']))) {
                     throw new PlayerException('wrong_passcode', 422, ['passcode' => lang('Player.errors.wrong_passcode')]);
                 }
-                $document = $this->definitions->document($quiz, $claims['settings'], $claims['seed']);
+                $paper = $this->papers->current($quiz);
+                $document = $this->papers->studentDocument($paper, $claims['settings'], $claims['seed']);
                 $this->definitions->assertReady($document);
-                if ($quiz['frozen_at'] === null) {
-                    $db->table('quizzes')->where('id', $quiz['id'])->update(['frozen_at' => $now, 'version' => (int) $quiz['version'] + 1, 'updated_at' => $now]);
+                if ($quiz['first_started_at'] === null) {
+                    $db->table('quizzes')->where('id', $quiz['id'])->update(['first_started_at' => $now, 'updated_at' => $now]);
                 }
+            } else {
+                $paper = $db->table('quiz_papers')->where('id', $existing['paper_id'])->where('quiz_id', $quiz['id'])->get()->getRowArray();
+                if ($paper === null) throw new PlayerException('not_found', 404);
             }
+
             if ($isPractice) {
-                // Only expired keys, in bounded batches; no identity-based cache or rate-limit buckets.
                 foreach ($db->table('practice_keys')->where('expires_at <', $now)->limit(100)->get()->getResultArray() as $expired) {
                     $db->table('practice_keys')->where('quiz_id', $expired['quiz_id'])->where('request_key', $expired['request_key'])->delete();
                 }
-                return $this->practice->start($quiz, $claims, $existing, $now);
+                return $this->practice->start($quiz, $paper, $claims, $existing, $now);
             }
+
             $settings = $claims['settings'] + ['seed' => $claims['seed']];
-            $maximum = array_sum(array_map(static fn (array $q): int => ScoringService::cents($q['points']), $document['questions']));
+            $maximum = count($document['questions']) * ScoringService::FULL_CREDIT;
             $token = $this->credentials->attemptToken($claims['attemptId'], $claims['startKey']);
             $totalDue = PlayerStore::due($now, $settings['timeLimitSec']);
             $close = $settings['closesAt'] === null ? null : PlayerStore::date($settings['closesAt']);
-            $db->table('attempts')->insert($identity + ['quiz_id' => $quiz['id'], 'revision' => $quiz['revision'], 'public_id' => $claims['attemptId'],
+            $db->table('attempts')->insert($identity + ['quiz_id' => $quiz['id'], 'paper_id' => $paper['id'], 'public_id' => $claims['attemptId'],
                 'token_hash' => PlayerStore::binary(hash('sha256', $token, true)), 'start_key' => $claims['startKey'], 'start_hash' => PlayerStore::binary($hash),
                 'ip' => $ip === null ? null : substr($ip, 0, 45), 'agent' => $agent === null ? null : mb_substr($agent, 0, 512),
                 'status' => 'in_progress', 'phase' => 'answering', 'current_pos' => 1, 'version' => 1,
@@ -81,10 +94,12 @@ final class AdmissionService
             foreach ($document['questions'] as $index => $question) {
                 $db->table('attempt_items')->insert(['attempt_id' => $attemptId, 'quiz_id' => $quiz['id'], 'question_id' => $question['id'], 'pos' => $index + 1,
                     'choice_order' => json_encode(array_column($question['options'], 'code'), JSON_THROW_ON_ERROR), 'status' => $index === 0 ? 'active' : 'pending',
-                    'started_at' => $index === 0 ? $now : null, 'due_at' => $index === 0 ? PlayerStore::due($now, $question['timeLimitSec']) : null, 'save_ver' => 0]);
+                    'started_at' => $index === 0 ? $now : null, 'save_ver' => 0]);
             }
             return ['mode' => 'assessment', 'attemptId' => $claims['attemptId'], 'credential' => $token];
         });
+        $this->papers->purgeUnusedPracticePapers();
+        return $result;
     }
 
     private function available(array $quiz): void

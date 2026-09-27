@@ -5,19 +5,19 @@ declare(strict_types=1);
 namespace App\Services\Player;
 
 use App\Exceptions\PlayerException;
+use App\Services\QuizPaperService;
 
 final class AssessmentService
 {
-    public function __construct(private readonly PlayerStore $store, private readonly DefinitionService $definitions,
+    public function __construct(private readonly PlayerStore $store, private readonly QuizPaperService $papers,
         private readonly ScoringService $scoring) {}
 
     public function load(string $publicId, string $token): array
     {
         $attempt = $this->authorize($publicId, $token);
-        $quiz = $this->store->db->table('quizzes')->where('id', $attempt['quiz_id'])->get()->getRowArray();
-        if ($quiz === null) throw new PlayerException('not_found', 404);
+        $paper = $this->papers->findForAttempt($attempt);
         $settings = json_decode($attempt['settings'], true, 512, JSON_THROW_ON_ERROR);
-        $document = $this->definitions->document($quiz, $settings, $settings['seed']);
+        $document = $this->papers->studentDocument($paper, $settings, $settings['seed']);
         unset($document['settings']['seed']);
         $items = $this->items($attempt['id']);
         // Persisted orders, not current teacher shuffle settings, are authoritative.
@@ -46,10 +46,10 @@ final class AssessmentService
         $finish = $payload['finishReason'] ?? null;
         if ($finish !== null && ! in_array($finish, ['completed', 'total_timeout', 'scheduled_close'], true)) throw new PlayerException('invalid_progress');
         $this->store->transaction(function () use ($authorized, $payload, $finish): void {
-            $quiz = $this->store->lock('quizzes', (string) $authorized['quiz_id']);
             $attempt = $this->store->lock('attempts', (string) $authorized['id']);
             $settings = json_decode($attempt['settings'], true, 512, JSON_THROW_ON_ERROR);
-            $questions = array_column($this->definitions->document($quiz, $settings, $settings['seed'])['questions'], null, 'id');
+            $paper = $this->papers->findForAttempt($attempt);
+            $questions = array_column($this->papers->studentDocument($paper, $settings, $settings['seed'])['questions'], null, 'id');
             $items = array_column($this->items($attempt['id']), null, 'question_id');
             $now = PlayerStore::now();
             $changed = false;
@@ -69,7 +69,7 @@ final class AssessmentService
                 $submitKey = $input['submitKey'] ?? null;
                 $reason = $input['reason'] ?? 'answered';
                 if ($submitKey !== null && (! is_string($submitKey) || ! preg_match('/^[a-f0-9]{32}$/D', $submitKey)
-                    || ! in_array($reason, ['answered', 'skipped', 'question_timeout', 'attempt_timeout'], true))) throw new PlayerException('invalid_progress');
+                    || ! in_array($reason, ['answered', 'skipped', 'attempt_timeout'], true))) throw new PlayerException('invalid_progress');
                 if ($reason === 'skipped') $answer = ['answerCodes' => [], 'textAnswer' => ''];
                 $hash = hash('sha256', json_encode([$id, $answer, $reason], JSON_THROW_ON_ERROR), true);
                 if ($item['status'] === 'locked') {
@@ -94,10 +94,9 @@ final class AssessmentService
                     if ($answer !== $savedAnswer || $submitKey !== null) throw new PlayerException('progress_conflict', 409);
                     continue;
                 }
-                $due = PlayerStore::due($started, $question['timeLimitSec']);
                 $update = ['answer_codes' => json_encode($answer['answerCodes'], JSON_THROW_ON_ERROR),
                     'text_answer' => $question['type'] === 'short_text' ? $answer['textAnswer'] : null,
-                    'status' => $submitKey === null ? 'active' : 'locked', 'started_at' => $started, 'due_at' => $due,
+                    'status' => $submitKey === null ? 'active' : 'locked', 'started_at' => $started,
                     'save_ver' => $input['saveVer'], 'saved_at' => $now];
                 if ($submitKey !== null) {
                     foreach ($items as $other) if ($other['submit_key'] === $submitKey) throw new PlayerException('invalid_progress');
@@ -107,7 +106,7 @@ final class AssessmentService
                 if ($submitKey !== null) $update['submit_hash'] = $hash;
                 $items[$id] = array_replace($item, $update);
                 $changed = true;
-                $late = $late || $this->past($now, [$due, $attempt['total_due_at'], $attempt['close_at']]);
+                $late = $late || $this->past($now, [$attempt['total_due_at'], $attempt['close_at']]);
             }
             if ($finish !== null && $attempt['status'] === 'in_progress') {
                 if (($finish === 'total_timeout' && $attempt['total_due_at'] === null) || ($finish === 'scheduled_close' && $attempt['close_at'] === null)) throw new PlayerException('invalid_progress');
@@ -128,12 +127,12 @@ final class AssessmentService
             $active = array_values(array_filter($items, static fn (array $item): bool => $item['status'] === 'active'));
             $locked = array_values(array_filter($items, static fn (array $item): bool => $item['status'] === 'locked'));
             $update += ['phase' => $active === [] ? 'feedback' : 'answering', 'current_pos' => $active[0]['pos'] ?? max(1, count($locked)),
-                'due_at' => $this->earliest([$active[0]['due_at'] ?? null, $attempt['total_due_at'], $attempt['close_at']])];
+                'due_at' => $this->earliest([$attempt['total_due_at'], $attempt['close_at']])];
             if ($finish !== null) {
-                $score = array_sum(array_map(static fn (array $item): int => ScoringService::cents((string) ($item['points'] ?? '0.00')), $items));
+                $score = array_sum(array_map(static fn (array $item): int => ScoringService::hundredths((string) ($item['credit'] ?? '0.00')), $items));
                 $update = array_replace($update, ['status' => $finish === 'completed' ? 'submitted' : 'expired', 'phase' => 'complete', 'current_pos' => null,
                     'due_at' => null, 'submitted_at' => $now, 'finish_reason' => $finish, 'score' => ScoringService::decimal($score),
-                    'percent' => ScoringService::decimal(ScoringService::roundedRatio($score * 10000, ScoringService::cents((string) $attempt['max_score'])))]);
+                    'percent' => ScoringService::decimal(ScoringService::roundedRatio($score * 10000, ScoringService::hundredths((string) $attempt['max_score'])))]);
             }
             $this->store->db->table('attempts')->where('id', $attempt['id'])->update($update);
         });
@@ -155,7 +154,6 @@ final class AssessmentService
         $events = $input['events'] ?? null;
         if (! is_array($events) || ! array_is_list($events) || count($events) > 100) throw new PlayerException('invalid_progress');
         $this->store->transaction(function () use ($attempt, $events): void {
-            $this->store->lock('quizzes', (string) $attempt['quiz_id']);
             $this->store->lock('attempts', (string) $attempt['id']);
             foreach ($events as $event) {
                 if (! is_array($event) || ! is_string($event['key'] ?? null) || ! preg_match('/^[a-f0-9]{32}$/D', $event['key'])
@@ -188,7 +186,7 @@ final class AssessmentService
     private function serializeItem(array $item): array
     {
         return ['questionId' => (string) $item['question_id'], 'status' => $item['status'], 'saveVer' => (int) $item['save_ver'],
-            'startedAt' => PlayerStore::iso($item['started_at']), 'dueAt' => PlayerStore::iso($item['due_at']),
+            'startedAt' => PlayerStore::iso($item['started_at']),
             'answerCodes' => json_decode($item['answer_codes'] ?? '[]', true), 'textAnswer' => $item['text_answer'] ?? '',
             'submitKey' => $item['submit_key'], 'reason' => $item['lock_reason']];
     }
@@ -200,12 +198,11 @@ final class AssessmentService
         if ($settings['showScore']) {
             foreach (['score', 'max_score' => 'maxScore', 'percent'] as $key => $value) {
                 $column = is_int($key) ? $value : $key;
-                $result[$value] = ScoringService::decimal(ScoringService::cents((string) $attempt[$column]));
+                $result[$value] = ScoringService::decimal(ScoringService::hundredths((string) $attempt[$column]));
             }
         }
         foreach ($items as $item) {
             $row = ['questionId' => (string) $item['question_id'], 'result' => $item['result']];
-            if ($settings['showScore']) $row['points'] = ScoringService::decimal(ScoringService::cents((string) $item['points']));
             $result['items'][] = $row;
         }
         return $result;

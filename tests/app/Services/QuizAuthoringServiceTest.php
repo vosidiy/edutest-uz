@@ -56,8 +56,6 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
             'type' => 'single_choice',
             'content' => 'Which structure contains DNA?',
             'explanation' => 'The nucleus contains chromosomes.',
-            'points' => '2.50',
-            'timeLimitSec' => 30,
             'textAnswers' => [],
             'options' => [
                 ['id' => null, 'content' => 'Nucleus', 'isCorrect' => true],
@@ -67,7 +65,6 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         $saved = $this->authoring->save($owner, $created['publicId'], $document);
 
         $this->assertSame(2, $saved['version']);
-        $this->assertSame('2.50', $saved['questions'][0]['points']);
         $this->assertNotSame('', $saved['questions'][0]['id']);
         $this->assertCount(2, $saved['questions'][0]['options']);
         $this->assertNotSame('', $saved['questions'][0]['options'][0]['code']);
@@ -78,8 +75,6 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
             'type' => 'short_text',
             'content' => 'Name the process.',
             'explanation' => '',
-            'points' => '1.00',
-            'timeLimitSec' => null,
             'textAnswers' => ['photosynthesis'],
             'options' => [],
         ], $firstQuestion];
@@ -137,6 +132,35 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         $this->assertFalse($saved['passcode']['configured']);
     }
 
+    public function testTotalTimerUsesHalfMinuteSteps(): void
+    {
+        $owner = $this->insertUser('timer@example.test');
+        $created = $this->authoring->create($owner, 'Timer quiz', 'assessment');
+        $document = $this->authoring->document($owner, $created['publicId']);
+
+        foreach (['0.5' => 30, '1' => 60, '1.5' => 90, '1440' => 86400] as $minutes => $seconds) {
+            $document['timeLimitMinutes'] = $minutes;
+            $document = $this->authoring->save($owner, $created['publicId'], $document);
+            $this->assertSame((string) $minutes, $document['timeLimitMinutes']);
+            $this->assertSame($seconds, (int) $this->authoringDb->table('quizzes')->select('time_limit_sec')->where('public_id', $created['publicId'])->get()->getRow('time_limit_sec'));
+        }
+
+        $document['timeLimitMinutes'] = null;
+        $document = $this->authoring->save($owner, $created['publicId'], $document);
+        $this->assertNull($document['timeLimitMinutes']);
+
+        foreach (['0', '0.25', '1.25', '1440.5'] as $invalid) {
+            $document['timeLimitMinutes'] = $invalid;
+            try {
+                $this->authoring->save($owner, $created['publicId'], $document);
+                $this->fail('An invalid timer should fail: ' . $invalid);
+            } catch (AuthoringException $exception) {
+                $this->assertSame('validation_failed', $exception->errorCode);
+                $this->assertArrayHasKey('timeLimitMinutes', $exception->fields);
+            }
+        }
+    }
+
     public function testIncompleteDraftCannotPublish(): void
     {
         $owner = $this->insertUser('incomplete@example.test');
@@ -151,11 +175,11 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         }
     }
 
-    public function testOwnershipAndFrozenContentAreEnforced(): void
+    public function testOwnershipEditableContentAndModeLockAreEnforced(): void
     {
         $owner = $this->insertUser('owner2@example.test');
         $other = $this->insertUser('other@example.test');
-        $created = $this->authoring->create($owner, 'Frozen quiz', 'assessment');
+        $created = $this->authoring->create($owner, 'Started quiz', 'assessment');
 
         try {
             $this->authoring->document($other, $created['publicId']);
@@ -165,22 +189,27 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         }
 
         $this->authoringDb->table('quizzes')->where('public_id', $created['publicId'])->update([
-            'frozen_at' => '2026-01-01 00:00:00',
+            'first_started_at' => '2026-01-01 00:00:00',
         ]);
         $document = $this->authoring->document($owner, $created['publicId']);
-        $document['title'] = 'Changed title';
-
-        try {
-            $this->authoring->save($owner, $created['publicId'], $document);
-            $this->fail('Frozen authored content should not change.');
-        } catch (AuthoringException $exception) {
-            $this->assertSame('quiz_frozen', $exception->errorCode);
-        }
-
-        $document = $this->authoring->document($owner, $created['publicId']);
-        $document['listed'] = true;
+        $originalRevision = $document['revision'];
+        $document['title'] = 'Changed after a start';
         $saved = $this->authoring->save($owner, $created['publicId'], $document);
-        $this->assertTrue($saved['listed']);
+        $this->assertSame('Changed after a start', $saved['title']);
+        $this->assertSame($originalRevision + 1, $saved['revision']);
+
+        $saved['listed'] = true;
+        $listingOnly = $this->authoring->save($owner, $created['publicId'], $saved);
+        $this->assertTrue($listingOnly['listed']);
+        $this->assertSame($saved['revision'], $listingOnly['revision']);
+
+        $listingOnly['mode'] = 'practice';
+        try {
+            $this->authoring->save($owner, $created['publicId'], $listingOnly);
+            $this->fail('Mode must lock after the first start.');
+        } catch (AuthoringException $exception) {
+            $this->assertSame('mode_locked', $exception->errorCode);
+        }
     }
 
     public function testPrivateImageAndValidatedVideoMedia(): void
@@ -191,7 +220,7 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         $document = $this->authoring->document($owner, $created['publicId']);
         $document['questions'] = [[
             'id' => null, 'type' => 'single_choice', 'content' => 'Media question',
-            'explanation' => '', 'points' => '1.00', 'timeLimitSec' => null, 'textAnswers' => [],
+            'explanation' => '', 'textAnswers' => [],
             'options' => [
                 ['id' => null, 'content' => 'A', 'isCorrect' => true],
                 ['id' => null, 'content' => 'B', 'isCorrect' => false],
@@ -199,6 +228,7 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         ]];
         $saved = $this->authoring->save($owner, $created['publicId'], $document);
         $questionId = (int) $saved['questions'][0]['id'];
+        $optionId = (int) $saved['questions'][0]['options'][0]['id'];
 
         $temp = tempnam(sys_get_temp_dir(), 'edutest-image-');
         $this->assertNotFalse($temp);
@@ -224,6 +254,19 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         $this->assertNotFalse($waveTemp);
         $wave = 'RIFF' . pack('V', 36) . 'WAVEfmt ' . pack('VvvVVvv', 16, 1, 1, 8000, 8000, 1, 8) . 'data' . pack('V', 0);
         file_put_contents($waveTemp, $wave);
+        try {
+            $this->media->attachFile(
+                $owner,
+                $created['publicId'],
+                'option',
+                $optionId,
+                new TestUploadedFile($waveTemp, 'sample.wav', 'audio/wav', filesize($waveTemp), UPLOAD_ERR_OK),
+                $attached['version'],
+            );
+            $this->fail('Answer choices must reject audio media.');
+        } catch (AuthoringException $exception) {
+            $this->assertSame('invalid_option_media', $exception->errorCode);
+        }
         $waveUpload = new TestUploadedFile($waveTemp, 'sample.wav', 'audio/wav', filesize($waveTemp), UPLOAD_ERR_OK);
         $audio = $this->media->attachFile($owner, $created['publicId'], 'question', $questionId, $waveUpload, $attached['version']);
         $this->assertSame('audio', $audio['media']['type']);
@@ -288,6 +331,12 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         $this->assertSame('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ', $video['media']['embedUrl']);
         $this->assertFileDoesNotExist($originalAudio['path']);
         $this->assertFileExists($duplicateMedia['path']);
+        try {
+            $this->media->attachVideo($owner, $created['publicId'], 'option', $optionId, 'https://vimeo.com/123456789', $video['version']);
+            $this->fail('Answer choices must reject video media.');
+        } catch (AuthoringException $exception) {
+            $this->assertSame('invalid_option_media', $exception->errorCode);
+        }
 
         $this->expectException(AuthoringException::class);
         $this->media->attachVideo(
@@ -338,7 +387,7 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
             'title' => ['type' => 'VARCHAR', 'constraint' => 200], 'description' => ['type' => 'TEXT'],
             'instructions' => ['type' => 'TEXT'], 'revision' => ['type' => 'INTEGER'], 'version' => ['type' => 'INTEGER'],
             'cover_src' => ['type' => 'TEXT', 'null' => true],
-            'frozen_at' => ['type' => 'DATETIME', 'null' => true], 'time_limit_sec' => ['type' => 'INTEGER', 'null' => true],
+            'first_started_at' => ['type' => 'DATETIME', 'null' => true], 'time_limit_sec' => ['type' => 'INTEGER', 'null' => true],
             'opens_at' => ['type' => 'DATETIME', 'null' => true], 'closes_at' => ['type' => 'DATETIME', 'null' => true],
             'passcode_hash' => ['type' => 'VARCHAR', 'constraint' => 255, 'null' => true],
             'email_mode' => ['type' => 'VARCHAR', 'constraint' => 8], 'phone_mode' => ['type' => 'VARCHAR', 'constraint' => 8],
@@ -355,8 +404,7 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
             'id' => ['type' => 'INTEGER', 'constraint' => 11, 'auto_increment' => true], 'quiz_id' => ['type' => 'INTEGER'],
             'pos' => ['type' => 'INTEGER'], 'type' => ['type' => 'VARCHAR', 'constraint' => 16], 'content' => ['type' => 'TEXT'],
             'media_type' => ['type' => 'VARCHAR', 'constraint' => 8, 'null' => true], 'media_src' => ['type' => 'TEXT', 'null' => true],
-            'explanation' => ['type' => 'TEXT', 'null' => true], 'points' => ['type' => 'DECIMAL', 'constraint' => '8,2'],
-            'time_limit_sec' => ['type' => 'INTEGER', 'null' => true], 'text_answers' => ['type' => 'TEXT', 'null' => true],
+            'explanation' => ['type' => 'TEXT', 'null' => true], 'text_answers' => ['type' => 'TEXT', 'null' => true],
             'created_at' => ['type' => 'DATETIME'], 'updated_at' => ['type' => 'DATETIME'],
         ]);
         $this->forge->addKey('id', true); $this->forge->addUniqueKey(['quiz_id', 'pos']); $this->forge->createTable('questions');
@@ -369,6 +417,14 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         ]);
         $this->forge->addKey('id', true); $this->forge->addUniqueKey(['question_id', 'pos']); $this->forge->createTable('question_options');
 
+
+        $this->forge->addField([
+            'id' => ['type' => 'INTEGER', 'constraint' => 11, 'auto_increment' => true],
+            'quiz_id' => ['type' => 'INTEGER'], 'public_id' => ['type' => 'VARCHAR', 'constraint' => 32],
+            'revision' => ['type' => 'INTEGER'], 'definition' => ['type' => 'TEXT'],
+            'created_at' => ['type' => 'DATETIME'],
+        ]);
+        $this->forge->addKey('id', true); $this->forge->createTable('quiz_papers');
         $this->forge->addField([
             'id' => ['type' => 'INTEGER', 'constraint' => 11, 'auto_increment' => true], 'quiz_id' => ['type' => 'INTEGER'],
             'status' => ['type' => 'VARCHAR', 'constraint' => 12],
@@ -378,7 +434,7 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
 
     private function dropTables(): void
     {
-        foreach (['attempts', 'question_options', 'questions', 'quizzes', 'users'] as $table) {
+        foreach (['attempts', 'quiz_papers', 'question_options', 'questions', 'quizzes', 'users'] as $table) {
             if ($this->authoringDb->tableExists($table)) $this->forge->dropTable($table, true);
         }
     }
