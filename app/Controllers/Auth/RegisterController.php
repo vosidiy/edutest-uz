@@ -18,7 +18,7 @@ final class RegisterController extends BaseController
     public function index(): string|RedirectResponse
     {
         if (service('auth')->check()) {
-            return redirect()->route('quizzes');
+            return redirect()->route('dashboard');
         }
 
         return view('auth/register');
@@ -71,7 +71,7 @@ final class RegisterController extends BaseController
                 ->with('old', $this->safeOldInput($data));
         }
 
-        return redirect()->route('quizzes');
+        return redirect()->route('dashboard');
     }
 
     /** @return array{display_name: string, email: string, phone: string, password: string, password_confirm: string} */

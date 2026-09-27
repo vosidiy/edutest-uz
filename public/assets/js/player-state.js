@@ -72,6 +72,10 @@ export function hasPending(state) {
   return state.mode === 'assessment' && (state.items.some(item => item.saveVer > item.ackVer) || (state.finishReason && !state.result) || state.events.length > 0);
 }
 
+export function isFullscreenExit(previouslyActive, currentlyActive) {
+  return Boolean(previouslyActive) && !currentlyActive;
+}
+
 /** Merge acknowledgements without replacing newer local work. Locked conflicts require a human choice. */
 export function mergeServer(state, server) {
   if (server.version < state.version) return true;

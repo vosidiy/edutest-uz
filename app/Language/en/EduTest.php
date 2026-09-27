@@ -4,14 +4,32 @@ declare(strict_types=1);
 
 return [
     'builder' => [
-        'existingAttemptsNotice' => 'Saved changes apply to future starts. Existing attempts keep the paper revision they received.',
-        'modeLocked' => 'Quiz mode is locked after the first student start.',
+        'existingAttemptsNotice' => 'Saved content and mode changes apply to future starts. Existing runs keep the mode and paper revision they received.',
+        'navigation' => [
+            'builder' => 'Quiz builder',
+            'responses' => 'Responses',
+        ],
+        'modeChange' => [
+            'assessment' => 'Switch to Assessment? Future starts will collect a student name and save official results. Existing Practice runs remain anonymous and local.',
+            'practice' => 'Switch to Practice? Future starts will be anonymous and local-only. Passcode, identity collection, and integrity settings will be cleared; existing Assessment results remain available.',
+        ],
+        'integrityHelp' => 'Record hidden-tab and fullscreen-exit signals without automatic penalties.',
+        'publication' => [
+            'title' => 'Add a quiz title.',
+            'questions' => 'Add at least one question.',
+            'questionText' => 'Question {number} needs question text.',
+            'acceptedAnswer' => 'Question {number} needs an accepted answer.',
+            'twoChoices' => 'Question {number} needs at least two choices.',
+            'emptyChoice' => 'Question {number} has an empty choice.',
+            'singleCorrect' => 'Question {number} needs exactly one correct choice.',
+            'multiCorrect' => 'Question {number} needs at least one correct choice.',
+        ],
     ],
     'createQuiz' => [
         'eyebrow' => 'New draft',
         'title' => 'Create a quiz',
         'close' => 'Close',
-        'description' => 'Choose the starting mode. You can change it until the first student starts.',
+        'description' => 'Choose the starting mode. You can change it later; saved changes affect future starts only.',
         'quizTitle' => 'Quiz title',
         'placeholder' => 'e.g. Algebra midterm',
         'mode' => 'Quiz mode',

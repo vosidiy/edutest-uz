@@ -35,8 +35,8 @@ final class TeacherResultsService
     {
         $filters = $this->normalizeOverviewFilters($input);
         $builder = $this->db->table('quizzes q')
-            ->where('q.user_id', $userId)
-            ->where('q.mode', 'assessment');
+            ->where('q.user_id', $userId);
+        $this->applyAssessmentHistoryScope($builder);
         $this->applyOverviewFilters($builder, $filters);
 
         $total = (clone $builder)->countAllResults();
@@ -45,13 +45,13 @@ final class TeacherResultsService
 
         $this->restoreAliases('q');
         $rowsBuilder = $builder
-            ->select('q.id, q.public_id, q.title, q.status, q.deleted_at, q.updated_at')
+            ->select('q.id, q.public_id, q.title, q.mode, q.status, q.deleted_at, q.updated_at')
             ->select("SUM(CASE WHEN a.status IN ('submitted', 'expired') THEN 1 ELSE 0 END) AS finalized_count", false)
             ->select("SUM(CASE WHEN a.status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress_count", false)
             ->select("AVG(CASE WHEN a.status IN ('submitted', 'expired') THEN a.percent ELSE NULL END) AS average_percent", false)
             ->select("MAX(CASE WHEN a.status IN ('submitted', 'expired') THEN a.submitted_at ELSE NULL END) AS latest_submission", false)
             ->join('attempts a', 'a.quiz_id = q.id', 'left')
-            ->groupBy('q.id, q.public_id, q.title, q.status, q.deleted_at, q.updated_at');
+            ->groupBy('q.id, q.public_id, q.title, q.mode, q.status, q.deleted_at, q.updated_at');
 
         match ($filters['sort']) {
             'title_asc'        => $rowsBuilder->orderBy('q.title', 'ASC')->orderBy('q.id', 'ASC'),
@@ -72,7 +72,6 @@ final class TeacherResultsService
             ->select("AVG(CASE WHEN a.status IN ('submitted', 'expired') THEN a.percent ELSE NULL END) AS average_percent", false)
             ->join('quizzes q', 'q.id = a.quiz_id')
             ->where('q.user_id', $userId)
-            ->where('q.mode', 'assessment')
             ->get()
             ->getRowArray() ?? [];
 
@@ -85,6 +84,7 @@ final class TeacherResultsService
             'rows' => array_map(fn (array $row): array => [
                 'publicId'       => (string) $row['public_id'],
                 'title'          => trim((string) $row['title']) !== '' ? (string) $row['title'] : lang('Results.untitledQuiz'),
+                'currentMode'    => (string) $row['mode'],
                 'status'         => $row['deleted_at'] !== null ? 'deleted' : (string) $row['status'],
                 'finalizedCount' => (int) $row['finalized_count'],
                 'inProgressCount'=> (int) $row['in_progress_count'],
@@ -128,6 +128,9 @@ final class TeacherResultsService
             'quiz' => [
                 'publicId' => (string) $quiz['public_id'],
                 'title'    => trim((string) $quiz['title']) !== '' ? (string) $quiz['title'] : lang('Results.untitledQuiz'),
+                'builderUrl' => $quiz['deleted_at'] === null && $quiz['status'] !== 'archived' ? site_url('quizzes/' . $quiz['public_id'] . '/edit') : null,
+                'restoreUrl' => site_url('dashboard') . '?' . http_build_query(['view' => $quiz['deleted_at'] !== null ? 'trash' : 'archived', 'q' => $quiz['title']]),
+                'currentMode' => (string) $quiz['mode'],
                 'status'   => $quiz['deleted_at'] !== null ? 'deleted' : (string) $quiz['status'],
             ],
             'metrics'      => $metrics,
@@ -153,13 +156,12 @@ final class TeacherResultsService
 
         $attempt = $this->db->table('attempts a')
             ->select('a.id, a.public_id, a.quiz_id, a.paper_id, a.name, a.email, a.phone, a.ip, a.agent, a.status, a.phase, a.settings, a.started_at, a.total_due_at, a.close_at, a.due_at, a.submitted_at, a.finish_reason, a.score, a.max_score, a.percent, a.updated_at')
-            ->select('q.public_id AS quiz_public_id, q.title AS quiz_title, q.status AS quiz_status, q.deleted_at AS quiz_deleted_at')
+            ->select('a.responses, q.public_id AS quiz_public_id, q.title AS quiz_title, q.mode AS quiz_mode, q.status AS quiz_status, q.deleted_at AS quiz_deleted_at')
             ->select('p.public_id AS paper_public_id, p.revision AS paper_revision, p.definition AS paper_definition')
             ->join('quizzes q', 'q.id = a.quiz_id')
             ->join('quiz_papers p', 'p.id = a.paper_id AND p.quiz_id = a.quiz_id')
             ->where('a.public_id', $attemptPublicId)
             ->where('q.user_id', $userId)
-            ->where('q.mode', 'assessment')
             ->get()
             ->getRowArray();
 
@@ -182,12 +184,7 @@ final class TeacherResultsService
             $snapshotById[(string) $question['id']] = $question;
         }
 
-        $items = $this->db->table('attempt_items')
-            ->select('question_id, pos, choice_order, status, started_at, locked_at, lock_reason, answer_codes, text_answer, saved_at, result, credit')
-            ->where('attempt_id', (int) $attempt['id'])
-            ->orderBy('pos', 'ASC')
-            ->get()
-            ->getResultArray();
+        $items = \App\Services\Player\AttemptResponses::decode($attempt['responses']);
 
         $events = $this->db->table('cheat_events')
             ->select('type, happened_at, received_at, duration_ms, data')
@@ -227,11 +224,15 @@ final class TeacherResultsService
             'quiz' => [
                 'publicId' => (string) $attempt['quiz_public_id'],
                 'title' => trim((string) $attempt['quiz_title']) !== '' ? (string) $attempt['quiz_title'] : lang('Results.untitledQuiz'),
+                'builderUrl' => $attempt['quiz_deleted_at'] === null && $attempt['quiz_status'] !== 'archived' ? site_url('quizzes/' . $attempt['quiz_public_id'] . '/edit') : null,
+                'restoreUrl' => site_url('dashboard') . '?' . http_build_query(['view' => $attempt['quiz_deleted_at'] !== null ? 'trash' : 'archived', 'q' => $attempt['quiz_title']]),
+                'currentMode' => (string) $attempt['quiz_mode'],
                 'status' => $attempt['quiz_deleted_at'] !== null ? 'deleted' : (string) $attempt['quiz_status'],
                 'url' => site_url('results/quizzes/' . $attempt['quiz_public_id']),
             ],
             'paper' => [
                 'revision' => (int) $attempt['paper_revision'],
+                'mode' => (string) ($paperQuiz['mode'] ?? 'assessment'),
                 'title' => trim((string) ($paperQuiz['title'] ?? '')) !== '' ? (string) $paperQuiz['title'] : lang('Results.untitledQuiz'),
                 'description' => (string) ($paperQuiz['description'] ?? ''),
                 'instructions' => (string) ($paperQuiz['instructions'] ?? ''),
@@ -493,14 +494,14 @@ final class TeacherResultsService
         }
 
         $quiz = $this->db->table('quizzes')
-            ->select('id, public_id, title, status, deleted_at')
+            ->select('id, public_id, title, mode, status, deleted_at')
             ->where('public_id', $publicId)
             ->where('user_id', $userId)
-            ->where('mode', 'assessment')
             ->get()
             ->getRowArray();
 
-        if ($quiz === null) {
+        if ($quiz === null || ($quiz['mode'] !== 'assessment'
+            && $this->db->table('attempts')->where('quiz_id', $quiz['id'])->countAllResults() === 0)) {
             throw new ReportingException('quiz_not_found', 'Quiz not found.');
         }
 
@@ -546,6 +547,15 @@ final class TeacherResultsService
         } elseif ($filters['lifecycle'] === 'deleted') {
             $builder->where('q.deleted_at IS NOT NULL', null, false);
         }
+    }
+
+    private function applyAssessmentHistoryScope(BaseBuilder $builder): void
+    {
+        $attempts = $this->db->prefixTable('attempts');
+        $builder->groupStart()
+            ->where('q.mode', 'assessment')
+            ->orWhere("EXISTS (SELECT 1 FROM {$attempts} history_attempt WHERE history_attempt.quiz_id = q.id)", null, false)
+            ->groupEnd();
     }
 
     /** @param array<string, mixed> $input

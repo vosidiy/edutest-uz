@@ -20,19 +20,31 @@ abstract class PlayerTestCase extends CIUnitTestCase
     protected MediaService $media;
     protected string $mediaRoot;
     private string $previousKey;
+    private ?IsolatedMysql $mysql = null;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->previousKey = (string) config('Encryption')->key;
         config('Encryption')->key = 'isolated-player-fixture-key-not-for-deployment';
-        $this->db = Database::connect(['DBDriver' => 'SQLite3', 'database' => ':memory:', 'DBPrefix' => 'player_', 'DBDebug' => true, 'foreignKeys' => true], false);
+        $socket = getenv('EDUTEST_TEST_MYSQL_SOCKET');
+        if ($socket) {
+            $this->mysql = new IsolatedMysql($socket);
+            $this->db = $this->mysql->connect();
+        } else {
+            $this->db = Database::connect(['DBDriver' => 'SQLite3', 'database' => ':memory:', 'DBPrefix' => 'player_', 'DBDebug' => true, 'foreignKeys' => true], false);
+        }
         $this->db->initialize();
         $schema = file_get_contents(ROOTPATH . 'docs/schema.sql');
         preg_match_all('/CREATE TABLE (\w+) \((.*?)\) ENGINE=InnoDB.*?;/s', $schema, $tables, PREG_SET_ORDER);
         foreach ($tables as $table) {
+            if ($this->mysql !== null) {
+                $this->db->query($table[0]);
+                continue;
+            }
             $body = preg_replace('/^\s*INDEX [^\n]*\n/m', '', $table[2]);
             $body = str_replace('BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY', 'INTEGER PRIMARY KEY AUTOINCREMENT', $body);
+            $body = str_replace('JSON_TYPE(responses)', 'UPPER(JSON_TYPE(responses))', $body);
             $body = preg_replace('/\b(?:BIGINT|SMALLINT|INT) UNSIGNED\b/', 'INTEGER', $body);
             $body = preg_replace('/\bTINYINT\(1\)/', 'INTEGER', $body);
             $body = preg_replace('/\bDATETIME\(6\)/', 'TEXT', $body);
@@ -51,6 +63,7 @@ abstract class PlayerTestCase extends CIUnitTestCase
     protected function tearDown(): void
     {
         $this->db->close();
+        $this->mysql?->close();
         config('Encryption')->key = $this->previousKey;
         if (is_dir($this->mediaRoot)) {
             $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($this->mediaRoot, \FilesystemIterator::SKIP_DOTS), \RecursiveIteratorIterator::CHILD_FIRST);

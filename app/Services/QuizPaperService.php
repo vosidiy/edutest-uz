@@ -123,14 +123,13 @@ final class QuizPaperService
         ];
     }
 
-    public function purgeUnusedPracticePapers(int $limit = 100): void
+    public function purgeUnusedPapers(int $limit = 100): void
     {
         $rows = $this->db->table('quiz_papers p')
             ->select('p.id, p.definition')
-            ->join('quizzes q', 'q.id = p.quiz_id')
             ->join('attempts a', 'a.paper_id = p.id', 'left')
             ->join('practice_keys k', 'k.paper_id = p.id', 'left')
-            ->where('q.mode', 'practice')->where('a.id', null)->where('k.request_key', null)
+            ->where('a.id', null)->where('k.request_key', null)
             ->limit(max(1, min(100, $limit)))->get()->getResultArray();
         foreach ($rows as $row) {
             $definition = json_decode((string) $row['definition'], true);

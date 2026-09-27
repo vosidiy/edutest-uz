@@ -1,13 +1,13 @@
 <?= $this->extend('layouts/teacher') ?>
 
 <?= $this->section('content') ?>
+<?= $this->include('teacher/partials/quiz_header') ?>
 <header class="page-header results-page-header">
     <div>
-        <p class="eyebrow"><a href="<?= site_url('results') ?>">Results</a> <span aria-hidden="true">/</span> Quiz results</p>
-        <div class="results-title-line"><h1><?= esc($report['quiz']['title']) ?></h1><span class="badge status <?= esc($report['quiz']['status'], 'attr') ?>"><?= esc(ucfirst($report['quiz']['status'])) ?></span></div>
+        <p class="eyebrow"><?= esc(lang('Workspace.responsesHeading')) ?></p>
+        <div class="results-title-line"><h1><?= esc($report['quiz']['title']) ?></h1><span class="badge <?= esc($report['quiz']['currentMode'], 'attr') ?>"><?= esc(lang('Results.currentMode')) ?>: <?= esc(ucfirst($report['quiz']['currentMode'])) ?></span><span class="badge status <?= esc($report['quiz']['status'], 'attr') ?>"><?= esc(ucfirst($report['quiz']['status'])) ?></span></div>
         <p>Finalized totals and saved work in progress. <?= esc(lang('Results.revisionRetentionNotice')) ?></p>
     </div>
-    <a class="btn btn-outline" href="<?= esc($report['exportUrl'], 'attr') ?>">↓ <?= esc(lang('Results.exportCsv')) ?></a>
 </header>
 
 <div class="content-area results-workspace">

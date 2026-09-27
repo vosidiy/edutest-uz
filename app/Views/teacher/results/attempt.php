@@ -1,13 +1,13 @@
 <?= $this->extend('layouts/teacher') ?>
 
 <?= $this->section('content') ?>
+<?= $this->include('teacher/partials/quiz_header') ?>
 <header class="page-header results-page-header">
     <div>
-        <p class="eyebrow"><a href="<?= site_url('results') ?>">Results</a> <span aria-hidden="true">/</span> <a href="<?= esc($report['quiz']['url'], 'attr') ?>"><?= esc($report['quiz']['title']) ?></a></p>
+        <p class="eyebrow"><a href="<?= site_url('dashboard') ?>"><?= esc(lang('Workspace.dashboardTitle')) ?></a> <span aria-hidden="true">/</span> <a href="<?= esc($report['quiz']['url'], 'attr') ?>"><?= esc($report['quiz']['title']) ?></a></p>
         <div class="results-title-line"><h1><?= esc(lang('Results.attemptTitle')) ?>: <?= esc($report['attempt']['name']) ?></h1><span class="badge attempt-status <?= esc($report['attempt']['status'], 'attr') ?>"><?= esc(ucwords(str_replace('_', ' ', $report['attempt']['status']))) ?></span></div>
-        <p><?= esc(lang('Results.paperRevision')) ?> <?= esc((string) $report['attempt']['paperRevision']) ?> as given to the student. Times use <?= esc($report['timezone']) ?>.</p>
+        <p><?= esc(lang('Results.paperRevision')) ?> <?= esc((string) $report['attempt']['paperRevision']) ?> · <?= esc(lang('Results.receivedMode')) ?>: <?= esc(ucfirst($report['paper']['mode'])) ?> · <?= esc(lang('Results.currentMode')) ?>: <?= esc(ucfirst($report['quiz']['currentMode'])) ?>. Times use <?= esc($report['timezone']) ?>.</p>
     </div>
-    <a class="btn btn-outline" href="<?= esc($report['quiz']['url'], 'attr') ?>">← Back to quiz results</a>
 </header>
 
 <div class="content-area results-workspace attempt-review">
@@ -102,7 +102,7 @@
         <?php else : ?>
             <ol class="integrity-timeline">
                 <?php foreach ($report['events'] as $event) : ?>
-                    <li><span class="timeline-dot" aria-hidden="true"></span><div><div class="timeline-heading"><strong><?= esc(ucwords(str_replace('_', ' ', $event['type']))) ?></strong><time datetime="<?= esc($event['receivedAt']['iso'] ?? '', 'attr') ?>"><?= esc($event['receivedAt']['display'] ?? lang('Results.notAvailable')) ?></time></div><p>Occurred: <?= esc($event['happenedAt']['display'] ?? lang('Results.notAvailable')) ?><?php if ($event['durationMs'] !== null) : ?> · Duration <?= esc((string) $event['durationMs']) ?> ms<?php endif ?></p><?php if ($event['metadata'] !== []) : ?><details><summary>Event metadata</summary><pre><?= esc(json_encode($event['metadata'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '{}') ?></pre></details><?php endif ?></div></li>
+                    <li><span class="timeline-dot" aria-hidden="true"></span><div><div class="timeline-heading"><strong><?= esc(lang('Results.eventTypes.' . $event['type'])) ?></strong><time datetime="<?= esc($event['receivedAt']['iso'] ?? '', 'attr') ?>"><?= esc($event['receivedAt']['display'] ?? lang('Results.notAvailable')) ?></time></div><p>Occurred: <?= esc($event['happenedAt']['display'] ?? lang('Results.notAvailable')) ?><?php if ($event['durationMs'] !== null) : ?> · Duration <?= esc((string) $event['durationMs']) ?> ms<?php endif ?></p><?php if ($event['metadata'] !== []) : ?><details><summary>Event metadata</summary><pre><?= esc(json_encode($event['metadata'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '{}') ?></pre></details><?php endif ?></div></li>
                 <?php endforeach ?>
             </ol>
         <?php endif ?>

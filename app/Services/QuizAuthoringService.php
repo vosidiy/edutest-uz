@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Exceptions\AuthoringException;
 use CodeIgniter\Database\BaseConnection;
 use Config\Database;
+use Closure;
 use DateTimeImmutable;
 use DateTimeZone;
 use Throwable;
@@ -18,10 +19,17 @@ final class QuizAuthoringService
     private const STATUSES = ['draft', 'published', 'closed', 'archived'];
 
     private readonly BaseConnection $db;
+    private readonly Closure $shareCodeFactory;
 
-    public function __construct(?BaseConnection $db = null, private readonly ?MediaService $media = null, private readonly ?QuizPaperService $papers = null)
+    public function __construct(
+        ?BaseConnection $db = null,
+        private readonly ?MediaService $media = null,
+        private readonly ?QuizPaperService $papers = null,
+        ?Closure $shareCodeFactory = null,
+    )
     {
         $this->db = $db ?? Database::connect();
+        $this->shareCodeFactory = $shareCodeFactory ?? static fn (): string => QuizShareCode::generate();
     }
 
     /** @return array<string, mixed> */
@@ -44,8 +52,6 @@ final class QuizAuthoringService
         $now = $this->now();
         $row = [
             'user_id'           => $userId,
-            'public_id'         => bin2hex(random_bytes(16)),
-            'share_token'       => bin2hex(random_bytes(32)),
             'mode'              => $mode,
             'status'            => 'draft',
             'listed'            => 0,
@@ -75,14 +81,36 @@ final class QuizAuthoringService
             'deleted_at'        => null,
         ];
 
-        if (! $this->db->table('quizzes')->insert($row)) {
-            throw new AuthoringException('create_failed', 'The quiz could not be created.', 500);
+        for ($attempt = 0; $attempt < 20; $attempt++) {
+            $shareCode = ($this->shareCodeFactory)();
+            if (! QuizShareCode::isShort($shareCode)) {
+                throw new AuthoringException('create_failed', 'The quiz could not be created.', 500);
+            }
+            if ($this->db->table('quizzes')->where('share_token', $shareCode)->countAllResults() > 0) {
+                continue;
+            }
+
+            $candidate = ['public_id' => bin2hex(random_bytes(16)), 'share_token' => $shareCode] + $row;
+            try {
+                if ($this->db->table('quizzes')->insert($candidate)) {
+                    return [
+                        'publicId' => $candidate['public_id'],
+                        'editUrl'  => site_url('quizzes/' . $candidate['public_id'] . '/edit'),
+                    ];
+                }
+            } catch (Throwable $exception) {
+                if (! $this->isDuplicateKey($exception)) {
+                    throw new AuthoringException('create_failed', 'The quiz could not be created.', 500);
+                }
+                continue;
+            }
+
+            if (! in_array((int) ($this->db->error()['code'] ?? 0), [19, 1062, 23000], true)) {
+                throw new AuthoringException('create_failed', 'The quiz could not be created.', 500);
+            }
         }
 
-        return [
-            'publicId' => $row['public_id'],
-            'editUrl'  => site_url('quizzes/' . $row['public_id'] . '/edit'),
-        ];
+        throw new AuthoringException('create_failed', 'A unique quiz code could not be generated. Please try again.', 500);
     }
 
     /** @return array<string, mixed> */
@@ -125,12 +153,6 @@ final class QuizAuthoringService
 
             $paperFingerprint = $this->paperFingerprint($quiz);
             $normalized = $this->normalizeDocument($payload, $quiz);
-
-            if ($quiz['first_started_at'] !== null && $normalized['quiz']['mode'] !== $quiz['mode']) {
-                throw new AuthoringException('mode_locked', 'Quiz mode cannot change after the first student start.', 409, [
-                    'mode' => 'Assessment/practice mode is locked after the first start.',
-                ]);
-            }
 
             $newVersion = (int) $quiz['version'] + 1;
             $quizUpdate = $normalized['quiz'];
@@ -338,6 +360,10 @@ final class QuizAuthoringService
     /** @return array<string, mixed>|null */
     public function publicSummary(string $shareToken): ?array
     {
+        if (! QuizShareCode::isValid($shareToken)) {
+            return null;
+        }
+
         $row = $this->db->table('quizzes q')
             ->select('q.*, u.display_name, u.timezone')
             ->join('users u', 'u.id = q.user_id')
@@ -738,6 +764,14 @@ final class QuizAuthoringService
     private function serializeDocument(array $quiz): array
     {
         $timezone = $this->userTimezone((int) $quiz['user_id']);
+        $hasAssessmentHistory = $quiz['mode'] !== 'assessment'
+            && $this->db->table('attempts')
+                ->select('id')
+                ->where('quiz_id', $quiz['id'])
+                ->limit(1)
+                ->get()
+                ->getRowArray() !== null;
+        $resultsAvailable = $quiz['mode'] === 'assessment' || $hasAssessmentHistory;
         $questions = $this->db->table('questions')->where('quiz_id', $quiz['id'])->orderBy('pos')->get()->getResultArray();
         $serialized = [];
         foreach ($questions as $question) {
@@ -782,13 +816,14 @@ final class QuizAuthoringService
         return [
             'publicId'         => (string) $quiz['public_id'],
             'shareUrl'         => site_url('q/' . $quiz['share_token']),
+            'resultsAvailable' => $resultsAvailable,
+            'resultsUrl'       => $resultsAvailable ? site_url('results/quizzes/' . $quiz['public_id']) : null,
             'version'          => (int) $quiz['version'],
             'revision'         => (int) $quiz['revision'],
             'mode'             => (string) $quiz['mode'],
             'status'           => (string) $quiz['status'],
             'deleted'          => $quiz['deleted_at'] !== null,
             'hasStarted'        => $quiz['first_started_at'] !== null,
-            'modeLocked'        => $quiz['first_started_at'] !== null,
             'listed'           => (bool) $quiz['listed'],
             'title'            => (string) $quiz['title'],
             'description'      => (string) $quiz['description'],
@@ -868,6 +903,16 @@ final class QuizAuthoringService
         if ($fields !== []) {
             throw new AuthoringException('not_publishable', 'Complete the highlighted fields before publishing.', 422, $fields);
         }
+    }
+
+    private function isDuplicateKey(Throwable $exception): bool
+    {
+        if (in_array((int) $exception->getCode(), [19, 1062, 23000], true)) {
+            return true;
+        }
+
+        $message = strtolower($exception->getMessage());
+        return str_contains($message, 'duplicate entry') || str_contains($message, 'unique constraint');
     }
 
     /** @return array<string, mixed> */

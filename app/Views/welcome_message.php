@@ -24,7 +24,7 @@
             <a href="#use-cases">Use cases</a>
         </div>
         <?php if ($authenticated ?? false) : ?>
-            <a class="button button-small button-outline" href="<?= site_url('quizzes') ?>">My quizzes</a>
+            <a class="button button-small button-outline" href="<?= site_url('dashboard') ?>"><?= esc(lang('Workspace.dashboardTitle')) ?></a>
         <?php else : ?>
             <a class="nav-signin" href="<?= site_url('login') ?>">Sign in</a>
             <a class="button button-small button-outline" href="<?= site_url('register') ?>">Get started</a>
@@ -92,7 +92,7 @@
             </article>
             <article class="feature-card">
                 <div class="icon">◇</div><h3>Meaningful integrity signals</h3>
-                <p>Review tab changes, focus loss, and inactivity as context. Teachers always make the final judgment.</p>
+                <p>Review hidden-tab and fullscreen-exit signals as context. Teachers always make the final judgment.</p>
             </article>
             <article class="feature-card">
                 <div class="icon">▧</div><h3>Questions beyond text</h3>

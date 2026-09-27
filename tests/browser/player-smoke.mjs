@@ -12,11 +12,11 @@ const artifacts = await fs.mkdtemp('/private/tmp/edutest-player-browser-');
 const chromePath = process.env.PLAYER_CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const php = process.env.PLAYER_PHP || '/Applications/MAMP/bin/php/php8.4.17/bin/php';
 const token = 'a'.repeat(64);
-let mode = 'assessment', feedback = 'after_each', visibility = true, official = null, forceConflict = false, loseStartResponse = false, starts = 0;
+let mode = 'assessment', feedback = 'after_each', visibility = true, integrity = true, official = null, forceConflict = false, loseStartResponse = false, starts = 0;
 const requests = [];
 const quiz = () => ({title: 'A little curiosity goes a long way', description: 'Explore geography in three quick questions. Take your time, trust what you know, and learn something new.',
   instructions: 'Choose your answer, then submit it. You cannot return to a submitted question.', teacher: 'Sarah Williams', questionCount: 3, timeLimitMinutes: '10',
-  opensAt: null, closesAt: null, passcodeRequired: false, availability: 'available', shareToken: token, emailMode: 'optional', phoneMode: 'hidden', cheatCheck: false, cover: null, mode});
+  opensAt: null, closesAt: null, passcodeRequired: false, availability: 'available', shareToken: token, emailMode: 'optional', phoneMode: 'hidden', cheatCheck: integrity, cover: null, mode});
 const questions = () => [
   {id: '9007199254740993', type: 'single_choice', content: 'What is the capital of France?', media: null, explanation: 'Paris has been the political and cultural centre of France for centuries.', acceptedAnswers: [], correctCodes: ['paris'],
     options: [{id: '11', code: 'berlin', content: 'Berlin', media: null}, {id: '12', code: 'paris', content: 'Paris', media: null}, {id: '13', code: 'rome', content: 'Rome', media: null}, {id: '14', code: 'madrid', content: 'Madrid', media: null}]},
@@ -50,7 +50,7 @@ const server = http.createServer(async (request, response) => {
       const now = new Date().toISOString();
       official = {mode, attemptId: mode === 'assessment' ? 'fixture' : null, credential: 'fixture-credential', version: 1, status: 'in_progress', phase: 'answering', startedAt: now,
         totalDueAt: new Date(Date.now() + 600000).toISOString(), closeAt: null, result: null, finishReason: null,
-        quiz: {...quiz(), settings: {feedback, ...(typeof visibility === 'boolean' ? {showScore: visibility, showAnswers: visibility, showExplain: visibility} : visibility), cheatCheck: false}, questions: questions()},
+        quiz: {...quiz(), settings: {feedback, ...(typeof visibility === 'boolean' ? {showScore: visibility, showAnswers: visibility, showExplain: visibility} : visibility), cheatCheck: integrity}, questions: questions()},
         items: questions().map((question, index) => ({questionId: question.id, status: index === 0 ? 'active' : 'pending', saveVer: 0, answerCodes: [], textAnswer: '', submitKey: null, reason: null, startedAt: index === 0 ? now : null}))};
       if (loseStartResponse) { loseStartResponse = false; response.writeHead(200, {'Content-Type': 'application/json'}).end('{"data":'); return; }
       json(response, official); return;
@@ -125,7 +125,12 @@ try {
   sessionId = (await command('Target.attachToTarget', {targetId: target.targetId, flatten: true}, null)).sessionId;
   await command('Page.enable'); await command('Runtime.enable'); await command('Network.enable');
   await viewport(1280, 1000); await navigate(); await screenshot('intro-desktop');
+  assert.equal(await evaluate('Boolean(document.querySelector("[data-fullscreen-button]"))'), true);
+  await evaluate(`Object.defineProperty(document.documentElement, 'requestFullscreen', {configurable:true, value:() => Promise.reject(new Error('denied'))}); document.querySelector('[data-fullscreen-button]').click()`);
+  await until(() => evaluate('document.querySelector("#player-alert").textContent.includes("could not be enabled")'), 'non-blocking fullscreen denial');
+  assert.equal(await evaluate('document.querySelector("#quiz-admission button[type=submit]").disabled'), false);
   await startQuiz(); await screenshot('question-desktop');
+  assert.equal(await evaluate('Boolean(document.querySelector(".player-topbar [data-fullscreen-button]"))'), true);
   assert.deepEqual(await evaluate('[...document.querySelectorAll(".player-option-letter")].map(node => node.textContent)'), ['A)', 'B)', 'C)', 'D)']);
   await command('Input.dispatchKeyEvent', {type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9});
   await command('Input.dispatchKeyEvent', {type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9});
@@ -148,7 +153,7 @@ try {
   assert.equal(await evaluate('document.querySelector(".player-results-header").textContent.includes("3.00 / 3.00 questions")'), true);
   assert.equal(starts, 1);
   // Anonymous at-end mode with every result-visibility toggle off.
-  await evaluate('sessionStorage.clear()'); official = null; mode = 'practice'; feedback = 'at_end'; visibility = false;
+  await evaluate('sessionStorage.clear()'); official = null; mode = 'practice'; feedback = 'at_end'; visibility = false; integrity = false;
   const requestIndex = requests.length;
   await navigate(); await startQuiz();
   await clickText('Skip question'); assert.equal(await evaluate('document.querySelector(".player-feedback") === null'), true);

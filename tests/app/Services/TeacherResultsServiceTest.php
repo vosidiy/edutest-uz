@@ -87,6 +87,33 @@ final class TeacherResultsServiceTest extends CIUnitTestCase
         $this->assertSame('=Alice Student', $flagged['attempts'][0]['name']);
     }
 
+    public function testAssessmentHistoryRemainsAvailableWhenCurrentModeIsPractice(): void
+    {
+        $this->reportingDb->table('quizzes')->where('id', 1)->update(['mode' => 'practice']);
+
+        $overview = $this->results->overview(1, [], 'UTC');
+        $row = array_values(array_filter($overview['rows'], fn (array $quiz): bool => $quiz['publicId'] === $this->quizPublicId))[0] ?? null;
+        $this->assertNotNull($row);
+        $this->assertSame('practice', $row['currentMode']);
+        $this->assertSame(4, $overview['metrics']['finalizedAttempts']);
+
+        $quiz = $this->results->quiz(1, $this->quizPublicId, [], 'UTC');
+        $this->assertSame('practice', $quiz['quiz']['currentMode']);
+        $this->assertSame(2, $quiz['metrics']['finalizedAttempts']);
+
+        $attempt = $this->results->attempt(1, $this->submittedAttemptId, 'UTC');
+        $this->assertSame('practice', $attempt['quiz']['currentMode']);
+        $this->assertSame('assessment', $attempt['paper']['mode']);
+        $this->assertCount(1, iterator_to_array($this->results->export(1, $this->quizPublicId, ['status' => 'submitted', 'q' => 'Alice'], 'UTC')['rows']));
+
+        try {
+            $this->results->quiz(1, str_repeat('c', 32), [], 'UTC');
+            $this->fail('A current Practice quiz without assessment history should not appear in Results.');
+        } catch (ReportingException $exception) {
+            $this->assertSame('quiz_not_found', $exception->errorCode);
+        }
+    }
+
     public function testAttemptReviewPreservesStoredChoiceOrderAndRedactsCredentialMetadata(): void
     {
         $this->reportingDb->table('question_options')->where('question_id', 1)->delete();
@@ -209,6 +236,7 @@ final class TeacherResultsServiceTest extends CIUnitTestCase
             ['id' => 6, 'quiz_id' => 2, 'public_id' => str_repeat('6', 32), 'name' => 'Other Student', 'email' => null, 'phone' => null, 'ip' => null, 'agent' => null, 'status' => 'submitted', 'phase' => 'complete', 'settings' => $settings, 'started_at' => '2026-01-05 00:00:00', 'total_due_at' => null, 'close_at' => null, 'submitted_at' => '2026-01-05 00:05:00', 'finish_reason' => 'completed', 'score' => '2.00', 'max_score' => '2.00', 'percent' => '100.00', 'updated_at' => '2026-01-05 00:05:00'],
         ];
         foreach ($attempts as &$attempt) {
+            $attempt['responses'] = \App\Services\Player\AttemptResponses::encode([]);
             $attempt['paper_id'] = match ((int) $attempt['quiz_id']) { 1 => 1, 4 => 2, 5 => 3, default => 4 };
         }
         unset($attempt);
@@ -222,16 +250,30 @@ final class TeacherResultsServiceTest extends CIUnitTestCase
             ['id' => 1, 'question_id' => 1, 'pos' => 1, 'code' => 'right', 'content' => 'Correct answer', 'media_type' => null, 'media_src' => null, 'is_correct' => 1],
             ['id' => 2, 'question_id' => 1, 'pos' => 2, 'code' => 'wrong', 'content' => 'Wrong answer', 'media_type' => null, 'media_src' => null, 'is_correct' => 0],
         ]);
-        $this->reportingDb->table('attempt_items')->insertBatch([
+        $responseRows = [
             ['id' => 1, 'attempt_id' => 1, 'quiz_id' => 1, 'question_id' => 1, 'pos' => 1, 'choice_order' => '["wrong","right"]', 'status' => 'locked', 'started_at' => '2026-01-01 18:30:00', 'locked_at' => '2026-01-01 18:30:30', 'lock_reason' => 'answered', 'answer_codes' => '["right"]', 'text_answer' => null, 'saved_at' => '2026-01-01 18:30:30', 'result' => 'correct', 'credit' => '1.00'],
             ['id' => 2, 'attempt_id' => 1, 'quiz_id' => 1, 'question_id' => 2, 'pos' => 2, 'choice_order' => '[]', 'status' => 'locked', 'started_at' => '2026-01-01 18:31:00', 'locked_at' => '2026-01-01 18:31:20', 'lock_reason' => 'answered', 'answer_codes' => null, 'text_answer' => 'other', 'saved_at' => '2026-01-01 18:31:20', 'result' => 'wrong', 'credit' => '0.00'],
             ['id' => 3, 'attempt_id' => 2, 'quiz_id' => 1, 'question_id' => 1, 'pos' => 1, 'choice_order' => '["right","wrong"]', 'status' => 'locked', 'started_at' => '2026-01-02 01:00:00', 'locked_at' => '2026-01-02 01:01:00', 'lock_reason' => 'answered', 'answer_codes' => '["wrong"]', 'text_answer' => null, 'saved_at' => '2026-01-02 01:01:00', 'result' => 'wrong', 'credit' => '0.00'],
             ['id' => 4, 'attempt_id' => 3, 'quiz_id' => 1, 'question_id' => 1, 'pos' => 1, 'choice_order' => '["right","wrong"]', 'status' => 'active', 'started_at' => '2026-01-03 00:00:00', 'locked_at' => null, 'lock_reason' => null, 'answer_codes' => '["wrong"]', 'text_answer' => null, 'saved_at' => '2026-01-03 00:00:30', 'result' => null, 'credit' => null],
-        ]);
+        ];
+        $grouped = [];
+        foreach ($responseRows as $row) {
+            $row['save_ver'] = 1;
+            if ($row['status'] === 'locked') {
+                $row['submit_key'] = md5((string) $row['id']);
+                $row['submit_hash'] = hash('sha256', (string) $row['id']);
+            }
+            $grouped[$row['attempt_id']][] = $row;
+        }
+        foreach ($grouped as $attemptId => $items) {
+            $this->reportingDb->table('attempts')->where('id', $attemptId)->update([
+                'responses' => \App\Services\Player\AttemptResponses::encode($items),
+            ]);
+        }
         $this->reportingDb->table('cheat_events')->insertBatch([
-            ['id' => 1, 'attempt_id' => 1, 'type' => 'tab_hidden', 'happened_at' => '2026-01-01 18:32:00', 'received_at' => '2026-01-01 18:32:01', 'duration_ms' => 1200, 'data' => '{"visibilityState":"hidden","tokenHash":"secret"}'],
-            ['id' => 2, 'attempt_id' => 1, 'type' => 'tab_visible', 'happened_at' => '2026-01-01 18:32:02', 'received_at' => '2026-01-01 18:32:02', 'duration_ms' => null, 'data' => '{}'],
-            ['id' => 3, 'attempt_id' => 6, 'type' => 'window_blur', 'happened_at' => null, 'received_at' => '2026-01-05 00:01:00', 'duration_ms' => null, 'data' => '{}'],
+            ['id' => 1, 'attempt_id' => 1, 'type' => 'tab_hidden', 'happened_at' => '2026-01-01 18:32:00', 'received_at' => '2026-01-01 18:32:01', 'duration_ms' => null, 'data' => '{"visibilityState":"hidden","tokenHash":"secret"}'],
+            ['id' => 2, 'attempt_id' => 1, 'type' => 'fullscreen_exit', 'happened_at' => '2026-01-01 18:32:02', 'received_at' => '2026-01-01 18:32:02', 'duration_ms' => null, 'data' => '{}'],
+            ['id' => 3, 'attempt_id' => 6, 'type' => 'fullscreen_exit', 'happened_at' => null, 'received_at' => '2026-01-05 00:01:00', 'duration_ms' => null, 'data' => '{}'],
         ]);
     }
 
@@ -240,16 +282,15 @@ final class TeacherResultsServiceTest extends CIUnitTestCase
         $p = fn (string $table): string => $this->reportingDb->prefixTable($table);
         $this->reportingDb->query("CREATE TABLE {$p('quizzes')} (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, public_id TEXT NOT NULL UNIQUE, mode TEXT NOT NULL, status TEXT NOT NULL, title TEXT NOT NULL, deleted_at TEXT NULL, updated_at TEXT NOT NULL)");
         $this->reportingDb->query("CREATE TABLE {$p('quiz_papers')} (id INTEGER PRIMARY KEY, quiz_id INTEGER NOT NULL, public_id TEXT NOT NULL UNIQUE, revision INTEGER NOT NULL, definition TEXT NOT NULL, created_at TEXT NOT NULL)");
-        $this->reportingDb->query("CREATE TABLE {$p('attempts')} (id INTEGER PRIMARY KEY, quiz_id INTEGER NOT NULL, paper_id INTEGER NOT NULL, public_id TEXT NOT NULL UNIQUE, name TEXT NOT NULL, email TEXT NULL, phone TEXT NULL, ip TEXT NULL, agent TEXT NULL, status TEXT NOT NULL, phase TEXT NOT NULL, settings TEXT NOT NULL, started_at TEXT NOT NULL, total_due_at TEXT NULL, close_at TEXT NULL, due_at TEXT NULL, submitted_at TEXT NULL, finish_reason TEXT NULL, score NUMERIC NULL, max_score NUMERIC NOT NULL, percent NUMERIC NULL, updated_at TEXT NOT NULL)");
+        $this->reportingDb->query("CREATE TABLE {$p('attempts')} (id INTEGER PRIMARY KEY, quiz_id INTEGER NOT NULL, paper_id INTEGER NOT NULL, public_id TEXT NOT NULL UNIQUE, name TEXT NOT NULL, email TEXT NULL, phone TEXT NULL, ip TEXT NULL, agent TEXT NULL, status TEXT NOT NULL, phase TEXT NOT NULL, settings TEXT NOT NULL, responses TEXT NOT NULL, started_at TEXT NOT NULL, total_due_at TEXT NULL, close_at TEXT NULL, due_at TEXT NULL, submitted_at TEXT NULL, finish_reason TEXT NULL, score NUMERIC NULL, max_score NUMERIC NOT NULL, percent NUMERIC NULL, updated_at TEXT NOT NULL)");
         $this->reportingDb->query("CREATE TABLE {$p('questions')} (id INTEGER PRIMARY KEY, quiz_id INTEGER NOT NULL, pos INTEGER NOT NULL, type TEXT NOT NULL, content TEXT NOT NULL, media_type TEXT NULL, media_src TEXT NULL, explanation TEXT NULL, text_answers TEXT NULL)");
         $this->reportingDb->query("CREATE TABLE {$p('question_options')} (id INTEGER PRIMARY KEY, question_id INTEGER NOT NULL, pos INTEGER NOT NULL, code TEXT NOT NULL, content TEXT NOT NULL, media_type TEXT NULL, media_src TEXT NULL, is_correct INTEGER NOT NULL)");
-        $this->reportingDb->query("CREATE TABLE {$p('attempt_items')} (id INTEGER PRIMARY KEY, attempt_id INTEGER NOT NULL, quiz_id INTEGER NOT NULL, question_id INTEGER NOT NULL, pos INTEGER NOT NULL, choice_order TEXT NOT NULL, status TEXT NOT NULL, started_at TEXT NULL, locked_at TEXT NULL, lock_reason TEXT NULL, answer_codes TEXT NULL, text_answer TEXT NULL, saved_at TEXT NULL, result TEXT NULL, credit NUMERIC NULL)");
         $this->reportingDb->query("CREATE TABLE {$p('cheat_events')} (id INTEGER PRIMARY KEY, attempt_id INTEGER NOT NULL, type TEXT NOT NULL, happened_at TEXT NULL, received_at TEXT NOT NULL, duration_ms INTEGER NULL, data TEXT NOT NULL)");
     }
 
     private function dropTables(): void
     {
-        foreach (['cheat_events', 'attempt_items', 'question_options', 'questions', 'attempts', 'quiz_papers', 'quizzes'] as $table) {
+        foreach (['cheat_events', 'question_options', 'questions', 'attempts', 'quiz_papers', 'quizzes'] as $table) {
             $this->reportingDb->query('DROP TABLE IF EXISTS ' . $this->reportingDb->prefixTable($table));
         }
     }

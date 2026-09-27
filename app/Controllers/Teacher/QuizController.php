@@ -7,20 +7,21 @@ namespace App\Controllers\Teacher;
 use App\Controllers\BaseController;
 use App\Exceptions\AuthoringException;
 use CodeIgniter\Exceptions\PageNotFoundException;
+use CodeIgniter\HTTP\RedirectResponse;
 
 final class QuizController extends BaseController
 {
-    public function index(): string
+    public function index(): RedirectResponse
     {
         return $this->library('active');
     }
 
-    public function archived(): string
+    public function archived(): RedirectResponse
     {
         return $this->library('archived');
     }
 
-    public function trash(): string
+    public function trash(): RedirectResponse
     {
         return $this->library('trash');
     }
@@ -39,28 +40,15 @@ final class QuizController extends BaseController
 
         return view('teacher/builder', [
             'title'     => 'Quiz builder — EduTest',
-            'activeNav' => 'quizzes',
+            'quizWorkspace' => true,
+            'builderHeader' => true,
             'user'      => $user,
             'quiz'      => $quiz,
         ]);
     }
 
-    private function library(string $view): string
+    private function library(string $view): RedirectResponse
     {
-        $user = service('auth')->user();
-        $filters = [
-            'q'      => $this->request->getGet('q'),
-            'status' => $this->request->getGet('status'),
-            'mode'   => $this->request->getGet('mode'),
-            'sort'   => $this->request->getGet('sort'),
-            'page'   => $this->request->getGet('page'),
-        ];
-
-        return view('teacher/quizzes', [
-            'title'     => 'My quizzes — EduTest',
-            'activeNav' => 'quizzes',
-            'user'      => $user,
-            'library'   => service('teacherQueries')->library((int) $user['id'], $filters, $view),
-        ]);
+        return redirect()->to(service('teacherQueries')->legacyDashboardUrl($this->request->getGet(), $view));
     }
 }

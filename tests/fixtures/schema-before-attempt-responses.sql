@@ -1,4 +1,6 @@
--- EduTest canonical application schema
+-- Frozen test fixture: schema BEFORE attempt-response consolidation.
+-- Used only for isolated upgrade verification and storage comparisons.
+-- Never import into the application database; docs/schema.sql is canonical.
 -- Target: MySQL 8.4, InnoDB, utf8mb4
 -- Last updated: 2026-09-27
 --
@@ -45,7 +47,7 @@ CREATE TABLE quizzes (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id BIGINT UNSIGNED NOT NULL,
   public_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-  share_token VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  share_token CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   mode VARCHAR(16) COLLATE utf8mb4_bin NOT NULL DEFAULT 'assessment',
   status VARCHAR(12) COLLATE utf8mb4_bin NOT NULL DEFAULT 'draft',
   listed TINYINT(1) NOT NULL DEFAULT 0,
@@ -220,7 +222,6 @@ CREATE TABLE attempts (
   current_pos SMALLINT UNSIGNED NULL,
   version INT UNSIGNED NOT NULL DEFAULT 1,
   settings JSON NOT NULL,
-  responses JSON NOT NULL,
   started_at DATETIME(6) NOT NULL,
   total_due_at DATETIME(6) NULL,
   close_at DATETIME(6) NULL,
@@ -244,8 +245,6 @@ CREATE TABLE attempts (
   INDEX ix_attempt_due (status, due_at),
   CONSTRAINT chk_attempts_status
     CHECK (status IN ('in_progress', 'submitted', 'expired')),
-  CONSTRAINT chk_attempts_responses
-    CHECK (JSON_TYPE(responses) = 'OBJECT'),
   CONSTRAINT chk_attempts_phase
     CHECK (phase IN ('answering', 'feedback', 'awaiting_next', 'complete')),
   CONSTRAINT chk_attempts_finish_reason
@@ -265,6 +264,51 @@ CREATE TABLE attempts (
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_0900_ai_ci;
 
+CREATE TABLE attempt_items (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  attempt_id BIGINT UNSIGNED NOT NULL,
+  quiz_id BIGINT UNSIGNED NOT NULL,
+  question_id BIGINT UNSIGNED NOT NULL,
+  pos SMALLINT UNSIGNED NOT NULL,
+  choice_order JSON NOT NULL,
+  status VARCHAR(8) COLLATE utf8mb4_bin NOT NULL DEFAULT 'pending',
+  started_at DATETIME(6) NULL,
+  locked_at DATETIME(6) NULL,
+  lock_reason VARCHAR(20) COLLATE utf8mb4_bin NULL,
+  answer_codes JSON NULL,
+  text_answer VARCHAR(500) NULL,
+  save_ver INT UNSIGNED NOT NULL DEFAULT 0,
+  saved_at DATETIME(6) NULL,
+  submit_key CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  submit_hash BINARY(32) NULL,
+  result VARCHAR(12) COLLATE utf8mb4_bin NULL,
+  credit DECIMAL(3,2) NULL,
+  CONSTRAINT fk_attempt_items_attempt
+    FOREIGN KEY (attempt_id, quiz_id) REFERENCES attempts(id, quiz_id),
+  CONSTRAINT uq_attempt_items_attempt_pos UNIQUE (attempt_id, pos),
+  CONSTRAINT uq_attempt_items_attempt_question UNIQUE (attempt_id, question_id),
+  CONSTRAINT uq_attempt_items_attempt_submit_key UNIQUE (attempt_id, submit_key),
+  CONSTRAINT chk_attempt_items_pos
+    CHECK (pos > 0),
+  CONSTRAINT chk_attempt_items_status
+    CHECK (status IN ('pending', 'active', 'locked')),
+  CONSTRAINT chk_attempt_items_lock_reason
+    CHECK (
+      lock_reason IS NULL
+      OR lock_reason IN ('answered', 'skipped', 'attempt_timeout')
+    ),
+  CONSTRAINT chk_attempt_items_result
+    CHECK (result IS NULL OR result IN ('correct', 'partial', 'wrong', 'unanswered')),
+  CONSTRAINT chk_attempt_items_credit
+    CHECK (credit IS NULL OR credit BETWEEN 0.00 AND 1.00),
+  CONSTRAINT chk_attempt_items_submit_pair
+    CHECK (
+      (submit_key IS NULL AND submit_hash IS NULL)
+      OR (submit_key IS NOT NULL AND submit_hash IS NOT NULL)
+    )
+) ENGINE=InnoDB
+  DEFAULT CHARACTER SET utf8mb4
+  COLLATE utf8mb4_0900_ai_ci;
 
 CREATE TABLE cheat_events (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -283,7 +327,12 @@ CREATE TABLE cheat_events (
     CHECK (
       type IN (
         'tab_hidden',
-        'fullscreen_exit'
+        'tab_visible',
+        'window_blur',
+        'window_focus',
+        'fullscreen_exit',
+        'inactivity_start',
+        'inactivity_end'
       )
     )
 ) ENGINE=InnoDB

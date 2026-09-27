@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\App\Models;
 
-use App\Models\AttemptItemModel;
 use App\Models\AttemptModel;
 use App\Models\CheatEventModel;
 use App\Models\PracticeKeyModel;
@@ -56,7 +55,6 @@ final class ModelConfigurationTest extends CIUnitTestCase
             QuestionOptionModel::class => ['question_options', true, false],
             QuizPaperModel::class      => ['quiz_papers', false, false],
             AttemptModel::class        => ['attempts', false, false],
-            AttemptItemModel::class    => ['attempt_items', false, false],
             CheatEventModel::class     => ['cheat_events', false, false],
         ];
 
@@ -78,12 +76,10 @@ final class ModelConfigurationTest extends CIUnitTestCase
         $this->assertSame('int-bool', $this->casts(new QuestionOptionModel())['is_correct']);
         $this->assertSame('json-array', $this->casts(new QuizPaperModel())['definition']);
         $this->assertSame('json-array', $this->casts(new AttemptModel())['settings']);
-        $this->assertSame('json-array', $this->casts(new AttemptItemModel())['choice_order']);
+        $this->assertSame('json-array', $this->casts(new AttemptModel())['responses']);
         $this->assertSame('json-array', $this->casts(new CheatEventModel())['data']);
 
         $this->assertArrayNotHasKey('score', $this->casts(new AttemptModel()));
-        $this->assertArrayNotHasKey('credit', $this->casts(new AttemptItemModel()));
-        $this->assertNotContains('points', $this->property(new AttemptItemModel(), 'allowedFields'));
         $this->assertNotContains('points', $this->property(new QuestionModel(), 'allowedFields'));
         $this->assertNotContains('time_limit_sec', $this->property(new QuestionModel(), 'allowedFields'));
     }

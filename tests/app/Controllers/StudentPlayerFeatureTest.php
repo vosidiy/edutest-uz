@@ -33,6 +33,40 @@ final class StudentPlayerFeatureTest extends PlayerTestCase
         $response->assertSee('Start quiz');
     }
 
+    public function testShortAndLegacyShareLinksAreAcceptedButMalformedLinksAreHidden(): void
+    {
+        $quiz = $this->quiz();
+        $this->assertMatchesRegularExpression('/^[0-9]{9}$/D', $quiz['share']);
+        $this->get('/q/' . $quiz['share'])->assertOK();
+
+        $legacy = str_repeat('a', 64);
+        $this->db->table('quizzes')->where('public_id', $quiz['publicId'])->update(['share_token' => $legacy]);
+        $this->get('/q/' . $legacy)->assertOK();
+        $this->get('/q/' . $legacy . '/play')->assertOK();
+        $this->withHeaders(['X-EduTest-Player' => '1'])->get('/api/v1/player/tickets/' . $legacy)->assertOK();
+
+        foreach (['/q/not-a-code', '/q/not-a-code/play'] as $path) {
+            try {
+                $this->get($path);
+                $this->fail('Malformed public quiz codes must return not found.');
+            } catch (\CodeIgniter\Exceptions\PageNotFoundException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+        $this->withHeaders(['X-EduTest-Player' => '1'])->get('/api/v1/player/tickets/not-a-code')->assertStatus(404);
+    }
+
+    public function testIntegrityDisclosureOffersNonBlockingFullscreenControl(): void
+    {
+        $quiz = $this->quiz(settings: ['cheatCheck' => true]);
+        $response = $this->get('/q/' . $quiz['share']);
+
+        $response->assertOK();
+        $response->assertSee('Enable fullscreen');
+        $response->assertSee('quiz tab is hidden');
+        $response->assertSee('Start quiz');
+    }
+
     public function testStudentApiRequiresSameOriginCustomHeader(): void
     {
         $quiz = $this->quiz('practice');

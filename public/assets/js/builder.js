@@ -1,6 +1,42 @@
 (() => {
   'use strict';
 
+  const BuilderRules = Object.freeze({
+    shouldAutosave(quiz) { return quiz?.status === 'draft'; },
+    modeTransition(currentMode, nextMode, confirmChange) {
+      if (!['assessment', 'practice'].includes(nextMode) || nextMode === currentMode) {
+        return {accepted: false, mode: currentMode, clearAssessmentSettings: false};
+      }
+      if (!confirmChange(nextMode)) {
+        return {accepted: false, mode: currentMode, clearAssessmentSettings: false};
+      }
+      return {accepted: true, mode: nextMode, clearAssessmentSettings: nextMode === 'practice'};
+    },
+    publicationIssues(quiz, messages = {}) {
+      const message = (key, number = null) => String(messages[key] || key).replace('{number}', String(number ?? ''));
+      const issues = [];
+      if (!quiz || String(quiz.title || '').trim() === '') issues.push(message('title'));
+      const questions = Array.isArray(quiz?.questions) ? quiz.questions : [];
+      if (questions.length === 0) issues.push(message('questions'));
+      questions.forEach((question, index) => {
+        const number = index + 1;
+        if (String(question?.content || '').trim() === '') issues.push(message('questionText', number));
+        if (question?.type === 'short_text') {
+          if (!(question.textAnswers || []).some(answer => String(answer || '').trim() !== '')) issues.push(message('acceptedAnswer', number));
+          return;
+        }
+        const options = Array.isArray(question?.options) ? question.options : [];
+        if (options.length < 2) issues.push(message('twoChoices', number));
+        if (options.some(option => String(option?.content || '').trim() === '' && !option?.media)) issues.push(message('emptyChoice', number));
+        const correct = options.filter(option => option?.isCorrect).length;
+        if (question?.type === 'single_choice' && correct !== 1) issues.push(message('singleCorrect', number));
+        if (question?.type === 'multi_select' && correct < 1) issues.push(message('multiCorrect', number));
+      });
+      return issues;
+    }
+  });
+  window.EduTestBuilderRules = BuilderRules;
+
   const root = document.querySelector('#quiz-builder');
   if (!root || !window.Vue || !window.EduTestApi) return;
 
@@ -36,11 +72,16 @@
         hydrating: true,
         passcodeValue: '',
         coverUploading: false,
-        conflictVersion: null
+        conflictVersion: null,
+        publicationMessages: JSON.parse(root.dataset.publicationMessages || '{}'),
+        modeMessages: JSON.parse(root.dataset.modeMessages || '{}')
       };
     },
     computed: {
       selectedQuestion() { return this.quiz?.questions?.[this.selectedIndex] || null; },
+      publicationIssues() { return BuilderRules.publicationIssues(this.quiz, this.publicationMessages); },
+      publishReady() { return this.publicationIssues.length === 0; },
+      publishReadinessMessage() { return this.publicationIssues[0] || ''; },
       saveLabel() {
         if (this.saveState === 'saving') return 'Saving…';
         if (this.saveState === 'dirty') return 'Unsaved changes';
@@ -48,7 +89,7 @@
         if (this.saveState === 'validation') return 'Fix validation errors';
         if (this.saveState === 'conflict') return 'Newer changes found';
         if (this.lastSavedAt) return `Saved ${new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(this.lastSavedAt)}`;
-        return 'Draft loaded';
+        return this.quiz?.status === 'draft' ? 'Draft loaded' : 'Quiz loaded';
       }
     },
     watch: {
@@ -84,6 +125,7 @@
         }
       },
       applyServerQuiz(quiz) {
+        clearTimeout(this.autosaveTimer);
         this.hydrating = true;
         this.quiz = quiz;
         this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, quiz.questions.length - 1));
@@ -95,7 +137,9 @@
         this.saveState = 'dirty';
         this.globalError = '';
         clearTimeout(this.autosaveTimer);
-        this.autosaveTimer = setTimeout(() => this.save(false), 1000);
+        if (BuilderRules.shouldAutosave(this.quiz)) {
+          this.autosaveTimer = setTimeout(() => this.save(false), 1000);
+        }
       },
       async save(manual = false, overwrite = false) {
         if (!this.quiz || (this.saveState === 'saved' && !manual && !overwrite)) return true;
@@ -206,11 +250,19 @@
           this.selectedQuestion.options.forEach((option, i) => { option.isCorrect = i === index; });
         } else this.selectedQuestion.options[index].isCorrect = checked;
       },
-      changeMode(mode) {
-        if (mode === this.quiz.mode) return;
-        if (mode === 'practice' && !window.confirm('Practice mode clears passcode, identity collection, and integrity settings. Continue?')) return;
-        this.quiz.mode = mode;
-        if (mode === 'practice') {
+      changeMode(event) {
+        const select = event?.target;
+        const mode = String(select?.value || '');
+        const previousMode = this.quiz.mode;
+        const transition = BuilderRules.modeTransition(previousMode, mode, nextMode => (
+          window.confirm(this.modeMessages[nextMode] || 'Change the mode for future starts?')
+        ));
+        if (!transition.accepted) {
+          if (select) select.value = previousMode;
+          return;
+        }
+        this.quiz.mode = transition.mode;
+        if (transition.clearAssessmentSettings) {
           this.quiz.passcode.action = 'clear';
           this.quiz.passcode.configured = false;
           this.passcodeValue = '';
@@ -303,6 +355,11 @@
         finally { if (questionIndex === -1) this.coverUploading = false; }
       },
       async lifecycle(action) {
+        if (action === 'publish' && !this.publishReady) {
+          this.globalError = this.publishReadinessMessage;
+          this.saveState = 'validation';
+          return;
+        }
         if (!await this.save(true)) return;
         if (!window.confirm(action === 'publish' ? 'Publish this quiz and activate its stable share page?' : `${action} this quiz?`)) return;
         try {

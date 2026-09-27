@@ -39,10 +39,11 @@ final class PlayerStore
         }
     }
 
-    public function lock(string $table, string $id): array
+    public function lock(string $table, string $id, string $columns = '*'): array
     {
         if (! in_array($table, ['quizzes', 'attempts'], true)) throw new \LogicException('Invalid lock target.');
-        $sql = 'SELECT * FROM ' . $this->db->prefixTable($table) . ' WHERE id = ?';
+        if (! in_array($columns, ['*', 'id'], true)) throw new \LogicException('Invalid lock columns.');
+        $sql = 'SELECT ' . $columns . ' FROM ' . $this->db->prefixTable($table) . ' WHERE id = ?';
         if ($this->db->DBDriver !== 'SQLite3') $sql .= ' FOR UPDATE';
         $row = $this->db->query($sql, [$id])->getRowArray();
         if ($row === null) throw new PlayerException('not_found', 404);

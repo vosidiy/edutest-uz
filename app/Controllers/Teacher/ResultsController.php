@@ -8,25 +8,13 @@ use App\Controllers\BaseController;
 use App\Exceptions\ReportingException;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\HTTP\ResponseInterface;
+use CodeIgniter\HTTP\RedirectResponse;
 
 final class ResultsController extends BaseController
 {
-    public function index(): string
+    public function index(): RedirectResponse
     {
-        $user = service('auth')->user();
-        $ownerId = service('auth')->id();
-        $this->privateResponse();
-
-        return view('teacher/results/index', [
-            'title'     => lang('Results.overviewTitle') . ' — EduTest',
-            'activeNav' => 'results',
-            'user'      => $user,
-            'report'    => service('teacherResults')->overview(
-                (int) $ownerId,
-                $this->overviewFilters(),
-                (string) $user['timezone'],
-            ),
-        ]);
+        return redirect()->to(service('teacherQueries')->legacyDashboardUrl($this->request->getGet(), 'results'));
     }
 
     public function quiz(string $quizPublicId): string
@@ -48,7 +36,8 @@ final class ResultsController extends BaseController
 
         return view('teacher/results/quiz', [
             'title'     => $report['quiz']['title'] . ' — ' . lang('Results.nav'),
-            'activeNav' => 'results',
+            'quizWorkspace' => true,
+            'builderHeader' => false,
             'user'      => $user,
             'report'    => $report,
         ]);
@@ -72,7 +61,8 @@ final class ResultsController extends BaseController
 
         return view('teacher/results/attempt', [
             'title'     => lang('Results.attemptTitle') . ' — EduTest',
-            'activeNav' => 'results',
+            'quizWorkspace' => true,
+            'builderHeader' => false,
             'user'      => $user,
             'report'    => $report,
         ]);
@@ -127,17 +117,6 @@ final class ResultsController extends BaseController
             ->setHeader('Cache-Control', 'private, no-store, max-age=0')
             ->setHeader('X-Content-Type-Options', 'nosniff')
             ->setBody($body);
-    }
-
-    /** @return array<string, mixed> */
-    private function overviewFilters(): array
-    {
-        return [
-            'q'         => $this->request->getGet('q'),
-            'lifecycle' => $this->request->getGet('lifecycle'),
-            'sort'      => $this->request->getGet('sort'),
-            'page'      => $this->request->getGet('page'),
-        ];
     }
 
     /** @return array<string, mixed> */

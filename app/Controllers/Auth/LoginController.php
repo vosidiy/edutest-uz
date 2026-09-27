@@ -17,7 +17,7 @@ final class LoginController extends BaseController
     public function index(): string|RedirectResponse
     {
         if (service('auth')->check()) {
-            return redirect()->route('quizzes');
+            return redirect()->route('dashboard');
         }
 
         return view('auth/login');
@@ -62,7 +62,7 @@ final class LoginController extends BaseController
 
         $throttler->remove($rateKey);
 
-        return redirect()->route('quizzes');
+        return redirect()->route('dashboard');
     }
 
     public function logout(): RedirectResponse

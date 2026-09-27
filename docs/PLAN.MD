@@ -18,11 +18,15 @@ EduTest helps independent teachers, education centers acting through a teacher a
 
 Teachers register with email/password, may provide a phone number, manage a public profile, and own quizzes directly. Registration signs the teacher in immediately; email verification and password recovery are deferred beyond the initial authentication foundation. Public profiles are disabled by default and show only the display name, biography, and explicitly listed available quizzes.
 
-Teachers can create, edit, duplicate, publish, close, archive, and soft-delete quizzes. Each quiz has a private share link and may optionally appear on the teacher's public page.
+Teachers can create, edit, duplicate, publish, close, archive, and soft-delete quizzes. New quizzes receive a nine-digit share code and may optionally appear on the teacher's public page. A share code is a convenient locator rather than an access-control secret; teachers should configure a passcode when assessment access must be restricted.
 
 Quiz settings include title, description, instructions, an optional cover image, mode, availability dates, an optional total timer entered in half-minute increments, shuffle options, feedback timing, and result visibility. Assessments may also require a passcode and collect email or phone.
 
-Teacher assessment reporting is implemented as a read-only workspace. It includes historical active, archived, and soft-deleted assessment quizzes; basic workspace and per-quiz totals; filtered attempt lists; complete answer and integrity-event review; and filtered CSV exports. Practice quizzes remain absent from individual reports because practice stores only an aggregate start count.
+The teacher home is one centered dashboard with a logo/account header, six summary metrics, and a searchable, paginated quiz library with All/Active/Archived/Trash views and lifecycle actions. Quiz management and assessment summaries appear in one list rather than separate screens. Login and registration open this dashboard; old library and Results-overview links redirect there.
+
+Quiz editing and response review use a dedicated workspace without the dashboard header. A shared sticky header links Builder and Responses for Assessment quizzes or quizzes with historical assessment attempts; Practice-only quizzes omit the tabs. Historical archived/deleted reports remain accessible, with restoration guidance instead of an unusable Builder link.
+
+Teacher assessment reporting is implemented as a read-only workspace. It includes current assessment quizzes plus any active, archived, or soft-deleted quiz with historical assessment attempts; basic workspace and per-quiz totals; filtered attempt lists; complete answer and integrity-event review; and filtered CSV exports. Practice runs remain absent from individual reports because practice stores only an aggregate start count.
 
 ## Questions and media
 
@@ -38,11 +42,13 @@ The MVP supports:
 
 Answer-choice media is image-only. Uploaded video, arbitrary embeds, question banks, fill-in-the-blank, essays, speaking responses, and manual grading are outside the MVP.
 
-Each real student start binds the run to one immutable paper for the current quiz revision. Teachers may continue editing live content; existing attempts and results remain tied to the exact paper they received. Quiz mode alone locks after the first start.
+Each real student start binds the run to one immutable paper for the current quiz revision. Teachers may continue editing live content and may switch between Assessment and Practice. Saved changes affect future starts only; existing attempts and Practice runs remain tied to the exact mode and paper they received.
 
 ## Student experience
 
 Students see one question at a time with clear progress, optional total/closing timers, accessible controls, and a deliberate submit/skip action. Submitted answers cannot be edited and there is no backward navigation.
+
+Each assessment keeps one compact response document for the student's progress and answers, alongside indexed result summaries. Quiz content remains in a shared immutable paper. Detailed individual review remains available; per-question aggregate analytics are not collected.
 
 Assessment drafts synchronize in the background with visible saving, saved, pending, and retry states. A tab-local outbox permits continued answering during a disconnect. Practice progress is saved only in the current browser tab and is clearly labeled that way.
 
@@ -79,7 +85,7 @@ Assessment start and receipt timestamps are server-generated. Optional total and
 
 Each successful student start captures or reuses an immutable paper for the current revision. Later authored changes apply to future starts; an existing authorized attempt can finish from its paper after the teacher edits, closes, archives, or soft-deletes the live quiz. Students can view their own finalized result with their tab-scoped bearer credential.
 
-Before starting, students are told which identity, network, browser, answer, timing, and integrity information the teacher receives. Integrity events are warnings and timeline signals only; they never automatically fail or penalize a student.
+Before starting, students are told which identity, network, browser, answer, timing, and integrity information the teacher receives. Optional integrity monitoring records only when the quiz tab is hidden and when an active fullscreen session is exited. Fullscreen is recommended but does not block access, and integrity events never automatically fail or penalize a student.
 
 Teacher exports include finalized assessment identity/result fields but exclude IP addresses and browser agents. Those sensitive fields are restricted to owner-authorized attempt detail.
 
@@ -92,7 +98,7 @@ The aggregate counter represents deduplicated starts, not unique people or compl
 ## Delivery milestones
 
 1. Foundation — CI4, project-owned session authentication/account identity, and the canonical SQL schema.
-2. Authoring — teacher dashboard/library, quiz lifecycle, builder, private media, preview, and the stable public quiz-information page. Public teacher profiles remain deferred.
+2. Authoring — unified teacher dashboard/library and shared quiz workspace, quiz lifecycle, builder, private media, preview, and the stable public quiz-information page. Public teacher profiles remain deferred.
 3. Student player — assessment admission, background synchronization, offline-friendly timers, official scoring, feedback, and student results; anonymous practice with local grading and start counting.
 4. Teacher reporting — assessment result pages, basic totals, attempt review, and CSV exports (implemented).
 5. Launch — integrity events, accessibility, race/load/security tests, backups, and cPanel deployment.

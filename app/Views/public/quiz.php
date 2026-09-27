@@ -17,7 +17,15 @@
         <?php if ($quiz['instructions'] !== '') : ?><section class="player-instructions"><h2><?= esc(lang('Player.ui.instructions')) ?></h2><p><?= nl2br(esc($quiz['instructions'])) ?></p></section><?php endif ?>
         <p class="player-help"><?= esc(lang('Player.ui.questionHint')) ?></p>
         <p class="player-help"><?= esc(lang('Player.ui.' . ($quiz['mode'] === 'practice' ? 'practiceNotice' : 'assessmentNotice'))) ?></p>
-        <?php if ($quiz['cheatCheck']) : ?><p class="alert alert-warning"><?= esc(lang('Player.ui.integrityNotice')) ?></p><?php endif ?>
+        <?php if ($quiz['cheatCheck']) : ?>
+            <div class="alert alert-warning player-integrity-notice">
+                <p><?= esc(lang('Player.ui.integrityNotice')) ?></p>
+                <div class="player-fullscreen-control">
+                    <button type="button" class="btn btn-default" data-fullscreen-button><?= esc(lang('Player.ui.enableFullscreen')) ?></button>
+                    <span data-fullscreen-status role="status"><?= esc(lang('Player.ui.fullscreenRecommended')) ?></span>
+                </div>
+            </div>
+        <?php endif ?>
         <p class="player-help"><?= esc(lang('Player.ui.timingNotice')) ?></p>
         <button id="resume-quiz" type="button" class="btn btn-primary btn-lg" hidden><?= esc(lang('Player.ui.resume')) ?></button>
         <?php if ($quiz['availability'] === 'available') : ?>

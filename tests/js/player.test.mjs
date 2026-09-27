@@ -2,10 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {grade, summarize} from '../../public/assets/js/player-scoring.js';
-import {createState, editAnswer, submitAnswer, nextQuestion, finishTimed, deadlines, syncPayload, mergeServer, hasPending, PlayerClock} from '../../public/assets/js/player-state.js';
+import {createState, editAnswer, submitAnswer, nextQuestion, finishTimed, deadlines, syncPayload, mergeServer, hasPending, PlayerClock, isFullscreenExit} from '../../public/assets/js/player-state.js';
 import {PlayerSync} from '../../public/assets/js/player-sync.js';
 
 const cases = JSON.parse(fs.readFileSync(new URL('../fixtures/player-scoring.json', import.meta.url), 'utf8'));
+
+test('fullscreen exits require an active-to-inactive transition', () => {
+  assert.equal(isFullscreenExit(false, false), false);
+  assert.equal(isFullscreenExit(false, true), false);
+  assert.equal(isFullscreenExit(true, true), false);
+  assert.equal(isFullscreenExit(true, false), true);
+});
 for (const fixture of cases) test(fixture.name, () => assert.deepEqual(grade(fixture.question, fixture.answer), fixture.expected));
 const startedAt = '2026-09-26T10:00:00.000000Z';
 const data = () => ({mode: 'assessment', attemptId: 'attempt', credential: 'test-only', version: 1, startedAt, totalDueAt: '2026-09-26T10:02:00Z', closeAt: null,

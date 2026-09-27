@@ -201,6 +201,25 @@
       if (!toggle || menu !== toggle.nextElementSibling) menu.hidden = true;
     });
     if (toggle) toggle.nextElementSibling.hidden = !toggle.nextElementSibling.hidden;
+    document.querySelectorAll('[data-menu-toggle]').forEach(button => button.setAttribute('aria-expanded', String(!button.nextElementSibling.hidden)));
+  });
+
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    const account = document.querySelector('[data-account-menu][open]');
+    if (account) {
+      account.open = false;
+      account.querySelector('summary').focus();
+    }
+    document.querySelectorAll('[data-menu-toggle][aria-expanded="true"]').forEach(button => {
+      button.nextElementSibling.hidden = true;
+      button.setAttribute('aria-expanded', 'false');
+      button.focus();
+    });
+  });
+  document.addEventListener('click', event => {
+    const account = document.querySelector('[data-account-menu][open]');
+    if (account && !account.contains(event.target)) account.open = false;
   });
 
   document.querySelectorAll('[data-quiz-action]').forEach(button => button.addEventListener('click', async () => {

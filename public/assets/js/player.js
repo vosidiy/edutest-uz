@@ -1,5 +1,5 @@
 import {grade, normalize, summarize} from './player-scoring.js';
-import {createState, PlayerClock, editAnswer, submitAnswer, nextQuestion, finishTimed, deadlines, hasPending, uniqueKey, mergeServer} from './player-state.js';
+import {createState, PlayerClock, editAnswer, submitAnswer, nextQuestion, finishTimed, deadlines, hasPending, uniqueKey, mergeServer, isFullscreenExit} from './player-state.js';
 import {PlayerSync} from './player-sync.js';
 
 const config = JSON.parse(document.querySelector('#player-config').textContent);
@@ -12,6 +12,7 @@ const announcer = document.querySelector('#player-announcer');
 const storageKey = `edutest:player:${config.shareToken}`;
 let state = null, clock = null, storageAvailable = true, lastError = '', timer = null, mediaTimer = null, remoteConflict = null;
 let renderedPhase = '', warnedDeadline = '', starting = false, admission = null, mediaBusy = false;
+let integrityReady = false, fullscreenWasActive = Boolean(document.fullscreenElement);
 let blobBytes = 0;
 const blobs = new Map();
 const blobPending = new Set();
@@ -29,6 +30,46 @@ const optionLetter = index => {
   }
   return label;
 };
+
+function fullscreenActive() { return Boolean(document.fullscreenElement); }
+function updateFullscreenControls() {
+  const active = fullscreenActive();
+  document.querySelectorAll('[data-fullscreen-button]').forEach(control => { control.hidden = active; });
+  document.querySelectorAll('[data-fullscreen-status]').forEach(control => { control.textContent = t(active ? 'fullscreenActive' : 'fullscreenRecommended'); });
+}
+async function enableFullscreen() {
+  if (typeof document.documentElement.requestFullscreen !== 'function') {
+    lastError = t('fullscreenUnavailable'); showAlert(); return;
+  }
+  try {
+    await document.documentElement.requestFullscreen();
+    fullscreenWasActive = fullscreenActive();
+    lastError = ''; notify(t('fullscreenEnabled')); showAlert(); updateFullscreenControls();
+  } catch (_) {
+    lastError = t('fullscreenUnavailable'); showAlert();
+  }
+}
+function fullscreenControl() {
+  const wrapper = node('div', 'player-fullscreen-control');
+  const control = button(t('enableFullscreen'), enableFullscreen, 'btn-default btn-sm');
+  control.dataset.fullscreenButton = '';
+  const message = node('span', '', t(fullscreenActive() ? 'fullscreenActive' : 'fullscreenRecommended'));
+  message.dataset.fullscreenStatus = ''; message.setAttribute('role', 'status');
+  wrapper.append(control, message);
+  return wrapper;
+}
+function recordIntegrity(type) {
+  if (!integrityReady || !state || state.mode !== 'assessment' || !state.quiz.settings.cheatCheck || state.finishReason) return;
+  if (state.events.length >= 1000) return;
+  state.events.push({key: uniqueKey(), type, happenedAt: clock.iso(), durationMs: null});
+  changed();
+}
+function handleFullscreenChange() {
+  const active = fullscreenActive();
+  if (isFullscreenExit(fullscreenWasActive, active)) recordIntegrity('fullscreen_exit');
+  fullscreenWasActive = active;
+  updateFullscreenControls();
+}
 
 function readStorage(key) {
   try { return JSON.parse(sessionStorage.getItem(key) || 'null'); }
@@ -150,7 +191,11 @@ async function retryPractice() {
     let pending = state.practiceRetry || readStorage(retryKey);
     if (!pending || pending.fromStartedAt !== state.startedAt) {
       const ticket = (await request(`/tickets/${config.shareToken}`)).data;
-      if (ticket.mode !== 'practice') throw new Error(t('practiceChanged'));
+      if (ticket.mode !== 'practice') {
+        store(storageKey, null); store(retryKey, null); store(storageKey + ':admission', null);
+        window.location.assign(config.quizUrl);
+        return;
+      }
       pending = {fromStartedAt: state.startedAt, ticket: ticket.ticket};
       state.practiceRetry = pending; store(retryKey, pending); persist();
     }
@@ -199,13 +244,15 @@ function renderQuestion() {
   const question = state.quiz.questions[state.index];
   const item = state.items[state.index];
   const top = node('div', 'player-topbar');
-  top.append(node('p', 'player-quiz-title', state.quiz.title), node('div', 'player-timers'));
+  const timers = node('div', 'player-timers');
+  top.append(node('p', 'player-quiz-title', state.quiz.title), timers);
   root.append(top);
   for (const deadline of deadlines(state)) {
     const box = node('div', 'player-timer'); box.dataset.deadline = String(deadline.at); box.setAttribute('aria-live', 'off');
     box.append(node('span', '', t(deadline.label)), node('strong', '', ''));
-    top.lastChild.append(box);
+    timers.append(box);
   }
+  if (state.mode === 'assessment' && state.quiz.settings.cheatCheck) timers.append(fullscreenControl());
   const progress = node('progress', 'player-progress'); progress.max = state.items.length; progress.value = state.items.filter(row => row.status === 'locked').length; progress.setAttribute('aria-label', t('progress')); root.append(progress);
   const paper = node('section', 'card player-question');
   paper.append(node('span', 'player-question-number', t('questionOf', {number: state.index + 1, total: state.items.length})));
@@ -379,23 +426,12 @@ async function refreshMedia() {
   } finally { mediaBusy = false; }
 }
 
-let integrityReady = false, lastActivity = 0, inactive = false;
 function setupIntegrity() {
   if (integrityReady || state.mode !== 'assessment' || !state.quiz.settings.cheatCheck) return;
-  integrityReady = true; lastActivity = clock.now();
-  const record = (type, durationMs = null) => {
-    if (state.finishReason) return;
-    // Bound tab storage during very long/disconnected sessions; events are signals, not surveillance.
-    if (state.events.length >= 1000) return;
-    state.events.push({key: uniqueKey(), type, happenedAt: clock.iso(), durationMs}); changed();
-  };
-  document.addEventListener('visibilitychange', () => { record(document.hidden ? 'tab_hidden' : 'tab_visible'); tick(); });
-  window.addEventListener('blur', () => record('window_blur'));
-  window.addEventListener('focus', () => { record('window_focus'); tick(); });
-  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) record('fullscreen_exit'); });
-  const activity = () => { const now = clock.now(); if (inactive) { record('inactivity_end', Math.min(4294967295, Math.floor(now - lastActivity))); inactive = false; } lastActivity = now; };
-  for (const name of ['keydown', 'pointerdown', 'pointermove']) document.addEventListener(name, activity, {passive: true});
-  setInterval(() => { if (!inactive && clock.now() - lastActivity >= 60000) { inactive = true; record('inactivity_start'); } }, 5000);
+  integrityReady = true;
+  fullscreenWasActive = fullscreenActive();
+  document.addEventListener('visibilitychange', () => { if (document.hidden) recordIntegrity('tab_hidden'); tick(); });
+  updateFullscreenControls();
 }
 
 document.querySelector('#keep-local').addEventListener('click', () => document.querySelector('#player-conflict').close());
@@ -410,6 +446,9 @@ window.addEventListener('offline', updateStatus);
 window.addEventListener('beforeunload', event => { persist(); if (state && hasPending(state)) { event.preventDefault(); event.returnValue = ''; } });
 window.addEventListener('pagehide', persist);
 document.querySelectorAll('.player-schedule time').forEach(element => { element.textContent = new Intl.DateTimeFormat(undefined, {dateStyle: 'medium', timeStyle: 'short'}).format(new Date(element.dateTime)); });
+document.querySelectorAll('[data-fullscreen-button]').forEach(control => control.addEventListener('click', enableFullscreen));
+document.addEventListener('fullscreenchange', handleFullscreenChange);
+updateFullscreenControls();
 const admissionForm = document.querySelector('#quiz-admission');
 if (admissionForm) {
   admissionForm.addEventListener('submit', start);

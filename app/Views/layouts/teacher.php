@@ -8,44 +8,34 @@
     <meta name="theme-color" content="#0f172a">
     <title><?= esc($title ?? 'EduTest') ?></title>
     <link rel="icon" href="/favicon.ico" sizes="any">
-    <link rel="stylesheet" href="/assets/css/teacher.css">
+    <link rel="stylesheet" href="<?= esc(base_url('assets/css/teacher.css') . '?v=' . filemtime(FCPATH . 'assets/css/teacher.css'), 'attr') ?>">
     <?= $this->renderSection('head') ?>
 </head>
-<body class="<?= esc($bodyClass ?? '', 'attr') ?>">
+<body class="<?= esc(($quizWorkspace ?? false) ? 'quiz-workspace ' . ($bodyClass ?? '') : 'dashboard-page', 'attr') ?>">
 <a class="skip-link" href="#main-content">Skip to content</a>
 <div class="teacher-shell">
-    <aside class="teacher-sidebar" aria-label="Teacher navigation">
-        <a class="teacher-brand" href="<?= site_url('dashboard') ?>" aria-label="EduTest overview">
-            <span class="brand-mark">E</span><span>EduTest</span>
-        </a>
-        <nav class="teacher-nav">
-            <a class="nav-link <?= ($activeNav ?? '') === 'dashboard' ? 'active' : '' ?>" href="<?= site_url('dashboard') ?>">
-                <span aria-hidden="true">▦</span> Overview
-            </a>
-            <a class="nav-link <?= ($activeNav ?? '') === 'quizzes' ? 'active' : '' ?>" href="<?= site_url('quizzes') ?>">
-                <span aria-hidden="true">▤</span> My quizzes
-            </a>
-            <a class="nav-link <?= ($activeNav ?? '') === 'results' ? 'active' : '' ?>" href="<?= site_url('results') ?>">
-                <span aria-hidden="true">▥</span> <?= esc(lang('Results.nav')) ?>
-            </a>
-        </nav>
-        <div class="sidebar-profile">
-            <?php
-            $displayName = (string) ($user['display_name'] ?? 'Teacher');
-            $parts = preg_split('/\s+/u', trim($displayName)) ?: [];
-            $initials = '';
-            foreach (array_slice($parts, 0, 2) as $part) {
-                $initials .= mb_strtoupper(mb_substr($part, 0, 1));
-            }
-            ?>
-            <span class="avatar"><?= esc($initials ?: 'T') ?></span>
-            <span class="profile-copy"><strong><?= esc($displayName) ?></strong><small>Teacher workspace</small></span>
-            <form action="<?= site_url('logout') ?>" method="post">
-                <?= csrf_field() ?>
-                <button class="btn btn-sm btn-icon sidebar-logout" type="submit" title="Sign out" aria-label="Sign out">↪</button>
-            </form>
-        </div>
-    </aside>
+    <?php if (! ($quizWorkspace ?? false)) : ?>
+        <header class="teacher-topbar">
+            <div class="teacher-topbar-inner">
+                <a class="teacher-brand" href="<?= site_url('dashboard') ?>" aria-label="<?= esc(lang('Workspace.dashboardHome'), 'attr') ?>"><span class="brand-mark" aria-hidden="true">E</span><span>EduTest</span></a>
+                <?php
+                $displayName = (string) ($user['display_name'] ?? 'Teacher');
+                $parts = preg_split('/\s+/u', trim($displayName)) ?: [];
+                $initials = '';
+                foreach (array_slice($parts, 0, 2) as $part) $initials .= mb_strtoupper(mb_substr($part, 0, 1));
+                ?>
+                <details class="account-menu" data-account-menu>
+                    <summary aria-label="<?= esc(lang('Workspace.account') . ': ' . $displayName, 'attr') ?>"><span class="avatar" aria-hidden="true"><?= esc($initials ?: 'T') ?></span><strong><?= esc($displayName) ?></strong><span aria-hidden="true">⌄</span></summary>
+                    <div class="account-popover">
+                        <form action="<?= site_url('logout') ?>" method="post">
+                            <?= csrf_field() ?>
+                            <button class="btn btn-default" type="submit"><?= esc(lang('Workspace.signOut')) ?></button>
+                        </form>
+                    </div>
+                </details>
+            </div>
+        </header>
+    <?php endif ?>
     <main class="teacher-main" id="main-content">
         <?= $this->renderSection('content') ?>
     </main>

@@ -5,12 +5,16 @@ declare(strict_types=1);
 namespace App\Controllers\PublicSite;
 
 use App\Controllers\BaseController;
+use App\Services\QuizShareCode;
 use CodeIgniter\Exceptions\PageNotFoundException;
 
 final class QuizController extends BaseController
 {
     public function show(string $shareToken): string
     {
+        if (! QuizShareCode::isValid($shareToken)) {
+            throw PageNotFoundException::forPageNotFound();
+        }
         $quiz = service('quizAuthoring')->publicSummary($shareToken);
 
         if ($quiz === null) {
@@ -33,7 +37,7 @@ final class QuizController extends BaseController
 
     private function shell(string $shareToken, string $page): string
     {
-        if (! preg_match('/^[a-f0-9]{64}$/D', $shareToken)) throw PageNotFoundException::forPageNotFound();
+        if (! QuizShareCode::isValid($shareToken)) throw PageNotFoundException::forPageNotFound();
         // Existing bearers may finish after the teacher closes or archives the quiz.
         $this->privateResponse();
         return view('student/player', ['title' => lang('Player.ui.quizPlayer') . ' — EduTest', 'shareToken' => $shareToken, 'page' => $page]);

@@ -50,6 +50,9 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         $this->assertSame('draft', $document['status']);
         $this->assertSame(1, $document['version']);
         $this->assertSame([], $document['questions']);
+        $this->assertTrue($document['resultsAvailable']);
+        $this->assertSame(site_url('results/quizzes/' . $created['publicId']), $document['resultsUrl']);
+        $this->assertMatchesRegularExpression('/^[0-9]{9}$/D', basename($document['shareUrl']));
 
         $document['questions'] = [[
             'id' => null,
@@ -99,6 +102,8 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         $this->assertSame('draft', $duplicateDocument['status']);
         $this->assertFalse($duplicateDocument['listed']);
         $this->assertCount(2, $duplicateDocument['questions']);
+        $this->assertMatchesRegularExpression('/^[0-9]{9}$/D', basename($duplicateDocument['shareUrl']));
+        $this->assertNotSame(basename($published['shareUrl']), basename($duplicateDocument['shareUrl']));
 
         $queries = new TeacherQueryService($this->authoringDb);
         $this->assertSame(2, $queries->library($owner, [], 'active')['pagination']['total']);
@@ -130,6 +135,32 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         $this->assertSame('hidden', $saved['phoneMode']);
         $this->assertFalse($saved['cheatCheck']);
         $this->assertFalse($saved['passcode']['configured']);
+        $this->assertFalse($saved['resultsAvailable']);
+        $this->assertNull($saved['resultsUrl']);
+
+        $saved['mode'] = 'assessment';
+        $assessment = $this->authoring->save($owner, $created['publicId'], $saved);
+        $this->assertTrue($assessment['resultsAvailable']);
+        $this->assertSame(site_url('results/quizzes/' . $created['publicId']), $assessment['resultsUrl']);
+    }
+
+    public function testShareCodeCollisionRetriesWithoutOverwritingAQuiz(): void
+    {
+        $owner = $this->insertUser('codes@example.test');
+        $codes = ['000000001', '000000001', '000000002'];
+        $authoring = new QuizAuthoringService(
+            $this->authoringDb,
+            $this->media,
+            null,
+            static function () use (&$codes): string { return array_shift($codes); },
+        );
+
+        $first = $authoring->create($owner, 'First code', 'assessment');
+        $second = $authoring->create($owner, 'Second code', 'assessment');
+
+        $this->assertSame('000000001', basename($authoring->document($owner, $first['publicId'])['shareUrl']));
+        $this->assertSame('000000002', basename($authoring->document($owner, $second['publicId'])['shareUrl']));
+        $this->assertSame(2, $this->authoringDb->table('quizzes')->countAllResults());
     }
 
     public function testTotalTimerUsesHalfMinuteSteps(): void
@@ -175,7 +206,7 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         }
     }
 
-    public function testOwnershipEditableContentAndModeLockAreEnforced(): void
+    public function testOwnershipAndPostStartContentAndModeChangesAreEnforced(): void
     {
         $owner = $this->insertUser('owner2@example.test');
         $other = $this->insertUser('other@example.test');
@@ -191,6 +222,8 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         $this->authoringDb->table('quizzes')->where('public_id', $created['publicId'])->update([
             'first_started_at' => '2026-01-01 00:00:00',
         ]);
+        $quizId = (int) $this->authoringDb->table('quizzes')->select('id')->where('public_id', $created['publicId'])->get()->getRow('id');
+        $this->authoringDb->table('attempts')->insert(['quiz_id' => $quizId, 'status' => 'submitted']);
         $document = $this->authoring->document($owner, $created['publicId']);
         $originalRevision = $document['revision'];
         $document['title'] = 'Changed after a start';
@@ -204,12 +237,24 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         $this->assertSame($saved['revision'], $listingOnly['revision']);
 
         $listingOnly['mode'] = 'practice';
-        try {
-            $this->authoring->save($owner, $created['publicId'], $listingOnly);
-            $this->fail('Mode must lock after the first start.');
-        } catch (AuthoringException $exception) {
-            $this->assertSame('mode_locked', $exception->errorCode);
-        }
+        $listingOnly['emailMode'] = 'required';
+        $listingOnly['phoneMode'] = 'optional';
+        $listingOnly['cheatCheck'] = true;
+        $practice = $this->authoring->save($owner, $created['publicId'], $listingOnly);
+        $this->assertSame('practice', $practice['mode']);
+        $this->assertSame('hidden', $practice['emailMode']);
+        $this->assertSame('hidden', $practice['phoneMode']);
+        $this->assertFalse($practice['cheatCheck']);
+        $this->assertSame($listingOnly['revision'] + 1, $practice['revision']);
+        $this->assertTrue($practice['hasStarted']);
+        $this->assertArrayNotHasKey('modeLocked', $practice);
+        $this->assertTrue($practice['resultsAvailable']);
+        $this->assertSame(site_url('results/quizzes/' . $created['publicId']), $practice['resultsUrl']);
+
+        $practice['mode'] = 'assessment';
+        $assessment = $this->authoring->save($owner, $created['publicId'], $practice);
+        $this->assertSame('assessment', $assessment['mode']);
+        $this->assertSame($practice['revision'] + 1, $assessment['revision']);
     }
 
     public function testPrivateImageAndValidatedVideoMedia(): void
@@ -428,6 +473,8 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         $this->forge->addField([
             'id' => ['type' => 'INTEGER', 'constraint' => 11, 'auto_increment' => true], 'quiz_id' => ['type' => 'INTEGER'],
             'status' => ['type' => 'VARCHAR', 'constraint' => 12],
+            'percent' => ['type' => 'DECIMAL', 'constraint' => '5,2', 'null' => true],
+            'submitted_at' => ['type' => 'DATETIME', 'null' => true],
         ]);
         $this->forge->addKey('id', true); $this->forge->createTable('attempts');
     }

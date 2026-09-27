@@ -14,12 +14,12 @@ final class AssessmentService
 
     public function load(string $publicId, string $token): array
     {
-        $attempt = $this->authorize($publicId, $token);
+        $attempt = $this->authorize($publicId, $token, true);
         $paper = $this->papers->findForAttempt($attempt);
         $settings = json_decode($attempt['settings'], true, 512, JSON_THROW_ON_ERROR);
         $document = $this->papers->studentDocument($paper, $settings, $settings['seed']);
         unset($document['settings']['seed']);
-        $items = $this->items($attempt['id']);
+        $items = AttemptResponses::decode($attempt['responses']);
         // Persisted orders, not current teacher shuffle settings, are authoritative.
         $questions = array_column($document['questions'], null, 'id');
         $document['questions'] = [];
@@ -50,7 +50,7 @@ final class AssessmentService
             $settings = json_decode($attempt['settings'], true, 512, JSON_THROW_ON_ERROR);
             $paper = $this->papers->findForAttempt($attempt);
             $questions = array_column($this->papers->studentDocument($paper, $settings, $settings['seed'])['questions'], null, 'id');
-            $items = array_column($this->items($attempt['id']), null, 'question_id');
+            $items = array_column(AttemptResponses::decode($attempt['responses']), null, 'question_id');
             $now = PlayerStore::now();
             $changed = false;
             $late = (bool) $attempt['late_sync'];
@@ -71,7 +71,7 @@ final class AssessmentService
                 if ($submitKey !== null && (! is_string($submitKey) || ! preg_match('/^[a-f0-9]{32}$/D', $submitKey)
                     || ! in_array($reason, ['answered', 'skipped', 'attempt_timeout'], true))) throw new PlayerException('invalid_progress');
                 if ($reason === 'skipped') $answer = ['answerCodes' => [], 'textAnswer' => ''];
-                $hash = hash('sha256', json_encode([$id, $answer, $reason], JSON_THROW_ON_ERROR), true);
+                $hash = hash('sha256', json_encode([$id, $answer, $reason], JSON_THROW_ON_ERROR));
                 if ($item['status'] === 'locked') {
                     if ($submitKey !== $item['submit_key'] || $item['submit_hash'] === null || ! hash_equals($item['submit_hash'], $hash)) throw new PlayerException('answer_locked', 409);
                     continue;
@@ -100,10 +100,8 @@ final class AssessmentService
                     'save_ver' => $input['saveVer'], 'saved_at' => $now];
                 if ($submitKey !== null) {
                     foreach ($items as $other) if ($other['submit_key'] === $submitKey) throw new PlayerException('invalid_progress');
-                    $update += $this->scoring->grade($question, $answer) + ['locked_at' => $now, 'lock_reason' => $reason, 'submit_key' => $submitKey, 'submit_hash' => PlayerStore::binary($hash)];
+                    $update += $this->scoring->grade($question, $answer) + ['locked_at' => $now, 'lock_reason' => $reason, 'submit_key' => $submitKey, 'submit_hash' => $hash];
                 }
-                $this->store->db->table('attempt_items')->where('id', $item['id'])->update($update);
-                if ($submitKey !== null) $update['submit_hash'] = $hash;
                 $items[$id] = array_replace($item, $update);
                 $changed = true;
                 $late = $late || $this->past($now, [$attempt['total_due_at'], $attempt['close_at']]);
@@ -115,7 +113,6 @@ final class AssessmentService
                     if ($finish === 'completed') throw new PlayerException('invalid_progress');
                     $answer = ['answerCodes' => json_decode($item['answer_codes'] ?? '[]', true), 'textAnswer' => $item['text_answer'] ?? ''];
                     $update = $this->scoring->grade($questions[$id], $answer) + ['status' => 'locked', 'locked_at' => $now, 'lock_reason' => 'attempt_timeout'];
-                    $this->store->db->table('attempt_items')->where('id', $item['id'])->update($update);
                     $items[$id] = array_replace($item, $update);
                 }
                 $changed = true;
@@ -134,6 +131,7 @@ final class AssessmentService
                     'due_at' => null, 'submitted_at' => $now, 'finish_reason' => $finish, 'score' => ScoringService::decimal($score),
                     'percent' => ScoringService::decimal(ScoringService::roundedRatio($score * 10000, ScoringService::hundredths((string) $attempt['max_score'])))]);
             }
+            $update['responses'] = AttemptResponses::encode(array_values($items));
             $this->store->db->table('attempts')->where('id', $attempt['id'])->update($update);
         });
         return $this->load($publicId, $token);
@@ -154,10 +152,10 @@ final class AssessmentService
         $events = $input['events'] ?? null;
         if (! is_array($events) || ! array_is_list($events) || count($events) > 100) throw new PlayerException('invalid_progress');
         $this->store->transaction(function () use ($attempt, $events): void {
-            $this->store->lock('attempts', (string) $attempt['id']);
+            $this->store->lock('attempts', (string) $attempt['id'], 'id');
             foreach ($events as $event) {
                 if (! is_array($event) || ! is_string($event['key'] ?? null) || ! preg_match('/^[a-f0-9]{32}$/D', $event['key'])
-                    || ! in_array($event['type'] ?? null, ['tab_hidden', 'tab_visible', 'window_blur', 'window_focus', 'fullscreen_exit', 'inactivity_start', 'inactivity_end'], true)
+                    || ! in_array($event['type'] ?? null, ['tab_hidden', 'fullscreen_exit'], true)
                     || ! is_string($event['happenedAt'] ?? null)) throw new PlayerException('invalid_progress');
                 $date = PlayerStore::date($event['happenedAt']);
                 $duration = $event['durationMs'] ?? null;
@@ -170,17 +168,14 @@ final class AssessmentService
         return ['accepted' => true];
     }
 
-    private function authorize(string $publicId, string $token): array
+    private function authorize(string $publicId, string $token, bool $withResponses = false): array
     {
         if (! preg_match('/^[a-f0-9]{32}$/D', $publicId) || ! preg_match('/^[a-f0-9]{64}$/D', $token)) throw new PlayerException('invalid_credential', 401);
-        $attempt = $this->store->db->table('attempts')->where('public_id', $publicId)->get()->getRowArray();
+        $attempt = $this->store->db->table('attempts')->select($withResponses
+            ? 'id, quiz_id, paper_id, token_hash, settings, responses, version, status, phase, current_pos, started_at, total_due_at, close_at, late_sync, finish_reason, submitted_at, score, max_score, percent'
+            : 'id, token_hash, settings')->where('public_id', $publicId)->get()->getRowArray();
         if ($attempt === null || ! hash_equals($attempt['token_hash'], hash('sha256', $token, true))) throw new PlayerException('invalid_credential', 401);
         return $attempt;
-    }
-
-    private function items(string|int $attemptId): array
-    {
-        return $this->store->db->table('attempt_items')->where('attempt_id', $attemptId)->orderBy('pos')->get()->getResultArray();
     }
 
     private function serializeItem(array $item): array

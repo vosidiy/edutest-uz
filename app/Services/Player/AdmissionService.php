@@ -6,6 +6,7 @@ namespace App\Services\Player;
 
 use App\Exceptions\PlayerException;
 use App\Services\QuizPaperService;
+use App\Services\QuizShareCode;
 
 final class AdmissionService
 {
@@ -19,6 +20,7 @@ final class AdmissionService
 
     public function ticket(string $shareToken): array
     {
+        if (! QuizShareCode::isValid($shareToken)) throw new PlayerException('not_found', 404);
         $quiz = $this->store->db->table('quizzes')->where('share_token', $shareToken)->get()->getRowArray();
         if ($quiz === null) throw new PlayerException('not_found', 404);
         $this->available($quiz);
@@ -38,6 +40,9 @@ final class AdmissionService
             $quiz = $this->store->lock('quizzes', $claims['quizId']);
             $db = $this->store->db;
             $now = PlayerStore::now();
+            foreach ($db->table('practice_keys')->where('expires_at <', $now)->limit(100)->get()->getResultArray() as $expired) {
+                $db->table('practice_keys')->where('quiz_id', $expired['quiz_id'])->where('request_key', $expired['request_key'])->delete();
+            }
             $isPractice = $claims['settings']['mode'] === 'practice';
             $identity = [];
             $hash = null;
@@ -45,7 +50,7 @@ final class AdmissionService
                 if (array_diff(array_keys($input), ['ticket']) !== []) throw new PlayerException('practice_anonymous');
                 $existing = $db->table('practice_keys')->where('quiz_id', $quiz['id'])->where('request_key', $claims['startKey'])->get()->getRowArray();
             } else {
-                $existing = $db->table('attempts')->where('quiz_id', $quiz['id'])->where('start_key', $claims['startKey'])->get()->getRowArray();
+                $existing = $db->table('attempts')->select('public_id, start_hash')->where('quiz_id', $quiz['id'])->where('start_key', $claims['startKey'])->get()->getRowArray();
                 $identity = $this->identity($input, $claims['settings']);
                 $hash = hash('sha256', json_encode([$identity, $input['passcode'] ?? ''], JSON_THROW_ON_ERROR), true);
                 if ($existing !== null) {
@@ -73,9 +78,6 @@ final class AdmissionService
             }
 
             if ($isPractice) {
-                foreach ($db->table('practice_keys')->where('expires_at <', $now)->limit(100)->get()->getResultArray() as $expired) {
-                    $db->table('practice_keys')->where('quiz_id', $expired['quiz_id'])->where('request_key', $expired['request_key'])->delete();
-                }
                 return $this->practice->start($quiz, $paper, $claims, $existing, $now);
             }
 
@@ -88,17 +90,12 @@ final class AdmissionService
                 'token_hash' => PlayerStore::binary(hash('sha256', $token, true)), 'start_key' => $claims['startKey'], 'start_hash' => PlayerStore::binary($hash),
                 'ip' => $ip === null ? null : substr($ip, 0, 45), 'agent' => $agent === null ? null : mb_substr($agent, 0, 512),
                 'status' => 'in_progress', 'phase' => 'answering', 'current_pos' => 1, 'version' => 1,
-                'settings' => json_encode($settings, JSON_THROW_ON_ERROR), 'started_at' => $now, 'total_due_at' => $totalDue,
+                'settings' => json_encode($settings, JSON_THROW_ON_ERROR), 'responses' => AttemptResponses::initialize($document['questions'], $now),
+                'started_at' => $now, 'total_due_at' => $totalDue,
                 'close_at' => $close, 'due_at' => null, 'max_score' => ScoringService::decimal($maximum), 'updated_at' => $now, 'late_sync' => 0]);
-            $attemptId = (string) $db->insertID();
-            foreach ($document['questions'] as $index => $question) {
-                $db->table('attempt_items')->insert(['attempt_id' => $attemptId, 'quiz_id' => $quiz['id'], 'question_id' => $question['id'], 'pos' => $index + 1,
-                    'choice_order' => json_encode(array_column($question['options'], 'code'), JSON_THROW_ON_ERROR), 'status' => $index === 0 ? 'active' : 'pending',
-                    'started_at' => $index === 0 ? $now : null, 'save_ver' => 0]);
-            }
             return ['mode' => 'assessment', 'attemptId' => $claims['attemptId'], 'credential' => $token];
         });
-        $this->papers->purgeUnusedPracticePapers();
+        $this->papers->purgeUnusedPapers();
         return $result;
     }
 

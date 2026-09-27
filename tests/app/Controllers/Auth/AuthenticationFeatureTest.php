@@ -65,7 +65,7 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
             'password_confirm' => 'secret1',
         ]));
 
-        $result->assertRedirectTo(site_url('quizzes'));
+        $result->assertRedirectTo(site_url('dashboard'));
         $result->assertSessionHas(AuthService::SESSION_KEY);
         $result->assertSessionMissing('password');
         $result->assertSessionMissing('password_confirm');
@@ -143,7 +143,7 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
             'password' => 'secret1',
         ]));
 
-        $result->assertRedirectTo(site_url('quizzes'));
+        $result->assertRedirectTo(site_url('dashboard'));
         $result->assertSessionHas(AuthService::SESSION_KEY, $userId);
 
         $user = $this->authDb->table('users')->where('id', $userId)->get()->getRowArray();
@@ -190,8 +190,8 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
             fn () => $this->withSession($session)->get('/register'),
         );
 
-        $login->assertRedirectTo(site_url('quizzes'));
-        $register->assertRedirectTo(site_url('quizzes'));
+        $login->assertRedirectTo(site_url('dashboard'));
+        $register->assertRedirectTo(site_url('dashboard'));
     }
 
     public function testPostLogoutClearsTheSession(): void
