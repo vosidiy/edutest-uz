@@ -8,23 +8,6 @@ use App\Exceptions\PlayerException;
 
 final class DefinitionService
 {
-    /** @return array<string, mixed> */
-    public function settings(array $quiz): array
-    {
-        $settings = [
-            'mode' => $quiz['mode'], 'feedback' => $quiz['feedback'],
-            'emailMode' => $quiz['email_mode'], 'phoneMode' => $quiz['phone_mode'],
-            'timeLimitSec' => $quiz['time_limit_sec'] === null ? null : (int) $quiz['time_limit_sec'],
-            'closesAt' => PlayerStore::iso($quiz['closes_at']),
-            'timingPolicy' => 'client_enforced_offline_allowed',
-        ];
-        foreach (['showScore' => 'show_score', 'showAnswers' => 'show_answers', 'showExplain' => 'show_explain',
-            'shuffleQuestions' => 'shuffle_questions', 'shuffleOptions' => 'shuffle_options', 'cheatCheck' => 'cheat_check'] as $public => $column) {
-            $settings[$public] = (bool) $quiz[$column];
-        }
-        return $settings;
-    }
-
     public function assertReady(array $document): void
     {
         $settings = $document['settings'];

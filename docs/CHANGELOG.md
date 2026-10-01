@@ -4,12 +4,29 @@
 
 ### Added
 
+- Recoverable offline assessment synchronization: durable format-4 local progress/outbox, immediate local feedback/results, serialized resume and upload coordination, small answer acknowledgements, and direct paper grading.
+- Additive manual `offline-continuity-upgrade.sql` and canonical client activity/answer-occurrence fields plus a late-sync flag; no application-triggered database changes or data reset.
+- Provisional Abandoned results can reconcile delayed work; Completed final records remain immutable. Timeout scores exclude unconfirmed drafts. Teacher detail/CSV distinguish occurrence, receipt, finish reason, and late synchronization.
+- Persistent connection warnings, bounded automatic/manual retry, receipt-only hidden-results behavior, and preservation of unsupported old pending browser queues.
+- Meaningful-interaction eight-hour inactivity policy, capped scheduled deadlines, five-second future-clock tolerance, and documented client-trusted offline timing.
+- Verified additive upgrade preservation and concurrent expiry/answer/Finish requests on disposable MySQL; added functional offline/reload Chrome checks without visual testing and documented 20/100/500-question acknowledgement measurements.
+
+- Exhaustive architecture database reference documenting every canonical table and column, including identifier, publication, retry, deadline, privacy, and historical-result responsibilities.
+- Explicit published-paper workflow: initial Publish and later Publish changes create immutable quiz paper schema version 3 and update `quizzes.current_paper_id`; ordinary saves edit only the teacher working copy.
+- Normalized `attempt_answers` persistence with one initialized row per assessment question, immutable confirmed answers, idempotent retries, and out-of-order-safe answer confirmations.
+- Destructive development reset SQL for installing published papers and normalized attempt answers after disposable test data has been cleared.
+- Updated isolated MySQL schema and 20/100/500-question storage/write measurement helper for normalized answer rows.
+
+- Same-quiz open-tab coordination for Assessment and Practice using non-waiting Web Locks, with accessible blocked/retry and unsupported-browser notices; no browser-wide identity or credential storage.
+- Canonical attempt schema without the obsolete admission fingerprint and duplicate question-position columns.
+- Isolated admission-retry, tab-ownership/sync, multi-tab Chrome, and MySQL schema/concurrent-start regression coverage.
+
 - Viewport-height quiz builder with independent desktop panel scrolling and state-preserving Questions/Editor/Settings switching on tablet/mobile.
 - Native Quiz details dialog for staged title/cover edits, cancellable local previews, focus restoration, and retained-cover upload retries.
 - Clear Saved / Save changes / Saving / Resolve conflict controls, serialized aggregate/cover saves, and acknowledgement merging that preserves edits made during requests.
 - Editor-local notices and a collapsed answers/timers disclosure, plus isolated save-flow and Chrome regression coverage for scrolling, dialog behavior, and in-flight edits.
 
-- Unified centered teacher dashboard with account/logout disclosure, six workspace metrics, and one enriched quiz library covering active, archived, deleted, and historical assessment activity.
+- Unified centered teacher dashboard with account/logout disclosure, four workspace metrics, and one enriched quiz library covering active, archived, deleted, and historical assessment activity.
 - Shared sticky quiz header across Builder, Responses, and attempt review, with contextual actions and archived/deleted restoration guidance.
 - Isolated dashboard/header/redirect regression tests and actual-view Chrome checks at desktop, tablet, and mobile widths.
 
@@ -17,26 +34,21 @@
 
 - Nine-digit share codes for newly created and duplicated quizzes, with collision retries and permanent compatibility for existing 64-character links.
 - Non-blocking fullscreen controls and status messaging on monitored assessment introductions and active player pages.
-- Manual `short-codes-integrity-upgrade.sql` for compatible share-token storage and the reduced integrity-event constraint.
+- Canonical compatible share-token storage and reduced integrity-event constraint.
 
-- Versioned, compact `attempts.responses` JSON with shared serialization/validation for assessment synchronization and teacher review.
-- Manual destructive `attempt-responses-upgrade.sql`; it clears disposable assessments and integrity events while preserving authored content, papers/media, practice data, and first-start metadata.
-- Isolated MySQL upgrade/concurrency verification and repeatable 20/100/500-question storage/write benchmarks.
-
-- Immutable shared quiz papers captured per used revision, with assessment and practice runs bound to their exact start definition.
-- Canonical `quiz_papers`, paper foreign keys, historical attempt question identifiers, and `first_started_at`.
+- Canonical `quiz_papers`, current-paper foreign keys, published passcode hashes, and historical attempt answer rows.
 - Updated fresh-install schema with equal-weight questions and image-only answer choices.
 
 - Practice-only “Try again” on completed results, with fresh admission/settings/timers, configured shuffling, deduplicated retry, and previous-result retention on failure.
 - Optional cover selection and preview in quiz creation, with upload retry on the same saved draft and continuation without a cover.
 
 - Responsive student introduction, assessment admission, one-question player, timers, instant client feedback, and student results for assessment and anonymous practice.
-- Signed admission/recovery credentials, bearer-protected assessment APIs, transactional paper capture at first use, captured policies and shuffle order, and idempotent ordered answer synchronization.
-- Offline-friendly assessment outbox, provisional/server-confirmed scores, explicit conflict recovery, late-sync flags, and opt-in informational integrity events.
+- Signed admission/recovery credentials, bearer-protected assessment APIs, published-paper policies and shuffle order, and idempotent answer confirmation.
+- Offline-friendly assessment retry queue, provisional/server-confirmed scores, recoverable client-timestamped deadlines, and opt-in informational integrity events.
 - Anonymous local-only practice grading and review, expiring start deduplication, and signed media renewal without individual results or PHP sessions.
 - Optional private quiz covers with builder controls, replacement/removal, independent duplication, and historical paper retention.
 - Shared exact-arithmetic PHP/JavaScript scoring fixtures and isolated student service, feature, media, and browser-state tests.
-- Canonical schema support for `quizzes.cover_src` and `attempts.late_sync`; the developer reported applying the corresponding incremental SQL.
+- Canonical schema support for `quizzes.cover_src`; the developer reported applying the corresponding incremental SQL.
 - Protected teacher Results workspace with historical assessment summaries, per-quiz summaries, filtered attempts, complete owner-only attempt review, integrity timelines, and formula-safe filtered CSV exports.
 - Responsive reporting components for metrics, attempt tables, answer review, media, empty states, and integrity timelines.
 
@@ -56,6 +68,14 @@
 
 ### Changed
 
+- Replaced aggregate assessment-response JSON and sync batches with per-question `PUT` confirmations plus a separate Finish endpoint.
+- Simplified teacher attempt review around published papers plus `attempt_answers`, preserving historical question order, answers, correctness, timestamps, overall timing, finish reason, IP/device details, and integrity history.
+
+- Matched student question-video rendering to the builder preview for hosted embeds, including iframe referrer behavior for YouTube playback, versioned student player assets, and simplified the dashboard summary to four metric cards.
+- The developer reported applying the response-storage, short-code/integrity, and MVP attempt-cleanup SQL on 2026-09-29; their completed one-time scripts were removed and `schema.sql` remains the sole database structure source.
+- Assessment admission now uses “first successful start wins”: valid credential-bound retries return the original in-progress/finalized attempt without validating changed admission input or resetting saved data.
+- Resume derives question position from the first `not_reached` answer row; removed `start_hash`, `current_pos`, the unused `currentPosition` API property, and the obsolete admission-input conflict message. Start keys, bearer hashes, and Practice deduplication remain.
+
 - Redirected teacher login/registration and authenticated landing navigation to `/dashboard`; preserved old library and Results-overview URLs as authenticated, filter-aware redirects.
 - Added dashboard report-eligibility filtering and assessment-summary sorting using grouped, owner-scoped queries without loading answer documents.
 - Kept Back and manual Save controls accessible on narrow builder layouts; versioned teacher CSS URLs to avoid stale layout caches.
@@ -68,17 +88,17 @@
 - Reduced integrity monitoring to hidden-tab and genuine fullscreen-exit signals, removing focus, return, and inactivity reports.
 - Renamed no-passcode student access from a private link to a share link because short quiz codes are locators rather than secrets.
 
-- Consolidated answer persistence into one atomic attempt-row update per changed sync batch, retaining public player contracts, exact scoring, retries, offline recovery, and immutable finalized results.
-- Moved question-order/answer review to response JSON plus shared immutable papers; kept report/CSV summaries and authorization/event checks independent of answer-document reads.
+- Moved assessment answer persistence into independently confirmed answer rows, retaining server-authoritative scoring, retries, offline recovery, and immutable terminal results.
+- Moved question-order/answer review to normalized answer rows plus shared immutable papers; kept report/CSV summaries and authorization/event checks independent of answer-detail reads.
 
-- Standardized every question at `1.00` maximum credit while retaining proportional multi-select partial credit; results now use equivalent correct-question counts and percentages rather than points.
+- Standardized every question as all-or-nothing, including exact-set multi-select; results now use correct-question counts and percentages rather than points or partial credit.
 - Changed the builder to one Add question action, immediate answer-type resets, semantic radio/checkbox correctness controls, and lettered choices across preview, player feedback, and historical review.
 - Added a file-version query to the builder application script so updated templates cannot reuse stale cached JavaScript and fail while rendering lettered choices.
 - Changed total timer authoring to exact `timeLimitMinutes` values in half-minute steps from `0.5` to `1440`, while keeping whole-second runtime storage.
-- Bumped immutable papers to schema version 2 and changed attempt items from weighted `points` and question deadlines to bounded internal `credit`.
+- Bumped immutable papers to schema version 3 and removed weighted points, per-question timers, and partial-credit terminology.
 - Restricted answer-option media to JPEG/PNG/WebP images while retaining image/audio/validated-video media for questions.
-- Replaced permanent content freezing with freely editable live quizzes backed by immutable papers; published edits must remain publication-ready.
-- Moved assessment load, synchronization, official grading, student results, media renewal, and teacher attempt review from live rows to the bound immutable paper.
+- Replaced permanent content freezing with freely editable working copies backed by explicitly published immutable papers; saved drafts are invisible to students until Publish changes.
+- Moved assessment load, answer confirmation, official grading, student results, media renewal, and teacher attempt review from live rows to the bound immutable paper.
 - Simplified teacher Results to finalized/in-progress counts, finalized average scores, filtered attempt lists, paper revisions, detailed attempt review, integrity timelines, and CSV export.
 - Made media cleanup paper-reference-aware so historical result media remains available after live replacement or deletion.
 
@@ -88,7 +108,7 @@
 
 - Activated the public quiz introduction, student player, and teacher assessment reporting workspace.
 - Made student introduction, player, and results styling self-contained in `player.css`, removing the `teacher.css` dependency while preserving the indigo appearance, components, and accessibility styles. Teacher, landing, and authentication styles remain unchanged.
-- Replaced server-only timing and practice server-grading assumptions with deliberately inspectable client-loaded keys and browser-enforced offline timing.
+- Replaced server-only timing and practice server-grading assumptions with deliberately inspectable client-loaded keys, browser-side practice timing, and server validation of reported assessment timing with late recovery.
 
 - Simplified `AGENTS.md`, `docs/PLAN.MD`, and `docs/ARCHITECTURE.MD`.
 - Made the architecture focus on frontend/backend behavior and the plan focus on product vision.
@@ -122,9 +142,12 @@
 
 ### Removed
 
+- Aggregate `attempts.responses`, `attempts.settings`, `attempts.phase`, `attempts.version`, and the old assessment sync route. The offline-continuity update adds `late_sync` back as an informational recovery flag.
+
+- Removed the applied `attempt-responses-upgrade.sql`, `short-codes-integrity-upgrade.sql`, and `attempt-mvp-cleanup-upgrade.sql`; the canonical schema contains their final structure.
 - Teacher sidebar/mobile bottom navigation and separate quiz-library/Results-overview views; their features now live on the dashboard.
 
-- The `attempt_items` table and model; no production service queries per-answer database rows.
+- The legacy `attempt_items` table and model; assessment answers now use the current `attempt_answers` table.
 
 - Removed score distributions, question-accuracy/timing aggregates, hardest/slowest insights, workspace integrity totals, and permanent frozen-content builder controls.
 - Removed configurable question points, per-question timers/deadlines, `question_timeout`, the true/false quick-add preset, and audio/video media from answer options.

@@ -44,7 +44,9 @@ abstract class PlayerTestCase extends CIUnitTestCase
             }
             $body = preg_replace('/^\s*INDEX [^\n]*\n/m', '', $table[2]);
             $body = str_replace('BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY', 'INTEGER PRIMARY KEY AUTOINCREMENT', $body);
-            $body = str_replace('JSON_TYPE(responses)', 'UPPER(JSON_TYPE(responses))', $body);
+            $body = preg_replace('/JSON_TYPE\(([^)]+)\)/', 'UPPER(JSON_TYPE($1))', $body);
+            $body = str_replace('JSON_LENGTH(', 'JSON_ARRAY_LENGTH(', $body);
+            $body = str_replace('CHAR_LENGTH(', 'LENGTH(', $body);
             $body = preg_replace('/\b(?:BIGINT|SMALLINT|INT) UNSIGNED\b/', 'INTEGER', $body);
             $body = preg_replace('/\bTINYINT\(1\)/', 'INTEGER', $body);
             $body = preg_replace('/\bDATETIME\(6\)/', 'TEXT', $body);
@@ -101,7 +103,21 @@ abstract class PlayerTestCase extends CIUnitTestCase
     protected function submission(array $attempt, int $index, bool $correct = true): array
     {
         $question = $attempt['quiz']['questions'][$index];
-        return ['questionId' => $question['id'], 'answerCodes' => [$correct ? $question['correctCodes'][0] : $question['options'][0]['code']],
-            'textAnswer' => '', 'saveVer' => 1, 'submitKey' => bin2hex(random_bytes(16)), 'reason' => 'answered', 'startedAt' => $attempt['startedAt']];
+        return ['status' => 'answered', 'questionId' => $question['id'],
+            'answerCodes' => [$correct ? $question['correctCodes'][0] : $question['options'][0]['code']], 'textAnswer' => ''];
+    }
+
+    protected function confirmation(array $answer, ?string $at = null): array
+    {
+        $at ??= \App\Services\Player\PlayerStore::iso(\App\Services\Player\PlayerStore::now());
+        return array_intersect_key($answer, array_flip(['status', 'answerCodes', 'textAnswer']))
+            + ['clientAnsweredAt' => $at, 'clientActivityAt' => $at];
+    }
+
+    protected function finishBody(array $attempt, string $reason = 'completed', ?string $at = null, ?string $activity = null, ?int $count = null): array
+    {
+        $at ??= \App\Services\Player\PlayerStore::iso(\App\Services\Player\PlayerStore::now());
+        return ['finishReason' => $reason, 'clientFinishedAt' => $at, 'clientActivityAt' => $activity ?? $at,
+            'confirmedCount' => $count ?? count($attempt['quiz']['questions'])];
     }
 }

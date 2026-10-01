@@ -5,14 +5,15 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Exceptions\PlayerException;
+use App\Services\Player\PlayerStore;
 use CodeIgniter\Database\BaseConnection;
 use Config\Database;
 use RuntimeException;
 
-/** Immutable definitions used by student runs and historical result review. */
+/** Immutable definitions activated explicitly by publishing. */
 final class QuizPaperService
 {
-    public const SCHEMA_VERSION = 2;
+    public const SCHEMA_VERSION = 3;
 
     private readonly BaseConnection $db;
 
@@ -22,29 +23,45 @@ final class QuizPaperService
     }
 
     /** Called while the owning quiz row is locked. @return array<string, mixed> */
-    public function current(array $quiz): array
+    public function publish(array $quiz): array
     {
         $paper = $this->db->table('quiz_papers')
-            ->where('quiz_id', $quiz['id'])
-            ->where('revision', $quiz['revision'])
+            ->where('quiz_id', $quiz['id'])->where('revision', $quiz['revision'])
             ->get()->getRowArray();
-        if ($paper !== null) {
-            return $paper;
+
+        if ($paper === null) {
+            $paper = [
+                'quiz_id'       => $quiz['id'],
+                'public_id'     => bin2hex(random_bytes(16)),
+                'revision'      => $quiz['revision'],
+                'passcode_hash' => $quiz['passcode_hash'],
+                'definition'    => json_encode($this->capture($quiz), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'created_at'    => $this->now(),
+            ];
+            if (! $this->db->table('quiz_papers')->insert($paper)) {
+                throw new RuntimeException('The quiz paper could not be published.');
+            }
+            $paper['id'] = (string) $this->db->insertID();
         }
 
-        $row = [
-            'quiz_id'    => $quiz['id'],
-            'public_id'  => bin2hex(random_bytes(16)),
-            'revision'   => $quiz['revision'],
-            'definition' => json_encode($this->capture($quiz), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            'created_at' => $this->now(),
-        ];
-        if (! $this->db->table('quiz_papers')->insert($row)) {
-            throw new RuntimeException('The quiz paper could not be created.');
-        }
-        $row['id'] = (string) $this->db->insertID();
+        $this->definition($paper);
+        return $paper;
+    }
 
-        return $row;
+    /** @return array<string, mixed> */
+    public function currentPublished(array $quiz): array
+    {
+        if ($quiz['current_paper_id'] === null) {
+            throw new PlayerException('quiz_unpublished', 409);
+        }
+        $paper = $this->db->table('quiz_papers')
+            ->where('id', $quiz['current_paper_id'])->where('quiz_id', $quiz['id'])
+            ->get()->getRowArray();
+        if ($paper === null) {
+            throw new PlayerException('quiz_unpublished', 409);
+        }
+        $this->definition($paper);
+        return $paper;
     }
 
     /** @return array<string, mixed> */
@@ -56,6 +73,7 @@ final class QuizPaperService
         if ($paper === null) {
             throw new PlayerException('not_found', 404);
         }
+        $this->definition($paper);
         return $paper;
     }
 
@@ -68,6 +86,7 @@ final class QuizPaperService
         if ($paper === null) {
             throw new PlayerException('not_found', 404);
         }
+        $this->definition($paper);
         return $paper;
     }
 
@@ -84,11 +103,35 @@ final class QuizPaperService
         return $definition;
     }
 
-    /** @param array<string, mixed> $settings @return array<string, mixed> */
-    public function studentDocument(array $paper, array $settings, string $seed): array
+    /** @return array<string, mixed> */
+    public function settings(array $paper): array
+    {
+        $quiz = $this->definition($paper)['quiz'];
+        return [
+            'mode'             => (string) $quiz['mode'],
+            'feedback'         => (string) $quiz['feedback'],
+            'emailMode'        => (string) $quiz['emailMode'],
+            'phoneMode'        => (string) $quiz['phoneMode'],
+            'timeLimitSec'     => $quiz['timeLimitSec'] === null ? null : (int) $quiz['timeLimitSec'],
+            'opensAt'          => PlayerStore::iso($quiz['opensAt']),
+            'closesAt'         => PlayerStore::iso($quiz['closesAt']),
+            'showScore'        => (bool) $quiz['showScore'],
+            'showAnswers'      => (bool) $quiz['showAnswers'],
+            'showExplain'      => (bool) $quiz['showExplain'],
+            'shuffleQuestions' => (bool) $quiz['shuffleQuestions'],
+            'shuffleOptions'   => (bool) $quiz['shuffleOptions'],
+            'cheatCheck'       => (bool) $quiz['cheatCheck'],
+            'timingPolicy'     => 'client_deadline_late_sync_v1',
+            'scoringPolicy'    => 'all_or_nothing_v1',
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    public function studentDocument(array $paper, string $seed): array
     {
         $definition = $this->definition($paper);
         $quiz = $definition['quiz'];
+        $settings = $this->settings($paper);
         $questions = [];
         foreach ($definition['questions'] as $storedQuestion) {
             $options = [];
@@ -125,17 +168,21 @@ final class QuizPaperService
 
     public function purgeUnusedPapers(int $limit = 100): void
     {
+        $this->db->table('practice_keys')->where('expires_at <', $this->now())->delete();
         $rows = $this->db->table('quiz_papers p')
             ->select('p.id, p.definition')
+            ->join('quizzes q', 'q.current_paper_id = p.id', 'left')
             ->join('attempts a', 'a.paper_id = p.id', 'left')
-            ->join('practice_keys k', 'k.paper_id = p.id', 'left')
-            ->where('a.id', null)->where('k.request_key', null)
+            ->join('practice_keys k', 'k.paper_id = p.id AND k.expires_at >= ' . $this->db->escape($this->now()), 'left', false)
+            ->where('q.id', null)->where('a.id', null)->where('k.request_key', null)
             ->limit(max(1, min(100, $limit)))->get()->getResultArray();
         foreach ($rows as $row) {
             $definition = json_decode((string) $row['definition'], true);
             $paths = is_array($definition) ? $this->mediaPaths($definition) : [];
             if ($this->db->table('quiz_papers')->where('id', $row['id'])->delete()) {
-                foreach ($paths as $path) ($this->media ?? service('media'))->deleteStoredReference($path);
+                foreach ($paths as $path) {
+                    ($this->media ?? service('media'))->deleteStoredReference($path);
+                }
             }
         }
     }
@@ -195,7 +242,7 @@ final class QuizPaperService
                 'feedback' => (string) $quiz['feedback'], 'showScore' => (bool) $quiz['show_score'],
                 'showAnswers' => (bool) $quiz['show_answers'], 'showExplain' => (bool) $quiz['show_explain'],
                 'cheatCheck' => (bool) $quiz['cheat_check'],
-                'timingPolicy' => 'client_enforced_offline_allowed',
+                'timingPolicy' => 'client_deadline_late_sync_v1', 'scoringPolicy' => 'all_or_nothing_v1',
             ],
             'questions' => $questions,
         ];
@@ -204,17 +251,13 @@ final class QuizPaperService
     /** @return array<string, string>|null */
     private function storedMedia(?string $type, ?string $src): ?array
     {
-        return $type === null || $src === null
-            ? null
-            : ['key' => bin2hex(random_bytes(16)), 'type' => $type, 'src' => $src];
+        return $type === null || $src === null ? null : ['key' => bin2hex(random_bytes(16)), 'type' => $type, 'src' => $src];
     }
 
     /** @return array<string, string>|null */
     private function paperMedia(array $paper, mixed $media): ?array
     {
-        if (! is_array($media)) {
-            return null;
-        }
+        if (! is_array($media)) return null;
         return ($this->media ?? service('media'))->paperDescriptor(
             (string) $media['type'], (string) $media['src'], (string) $paper['public_id'], (string) $media['key'],
         );
@@ -234,12 +277,8 @@ final class QuizPaperService
     private function containsPath(array $value, string $relative): bool
     {
         foreach ($value as $key => $child) {
-            if ($key === 'src' && $child === $relative) {
-                return true;
-            }
-            if (is_array($child) && $this->containsPath($child, $relative)) {
-                return true;
-            }
+            if ($key === 'src' && $child === $relative) return true;
+            if (is_array($child) && $this->containsPath($child, $relative)) return true;
         }
         return false;
     }

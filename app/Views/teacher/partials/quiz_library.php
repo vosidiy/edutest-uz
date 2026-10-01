@@ -25,7 +25,7 @@
                     <span class="quiz-symbol" aria-hidden="true">▤</span>
                     <div class="quiz-row-title">
                         <h3><?php if ($quiz['editUrl'] !== null || $quiz['resultsUrl'] !== null) : ?><a href="<?= esc($quiz['editUrl'] ?? $quiz['resultsUrl'], 'attr') ?>"><?= esc($quiz['title']) ?></a><?php else : ?><?= esc($quiz['title']) ?><?php endif ?></h3>
-                        <small><?= esc(lang('Workspace.questions', [$quiz['questionCount']])) ?> · <?= esc(lang('Workspace.mode.' . $quiz['mode'])) ?><?= $quiz['hasStarted'] ? ' · ' . esc(lang('Workspace.hasStarts')) : '' ?></small>
+                        <small><?= esc(lang('Workspace.questions', [$quiz['questionCount']])) ?> · <?= esc(lang('Workspace.mode.' . $quiz['mode'])) ?><?= $quiz['hasPublished'] ? ' · ' . esc(lang('Workspace.hasPublishedPaper')) : '' ?></small>
                     </div>
                     <span class="badge status <?= esc($quiz['deleted'] ? 'deleted' : $quiz['status'], 'attr') ?>"><?= esc(lang('Workspace.status.' . ($quiz['deleted'] ? 'deleted' : $quiz['status']))) ?></span>
                 </div>

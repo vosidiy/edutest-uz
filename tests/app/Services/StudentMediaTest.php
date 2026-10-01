@@ -32,6 +32,8 @@ final class StudentMediaTest extends PlayerTestCase
             if ($previous !== null) $this->assertFileDoesNotExist($previous);
             $previous = $resolved['path'];
         }
+        $this->authoring->transition($quiz['owner'], $quiz['publicId'], 'publish');
+        $version = $this->authoring->document($quiz['owner'], $quiz['publicId'])['version'];
         $summary = $this->authoring->publicSummary($quiz['share']);
         $this->assertNotNull($summary['cover']);
         $copy = $this->authoring->duplicate($quiz['owner'], $quiz['publicId']);
@@ -68,6 +70,9 @@ final class StudentMediaTest extends PlayerTestCase
         $this->assertNull($firstAttempt['quiz']['cover']);
         $this->assertNotNull($result['media']);
         $this->assertNotNull($this->authoring->document($quiz['owner'], $quiz['publicId'])['cover']);
+        $stillOld = $this->startQuiz($quiz);
+        $this->assertNull($stillOld['quiz']['cover']);
+        $this->authoring->transition($quiz['owner'], $quiz['publicId'], 'publish');
         $next = $this->startQuiz($quiz);
         $this->assertNotNull($next['quiz']['cover']);
         $this->assertSame(2, $this->db->table('quiz_papers')->countAllResults());

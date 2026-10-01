@@ -44,8 +44,8 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $quiz = $this->quiz();
         $first = $this->startQuiz($quiz);
         $this->db->table('attempts')->where('public_id', $first['attemptId'])->update([
-            'status' => 'submitted', 'score' => '0.00', 'percent' => '0.00',
-            'submitted_at' => '2026-01-01 21:30:00', 'responses' => '{"not":"decoded by summaries"}',
+            'status' => 'completed', 'score' => 0, 'percent' => '0.00',
+            'finished_at' => '2026-01-01 21:30:00', 'ended_reason' => 'completed',
         ]);
         $this->startQuiz($quiz);
         $this->db->table('quizzes')->where('public_id', $quiz['publicId'])->update(['mode' => 'practice', 'email_mode' => 'hidden', 'practice_starts' => 12]);
@@ -53,11 +53,13 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $this->startQuiz($other);
 
         $dashboard = $this->queries->dashboard($quiz['owner'], [], 'Asia/Tashkent');
-        $this->assertSame(['totalQuizzes' => 1, 'publishedQuizzes' => 1, 'assessmentSubmissions' => 1, 'inProgressAttempts' => 1, 'averagePercent' => '0.00', 'practiceStarts' => 12], $dashboard['metrics']);
+        $this->assertSame(['totalQuizzes' => 1, 'publishedQuizzes' => 1, 'assessmentSubmissions' => 1, 'inProgressAttempts' => 1], $dashboard['metrics']);
         $row = $dashboard['library']['rows'][0];
         $this->assertSame(2, $row['questionCount']);
         $this->assertSame(1, $row['assessmentSubmissions']);
         $this->assertSame(1, $row['inProgressAttempts']);
+        $this->assertSame('0.00', $row['averagePercent']);
+        $this->assertSame(12, $row['practiceStarts']);
         $this->assertSame('02 Jan 2026, 02:30', $row['latestSubmission']);
         $this->assertNotNull($row['resultsUrl']);
         $this->assertArrayNotHasKey('responses', $row);
@@ -66,7 +68,7 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $this->db->table('quizzes')->where('public_id', $quiz['publicId'])->update(['status' => 'archived', 'deleted_at' => '2026-01-02 00:00:00']);
         $historical = $this->queries->dashboard($quiz['owner'], ['view' => 'all']);
         $this->assertSame(1, $historical['metrics']['assessmentSubmissions']);
-        $this->assertSame(0, $historical['metrics']['practiceStarts']);
+        $this->assertArrayNotHasKey('practiceStarts', $historical['metrics']);
         $this->assertNull($historical['library']['rows'][0]['editUrl']);
         $this->assertTrue($historical['library']['rows'][0]['deleted']);
     }
@@ -78,9 +80,12 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $this->db->table('quizzes')->where('public_id', $high['publicId'])->update(['user_id' => $low['owner'], 'title' => 'High scoring quiz']);
         foreach ([[$low, '0.00'], [$high, '80.00'], [$high, '80.00']] as [$quiz, $percent]) {
             $attempt = $this->startQuiz($quiz);
-            $this->db->table('attempts')->where('public_id', $attempt['attemptId'])->update(['status' => 'submitted', 'percent' => $percent]);
+            $this->db->table('attempts')->where('public_id', $attempt['attemptId'])->update([
+                'status' => 'completed', 'finished_at' => '2026-01-01 01:00:00', 'ended_reason' => 'completed',
+                'score' => (int) round((float) $percent * 2 / 100), 'percent' => $percent,
+            ]);
         }
-        $this->assertSame('53.33', $this->queries->dashboard($low['owner'])['metrics']['averagePercent']);
+        $this->assertArrayNotHasKey('averagePercent', $this->queries->dashboard($low['owner'])['metrics']);
         foreach (['submissions_desc', 'score_desc'] as $sort) {
             $rows = $this->queries->library($low['owner'], ['sort' => $sort])['rows'];
             $this->assertSame($high['publicId'], $rows[0]['publicId']);
@@ -98,7 +103,7 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $dashboard = $this->queries->dashboard($quiz['owner'] + 100);
         $this->assertSame(0, $dashboard['metrics']['totalQuizzes']);
         $this->assertSame(0, $dashboard['metrics']['assessmentSubmissions']);
-        $this->assertNull($dashboard['metrics']['averagePercent']);
+        $this->assertArrayNotHasKey('averagePercent', $dashboard['metrics']);
         $this->assertSame([], $dashboard['library']['rows']);
     }
 

@@ -429,7 +429,6 @@ final class MediaService
             if ($this->db->table($table)->where('id', $targetId)->countAllResults() !== 1) throw new AuthoringException('media_not_found', 'Media target not found.', 404);
             $change = $target === 'cover' ? ['cover_src' => $src] : ['media_type' => $type, 'media_src' => $src];
             $this->db->table($table)->where('id', $targetId)->update($change + ['updated_at' => $this->now()]);
-            (new QuizAuthoringService($this->db, $this))->assertPublishedReady($quiz);
             $this->db->table('quizzes')->where('id', $record['quiz_id'])->update([
                 'version'    => $version + 1,
                 'revision'   => (int) $quiz['revision'] + 1,
@@ -461,14 +460,14 @@ final class MediaService
 
         if ($target === 'cover') {
             $sql = "SELECT z.id, z.id AS quiz_id, CASE WHEN z.cover_src IS NULL THEN NULL ELSE 'image' END AS media_type,
-                    z.cover_src AS media_src, z.version, z.first_started_at, z.status FROM " . $this->db->prefixTable('quizzes') . ' z
+                    z.cover_src AS media_src, z.version, z.status FROM " . $this->db->prefixTable('quizzes') . ' z
                     WHERE z.public_id = ? AND z.user_id = ? AND z.deleted_at IS NULL';
         } elseif ($target === 'question') {
-            $sql = 'SELECT q.id, q.quiz_id, q.media_type, q.media_src, z.version, z.first_started_at, z.status
+            $sql = 'SELECT q.id, q.quiz_id, q.media_type, q.media_src, z.version, z.status
                     FROM ' . $this->db->prefixTable('questions') . ' q JOIN ' . $this->db->prefixTable('quizzes') . ' z ON z.id = q.quiz_id
                     WHERE q.id = ? AND z.public_id = ? AND z.user_id = ? AND z.deleted_at IS NULL';
         } else {
-            $sql = 'SELECT o.id, q.quiz_id, o.media_type, o.media_src, z.version, z.first_started_at, z.status
+            $sql = 'SELECT o.id, q.quiz_id, o.media_type, o.media_src, z.version, z.status
                     FROM ' . $this->db->prefixTable('question_options') . ' o
                     JOIN ' . $this->db->prefixTable('questions') . ' q ON q.id = o.question_id
                     JOIN ' . $this->db->prefixTable('quizzes') . ' z ON z.id = q.quiz_id

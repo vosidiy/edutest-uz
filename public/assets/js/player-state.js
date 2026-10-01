@@ -1,105 +1,179 @@
 export const uniqueKey = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
 const copy = value => JSON.parse(JSON.stringify(value));
-const sameAnswer = (a, b) => JSON.stringify([...(a.answerCodes || [])].sort()) === JSON.stringify([...(b.answerCodes || [])].sort()) && (a.textAnswer || '') === (b.textAnswer || '');
+const iso = time => new Date(Math.ceil(time)).toISOString();
+const time = value => Date.parse(value);
+export const receiptOnly = settings => !settings.showScore && !settings.showAnswers && !settings.showExplain;
+const firstOpen = items => Math.max(0, items.findIndex(item => item.answerStatus === 'not_reached'));
 
 export function createState(data, serverTime, wallTime = Date.now()) {
   const serverItems = new Map((data.items || []).map(item => [item.questionId, item]));
   const items = data.quiz.questions.map((question, index) => {
     const saved = serverItems.get(question.id);
-    return saved ? {...copy(saved), ackVer: saved.saveVer} : {questionId: question.id, status: index === 0 ? 'active' : 'pending',
-      answerCodes: [], textAnswer: '', saveVer: 0, ackVer: 0, submitKey: null, reason: null, startedAt: index === 0 ? data.startedAt : null};
+    return saved ? copy(saved) : {questionId: question.id, status: index === 0 ? 'active' : 'pending', answerStatus: 'not_reached', answerCodes: [], textAnswer: ''};
   });
-  const firstActive = items.findIndex(item => item.status === 'active');
-  const lastLocked = items.findLastIndex(item => item.status === 'locked');
-  const finished = !!data.result;
-  return {format: 1, mode: data.mode, attemptId: data.attemptId || null, credential: data.credential, version: data.version || 1,
-    quiz: data.quiz, startedAt: data.startedAt, totalDueAt: data.totalDueAt, closeAt: data.closeAt,
-    items, index: Math.max(0, firstActive >= 0 ? firstActive : lastLocked), phase: finished ? 'complete' : firstActive >= 0 ? 'answering' : 'feedback',
-    finishReason: data.finishReason || null, result: data.result || null, events: [],
-    clock: {server: Date.parse(serverTime), wall: wallTime}, lastClock: Date.parse(serverTime)};
+  const finished = data.status === 'completed';
+  const allConfirmed = items.length > 0 && items.every(item => item.answerStatus !== 'not_reached');
+  const index = finished || allConfirmed ? Math.max(0, items.length - 1) : firstOpen(items);
+  if (!finished && items[index]?.answerStatus === 'not_reached') items[index].status = 'active';
+  return {
+    format: 4, mode: data.mode, attemptId: data.attemptId || null, credential: data.credential,
+    quiz: data.quiz, startedAt: data.startedAt, expiresAt: data.expiresAt, deadlineReason: data.deadlineReason,
+    clientActivityAt: data.clientActivityAt || data.startedAt, activityPending: false, activitySentAt: 0,
+    serverStatus: data.status, lateSync: Boolean(data.lateSync),
+    items, index, phase: finished ? 'complete' : allConfirmed ? 'feedback' : 'answering', pendingAnswers: [], finishPending: false, finishRecord: null,
+    finishReason: finished ? data.finishReason : null, result: finished ? data.result : null, serverResult: data.result || null, events: [],
+    clock: {server: time(serverTime), wall: wallTime}, lastClock: time(serverTime),
+  };
 }
 
-export function editAnswer(state, answer) {
-  const item = state.items[state.index];
-  if (state.finishReason || item.status !== 'active') return false;
-  Object.assign(item, answer, {saveVer: item.saveVer + 1});
+export function deadlines(state) {
+  if (!state.expiresAt) return [];
+  const labels = {timer_expired: 'quizTimer', scheduled_close: 'closingTimer', stale_timeout: 'inactivityTimer'};
+  return [{at: time(state.expiresAt), reason: state.deadlineReason, label: labels[state.deadlineReason] || 'quizTimer'}];
+}
+
+function setFinish(state, reason, at) {
+  state.finishReason = reason; state.finishPending = state.mode === 'assessment'; state.phase = 'complete';
+  state.finishRecord = {finishReason: reason, clientFinishedAt: at, clientActivityAt: state.clientActivityAt,
+    confirmedCount: state.items.filter(item => item.answerStatus !== 'not_reached').length};
+  state.activityPending = false;
+}
+
+export function finishTimed(state, reason = state.deadlineReason) {
+  if (state.finishReason) return false;
+  setFinish(state, reason, state.expiresAt);
   return true;
 }
 
-export function submitAnswer(state, reason = 'answered', key = uniqueKey()) {
+export function expireIfDue(state, now = state.lastClock) {
+  if (!state.finishReason && state.expiresAt && now >= time(state.expiresAt)) return finishTimed(state);
+  return false;
+}
+
+export function recordActivity(state, now = state.lastClock) {
+  if (expireIfDue(state, now) || state.finishReason) return false;
+  state.clientActivityAt = iso(Math.max(now, time(state.clientActivityAt)));
+  if (state.quiz.settings.timeLimitSec === null) {
+    let deadline = time(state.clientActivityAt) + 8 * 60 * 60 * 1000;
+    state.deadlineReason = 'stale_timeout';
+    const closes = time(state.quiz.settings.closesAt);
+    if (Number.isFinite(closes) && closes < deadline) { deadline = closes; state.deadlineReason = 'scheduled_close'; }
+    state.expiresAt = iso(deadline);
+    state.activityPending = state.mode === 'assessment';
+  }
+  return true;
+}
+
+export function editAnswer(state, answer, now = state.lastClock) {
+  if (expireIfDue(state, now) || state.finishReason || state.items[state.index].status !== 'active') return false;
+  recordActivity(state, now);
+  Object.assign(state.items[state.index], answer);
+  return true;
+}
+
+export function submitAnswer(state, reason = 'answered', now = state.lastClock) {
   const item = state.items[state.index];
-  if (state.finishReason || item.status !== 'active') return false;
+  if (expireIfDue(state, now) || state.finishReason || item.status !== 'active') return false;
+  recordActivity(state, now);
   if (reason === 'skipped') Object.assign(item, {answerCodes: [], textAnswer: ''});
-  Object.assign(item, {status: 'locked', reason, submitKey: key, saveVer: item.saveVer + 1});
+  item.status = 'locked';
+  item.answerStatus = reason === 'skipped' ? 'skipped' : 'answered';
+  item.clientAnsweredAt = state.clientActivityAt;
+  if (state.mode === 'assessment') state.pendingAnswers.push({
+    questionId: item.questionId, status: item.answerStatus, answerCodes: [...item.answerCodes].sort(), textAnswer: item.textAnswer || '',
+    clientAnsweredAt: item.clientAnsweredAt, clientActivityAt: state.clientActivityAt,
+  });
   state.phase = 'feedback';
   return true;
 }
 
-export function nextQuestion(state, now) {
-  if (state.finishReason || state.phase !== 'feedback') return false;
-  if (state.index === state.items.length - 1) { state.finishReason = 'completed'; state.phase = 'complete'; return true; }
+export function nextQuestion(state, now = state.lastClock) {
+  if (expireIfDue(state, now) || state.finishReason || state.phase !== 'feedback') return false;
+  recordActivity(state, now);
+  if (state.index === state.items.length - 1) { setFinish(state, 'completed', state.clientActivityAt); return true; }
   state.index++;
   const item = state.items[state.index];
-  if (item.status === 'pending') Object.assign(item, {status: 'active', startedAt: now, saveVer: 1});
+  if (item.status === 'pending') item.status = 'active';
   state.phase = item.status === 'locked' ? 'feedback' : 'answering';
   return true;
 }
 
-export function finishTimed(state, reason, key = uniqueKey()) {
-  if (state.finishReason) return false;
-  if (state.items[state.index].status === 'active') submitAnswer(state, 'attempt_timeout', key);
-  state.finishReason = reason;
-  state.phase = 'complete';
-  return true;
-}
-
-export function deadlines(state) {
-  const values = [];
-  if (state.totalDueAt) values.push({at: Date.parse(state.totalDueAt), reason: 'total_timeout', label: 'quizTimer'});
-  if (state.closeAt) values.push({at: Date.parse(state.closeAt), reason: 'scheduled_close', label: 'closingTimer'});
-  // The earliest total or scheduled-close deadline wins.
-  return values.sort((a, b) => a.at - b.at);
-}
-
-export function syncPayload(state) {
-  const dirty = state.items.filter(item => item.saveVer > item.ackVer);
-  return {version: state.version, items: dirty.slice(0, 100).map(({questionId, answerCodes, textAnswer, saveVer, submitKey, reason, startedAt}) =>
-    ({questionId, answerCodes: [...answerCodes].sort(), textAnswer, saveVer, submitKey, reason: reason || 'answered', startedAt})),
-    finishReason: dirty.length <= 100 ? state.finishReason : null};
-}
-
 export function hasPending(state) {
-  return state.mode === 'assessment' && (state.items.some(item => item.saveVer > item.ackVer) || (state.finishReason && !state.result) || state.events.length > 0);
+  if (state.format !== 4) return state.mode === 'assessment'; // Preserve unsupported work on exit, too.
+  return state.mode === 'assessment' && (state.pendingAnswers.length > 0 || state.finishPending || state.events.length > 0 || state.activityPending);
+}
+export function isFullscreenExit(previouslyActive, currentlyActive) { return Boolean(previouslyActive) && !currentlyActive; }
+
+function sameAnswer(item, operation) {
+  return JSON.stringify([...(item.answerCodes || [])].sort()) === JSON.stringify([...(operation.answerCodes || [])].sort())
+    && (item.textAnswer || '') === (operation.textAnswer || '') && item.answerStatus === operation.status;
 }
 
-export function isFullscreenExit(previouslyActive, currentlyActive) {
-  return Boolean(previouslyActive) && !currentlyActive;
+/** Small acknowledgements never replace local question state or drafts. */
+export function acknowledge(state, ack, operation = null) {
+  if (ack.attemptId !== state.attemptId) throw new Error('Attempt membership changed');
+  if (operation) {
+    if (ack.questionId !== operation.questionId || ack.answerStatus !== operation.status || state.pendingAnswers[0] !== operation) throw new Error('Invalid answer acknowledgement');
+    state.pendingAnswers.shift();
+  }
+  state.serverStatus = ack.status; state.lateSync ||= Boolean(ack.lateSync);
+  if (ack.clientActivityAt && time(ack.clientActivityAt) >= time(state.clientActivityAt)) {
+    state.activityPending = false;
+    state.expiresAt = ack.expiresAt; state.deadlineReason = ack.deadlineReason;
+  }
+  // Only an explicit Finish acknowledgement can seal the local run.
+  if (ack.result?.confirmed) {
+    if (state.pendingAnswers.length) throw new Error('Completion preceded answer acknowledgements');
+    state.result = ack.result; state.finishPending = false; state.finishReason = ack.finishReason; state.phase = 'complete';
+  }
 }
 
-/** Merge acknowledgements without replacing newer local work. Locked conflicts require a human choice. */
+/** Resume/recovery merges saved confirmations while preserving local drafts and unfinished uploads. */
 export function mergeServer(state, server) {
-  if (server.version < state.version) return true;
-  const localById = new Map(state.items.map(item => [item.questionId, item]));
-  for (const remote of server.items) {
-    const local = localById.get(remote.questionId);
-    if (!local) throw new Error('Question membership changed');
-    const dirty = local.saveVer > local.ackVer;
-    if (remote.status === 'locked' && dirty && (!sameAnswer(local, remote) || (local.submitKey && local.submitKey !== remote.submitKey))) return false;
+  if (server.attemptId !== state.attemptId) return false;
+  const remote = new Map(server.items.map(item => [item.questionId, item]));
+  const pending = new Map(state.pendingAnswers.map(operation => [operation.questionId, operation]));
+  const items = [];
+  for (const local of state.items) {
+    const saved = remote.get(local.questionId);
+    if (!saved) return false;
+    const operation = pending.get(local.questionId);
+    if (saved.answerStatus !== 'not_reached') {
+      if (operation && (!sameAnswer(saved, operation) || (saved.clientAnsweredAt && time(saved.clientAnsweredAt) !== time(operation.clientAnsweredAt)))) return false;
+      items.push(copy(saved));
+    } else {
+      if (server.status === 'completed' && operation) return false;
+      items.push(copy(local));
+    }
   }
-  for (const remote of server.items) {
-    const local = localById.get(remote.questionId);
-    const dirty = local.saveVer > local.ackVer;
-    if (remote.status === 'locked' || !dirty) Object.assign(local, copy(remote));
-    else if (remote.saveVer >= local.saveVer && (!sameAnswer(local, remote) || (local.submitKey && remote.status !== 'locked'))) local.saveVer = remote.saveVer + 1;
-    if (remote.startedAt) local.startedAt = remote.startedAt;
-    local.ackVer = remote.saveVer;
+  if (server.status === 'completed' && state.finishRecord
+      && (server.finishReason !== state.finishRecord.finishReason || time(server.result.finishedAt) !== time(state.finishRecord.clientFinishedAt))) return false;
+  state.items = items;
+  state.pendingAnswers = state.pendingAnswers.filter(operation => remote.get(operation.questionId).answerStatus === 'not_reached');
+  for (const item of items) {
+    if (item.answerStatus !== 'not_reached' && item.clientAnsweredAt && remote.get(item.questionId).answerStatus === 'not_reached'
+        && !state.pendingAnswers.some(operation => operation.questionId === item.questionId)) {
+      state.pendingAnswers.push({questionId:item.questionId, status:item.answerStatus, answerCodes:[...item.answerCodes].sort(),
+        textAnswer:item.textAnswer || '', clientAnsweredAt:item.clientAnsweredAt, clientActivityAt:item.clientAnsweredAt});
+    }
   }
-  state.version = server.version;
-  state.result = server.result;
-  if (server.result) { state.finishReason = server.finishReason; state.phase = 'complete'; }
-  // If another tab advanced beyond this tab, resume its current position without going backwards.
-  while (!state.finishReason && state.items[state.index].status === 'locked' && state.index < state.items.length - 1 && state.items[state.index + 1].startedAt) state.index++;
-  if (!state.finishReason) state.phase = state.items[state.index].status === 'locked' ? 'feedback' : 'answering';
+  const positions = new Map(items.map((item,index) => [item.questionId,index]));
+  state.pendingAnswers.sort((a,b) => positions.get(a.questionId) - positions.get(b.questionId));
+  state.serverStatus = server.status; state.serverResult = server.result; state.lateSync ||= Boolean(server.lateSync);
+  if (time(server.clientActivityAt) >= time(state.clientActivityAt)) {
+    state.activityPending = false; state.clientActivityAt = server.clientActivityAt;
+    state.expiresAt = server.expiresAt; state.deadlineReason = server.deadlineReason;
+  }
+  if (server.status === 'completed') {
+    state.result = server.result; state.finishReason = server.finishReason; state.finishPending = false; state.activityPending = false; state.phase = 'complete';
+  } else if (!state.finishReason && state.phase !== 'feedback') {
+    state.index = firstOpen(state.items);
+    if (state.items[state.index].answerStatus === 'not_reached') state.items[state.index].status = 'active';
+    else {
+      // All answers may be received while the Finish response was lost.
+      state.index = state.items.length - 1; state.phase = 'feedback';
+    }
+  }
   return true;
 }
 
@@ -111,8 +185,7 @@ export class PlayerClock {
   }
   now() {
     const value = Math.max(this.base + this.monotonic() - this.mark, this.state.clock.server + this.wall() - this.state.clock.wall, this.state.lastClock || 0);
-    this.state.lastClock = value;
-    return value;
+    this.state.lastClock = value; return value;
   }
-  iso() { return new Date(Math.ceil(this.now()) + 1).toISOString(); }
+  iso() { return iso(this.now()); }
 }

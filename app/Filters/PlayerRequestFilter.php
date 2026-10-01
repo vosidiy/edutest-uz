@@ -18,7 +18,7 @@ final class PlayerRequestFilter implements FilterInterface
         $method = strtoupper($request->getMethod());
         if ($request->getHeaderLine('X-EduTest-Player') !== '1' || ($origin !== '' && $origin !== $expected)
             || in_array($request->getHeaderLine('Sec-Fetch-Site'), ['cross-site', 'same-site'], true)) return $this->error('origin_rejected', 403);
-        if ($method === 'POST' && ! preg_match('~^application/json(?:\s*;|$)~i', $request->getHeaderLine('Content-Type'))) return $this->error('invalid_json', 415);
+        if (in_array($method, ['POST', 'PUT'], true) && ! preg_match('~^application/json(?:\s*;|$)~i', $request->getHeaderLine('Content-Type'))) return $this->error('invalid_json', 415);
         if (strlen((string) $request->getBody()) > 1048576) return $this->error('request_too_large', 413);
         // Deliberately endpoint-wide, without IP, user-agent, credential, or practice-session keys.
         $parts = explode('/', trim($request->getUri()->getPath(), '/'));

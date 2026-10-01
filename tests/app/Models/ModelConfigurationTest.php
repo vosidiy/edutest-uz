@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\App\Models;
 
 use App\Models\AttemptModel;
+use App\Models\AttemptAnswerModel;
 use App\Models\CheatEventModel;
 use App\Models\PracticeKeyModel;
 use App\Models\QuestionModel;
@@ -55,6 +56,7 @@ final class ModelConfigurationTest extends CIUnitTestCase
             QuestionOptionModel::class => ['question_options', true, false],
             QuizPaperModel::class      => ['quiz_papers', false, false],
             AttemptModel::class        => ['attempts', false, false],
+            AttemptAnswerModel::class  => ['attempt_answers', false, false],
             CheatEventModel::class     => ['cheat_events', false, false],
         ];
 
@@ -75,11 +77,11 @@ final class ModelConfigurationTest extends CIUnitTestCase
         $this->assertSame('?json-array', $this->casts(new QuestionModel())['text_answers']);
         $this->assertSame('int-bool', $this->casts(new QuestionOptionModel())['is_correct']);
         $this->assertSame('json-array', $this->casts(new QuizPaperModel())['definition']);
-        $this->assertSame('json-array', $this->casts(new AttemptModel())['settings']);
-        $this->assertSame('json-array', $this->casts(new AttemptModel())['responses']);
+        $this->assertSame('json-array', $this->casts(new AttemptAnswerModel())['presented_option_codes']);
+        $this->assertSame('?json-array', $this->casts(new AttemptAnswerModel())['selected_option_codes']);
         $this->assertSame('json-array', $this->casts(new CheatEventModel())['data']);
 
-        $this->assertArrayNotHasKey('score', $this->casts(new AttemptModel()));
+        $this->assertSame('?int', $this->casts(new AttemptModel())['score']);
         $this->assertNotContains('points', $this->property(new QuestionModel(), 'allowedFields'));
         $this->assertNotContains('time_limit_sec', $this->property(new QuestionModel(), 'allowedFields'));
     }

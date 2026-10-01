@@ -26,10 +26,8 @@
             ['published', 'publishedQuizzes', 'availableLinks'],
             ['finalized', 'assessmentSubmissions', 'finalizedHint'],
             ['inProgress', 'inProgressAttempts', 'inProgressHint'],
-            ['average', 'averagePercent', 'averageHint'],
-            ['practiceStarts', 'practiceStarts', 'practiceHint'],
         ] as [$label, $key, $hint]) : ?>
-            <article class="card metric"><span><?= esc(lang('Workspace.' . $label)) ?></span><strong><?= $metrics[$key] === null ? '—' : esc((string) $metrics[$key]) . ($key === 'averagePercent' ? '%' : '') ?></strong><small><?= esc(lang('Workspace.' . $hint)) ?></small></article>
+            <article class="card metric"><span><?= esc(lang('Workspace.' . $label)) ?></span><strong><?= esc((string) $metrics[$key]) ?></strong><small><?= esc(lang('Workspace.' . $hint)) ?></small></article>
         <?php endforeach ?>
     </section>
     <?php $library = $dashboard['library']; ?>

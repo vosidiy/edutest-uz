@@ -1443,7 +1443,7 @@ input[type=radio] {
   border-radius: 0 0 var(--border-radius-lg) var(--border-radius-lg);
 }
 
-.dashboard-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.dashboard-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .library-heading { margin: 32px 0 18px; }
 .library-heading p { color: var(--text-color-secondary); margin-top: 6px; }
 .quiz-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 22px; border-bottom: 1px solid var(--border-color-default); }
@@ -2584,14 +2584,13 @@ input[type=radio] {
   color: var(--red-800);
 }
 
-.attempt-status.submitted,
+.attempt-status.completed,
 .answer-result.correct {
   background: var(--green-100);
   color: var(--green-800);
 }
 
-.attempt-status.expired,
-.answer-result.partial {
+.attempt-status.abandoned {
   background: var(--orange-100);
   color: var(--orange-900);
 }

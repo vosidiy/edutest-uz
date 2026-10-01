@@ -27,9 +27,19 @@ final class PlayerController extends ApiController
         return $this->run(fn (): array => service('player')->assessment->load($id, $this->bearer()));
     }
 
-    public function sync(string $id): ResponseInterface
+    public function answer(string $id, string $questionId): ResponseInterface
     {
-        return $this->run(fn (): array => service('player')->assessment->sync($id, $this->bearer(), $this->input()));
+        return $this->run(fn (): array => service('player')->assessment->answer($id, $questionId, $this->bearer(), $this->input()));
+    }
+
+    public function finish(string $id): ResponseInterface
+    {
+        return $this->run(fn (): array => service('player')->assessment->finish($id, $this->bearer(), $this->input()));
+    }
+
+    public function activity(string $id): ResponseInterface
+    {
+        return $this->run(fn (): array => service('player')->assessment->activity($id, $this->bearer(), $this->input()));
     }
 
     public function results(string $id): ResponseInterface
@@ -44,7 +54,10 @@ final class PlayerController extends ApiController
 
     public function assessmentMedia(string $id): ResponseInterface
     {
-        return $this->show($id);
+        return $this->run(function () use ($id): array {
+            if ($this->input() !== []) throw new \App\Exceptions\PlayerException('invalid_progress');
+            return service('player')->assessment->media($id, $this->bearer());
+        });
     }
 
     public function practiceMedia(): ResponseInterface

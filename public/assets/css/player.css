@@ -220,6 +220,8 @@ summary { cursor: pointer; user-select: none; }
 .badge-primary-subtle { background: var(--primary-100); color: var(--primary-700); }
 .alert { display: flex; align-items: center; gap: var(--space-2); padding: 11px 14px; border: 1px solid transparent; border-radius: var(--border-radius-md); }
 .alert-warning { border-color: var(--orange-200); background: var(--orange-100); color: var(--orange-900); }
+.alert-error { border-color: var(--red-200); background: var(--red-100); color: var(--red-900); }
+.player-local-backup { white-space: pre-wrap; overflow-wrap: anywhere; }
 .dialog {
   width: min(520px, calc(100% - 28px));
   max-height: calc(100vh - 32px);
@@ -299,7 +301,6 @@ summary { cursor: pointer; user-select: none; }
 .player-actions > .btn-primary { min-width: 170px; }
 .player-feedback { margin-top: 26px; border: 1px solid var(--neutral-200); border-left: 4px solid var(--neutral-500); border-radius: var(--border-radius-md); padding: 20px; background: var(--neutral-50); }
 .player-feedback.correct { border-left-color: var(--green-600); background: var(--green-100); }
-.player-feedback.partial { border-left-color: var(--orange-600); background: var(--orange-100); }
 .player-feedback.wrong { border-left-color: var(--red-600); background: var(--red-100); }
 .player-feedback h3 { font-size: 1.1rem; margin: 0 0 12px; }
 .player-feedback p { white-space: pre-wrap; overflow-wrap: anywhere; }

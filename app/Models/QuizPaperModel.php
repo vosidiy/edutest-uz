@@ -12,7 +12,7 @@ final class QuizPaperModel extends Model
     protected $primaryKey = 'id';
     protected $returnType = 'array';
     protected $useTimestamps = false;
-    protected $allowedFields = ['quiz_id', 'public_id', 'revision', 'definition', 'created_at'];
+    protected $allowedFields = ['quiz_id', 'public_id', 'revision', 'passcode_hash', 'definition', 'created_at'];
     protected bool $allowEmptyInserts = false;
     protected bool $updateOnlyChanged = true;
     protected array $casts = [

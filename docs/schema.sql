@@ -1,6 +1,6 @@
 -- EduTest canonical application schema
 -- Target: MySQL 8.4, InnoDB, utf8mb4
--- Last updated: 2026-09-27
+-- Last updated: 2026-10-01
 --
 -- Fresh-install use in phpMyAdmin:
 --   1. Select the intended empty database.
@@ -55,7 +55,7 @@ CREATE TABLE quizzes (
   cover_src VARCHAR(1000) NULL,
   revision INT UNSIGNED NOT NULL DEFAULT 1,
   version INT UNSIGNED NOT NULL DEFAULT 1,
-  first_started_at DATETIME(6) NULL,
+  current_paper_id BIGINT UNSIGNED NULL,
   time_limit_sec INT UNSIGNED NULL,
   opens_at DATETIME(6) NULL,
   closes_at DATETIME(6) NULL,
@@ -80,6 +80,7 @@ CREATE TABLE quizzes (
   CONSTRAINT uq_quizzes_share_token UNIQUE (share_token),
   INDEX ix_quiz_user (user_id, status, deleted_at, updated_at),
   INDEX ix_quiz_listed (user_id, listed, status, deleted_at, published_at),
+  INDEX ix_quiz_current_paper (current_paper_id, id),
   CONSTRAINT chk_quizzes_mode
     CHECK (mode IN ('assessment', 'practice')),
   CONSTRAINT chk_quizzes_status
@@ -190,6 +191,7 @@ CREATE TABLE quiz_papers (
   quiz_id BIGINT UNSIGNED NOT NULL,
   public_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   revision INT UNSIGNED NOT NULL,
+  passcode_hash VARCHAR(255) NULL,
   definition JSON NOT NULL,
   created_at DATETIME(6) NOT NULL,
   CONSTRAINT fk_quiz_papers_quiz
@@ -202,6 +204,10 @@ CREATE TABLE quiz_papers (
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_0900_ai_ci;
 
+ALTER TABLE quizzes
+  ADD CONSTRAINT fk_quizzes_current_paper
+    FOREIGN KEY (current_paper_id, id) REFERENCES quiz_papers(id, quiz_id);
+
 CREATE TABLE attempts (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   quiz_id BIGINT UNSIGNED NOT NULL,
@@ -209,29 +215,24 @@ CREATE TABLE attempts (
   public_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   token_hash BINARY(32) NOT NULL,
   start_key CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-  start_hash BINARY(32) NOT NULL,
+  shuffle_seed CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   name VARCHAR(120) NOT NULL,
   email VARCHAR(254) NULL,
   phone VARCHAR(32) NULL,
   ip VARCHAR(45) CHARACTER SET ascii COLLATE ascii_bin NULL,
   agent VARCHAR(512) NULL,
   status VARCHAR(12) COLLATE utf8mb4_bin NOT NULL DEFAULT 'in_progress',
-  phase VARCHAR(20) COLLATE utf8mb4_bin NOT NULL DEFAULT 'answering',
-  current_pos SMALLINT UNSIGNED NULL,
-  version INT UNSIGNED NOT NULL DEFAULT 1,
-  settings JSON NOT NULL,
-  responses JSON NOT NULL,
   started_at DATETIME(6) NOT NULL,
-  total_due_at DATETIME(6) NULL,
-  close_at DATETIME(6) NULL,
-  due_at DATETIME(6) NULL,
-  submitted_at DATETIME(6) NULL,
-  finish_reason VARCHAR(20) COLLATE utf8mb4_bin NULL,
+  last_activity_at DATETIME(6) NOT NULL,
+  client_activity_at DATETIME(6) NOT NULL,
   late_sync TINYINT(1) NOT NULL DEFAULT 0,
-  score DECIMAL(12,2) NULL,
-  max_score DECIMAL(12,2) NOT NULL,
+  expires_at DATETIME(6) NOT NULL,
+  deadline_reason VARCHAR(20) COLLATE utf8mb4_bin NOT NULL,
+  finished_at DATETIME(6) NULL,
+  ended_reason VARCHAR(20) COLLATE utf8mb4_bin NULL,
+  score INT UNSIGNED NULL,
+  max_score INT UNSIGNED NOT NULL,
   percent DECIMAL(5,2) NULL,
-  updated_at DATETIME(6) NOT NULL,
   CONSTRAINT fk_attempts_quiz
     FOREIGN KEY (quiz_id) REFERENCES quizzes(id),
   CONSTRAINT fk_attempts_paper
@@ -241,26 +242,69 @@ CREATE TABLE attempts (
   CONSTRAINT uq_attempts_quiz_start_key UNIQUE (quiz_id, start_key),
   CONSTRAINT uq_attempts_id_quiz UNIQUE (id, quiz_id),
   INDEX ix_attempt_report (quiz_id, status, started_at),
-  INDEX ix_attempt_due (status, due_at),
+  INDEX ix_attempt_expiry (status, expires_at),
   CONSTRAINT chk_attempts_status
-    CHECK (status IN ('in_progress', 'submitted', 'expired')),
-  CONSTRAINT chk_attempts_responses
-    CHECK (JSON_TYPE(responses) = 'OBJECT'),
-  CONSTRAINT chk_attempts_phase
-    CHECK (phase IN ('answering', 'feedback', 'awaiting_next', 'complete')),
-  CONSTRAINT chk_attempts_finish_reason
+    CHECK (status IN ('in_progress', 'completed', 'abandoned')),
+  CONSTRAINT chk_attempts_late_sync CHECK (late_sync IN (0, 1)),
+  CONSTRAINT chk_attempts_deadline_reason
+    CHECK (deadline_reason IN ('timer_expired', 'scheduled_close', 'stale_timeout')),
+  CONSTRAINT chk_attempts_ended_reason
     CHECK (
-      finish_reason IS NULL
-      OR finish_reason IN ('completed', 'total_timeout', 'scheduled_close')
+      ended_reason IS NULL
+      OR ended_reason IN ('completed', 'timer_expired', 'scheduled_close', 'stale_timeout')
+    ),
+  CONSTRAINT chk_attempts_terminal_fields
+    CHECK (
+      (status = 'in_progress' AND finished_at IS NULL AND ended_reason IS NULL AND score IS NULL AND percent IS NULL)
+      OR (status IN ('completed', 'abandoned') AND finished_at IS NOT NULL AND ended_reason IS NOT NULL AND score IS NOT NULL AND percent IS NOT NULL)
     ),
   CONSTRAINT chk_attempts_max_score
     CHECK (max_score > 0),
-  CONSTRAINT chk_attempts_late_sync
-    CHECK (late_sync IN (0, 1)),
   CONSTRAINT chk_attempts_score
     CHECK (score IS NULL OR (score >= 0 AND score <= max_score)),
   CONSTRAINT chk_attempts_percent
     CHECK (percent IS NULL OR percent BETWEEN 0 AND 100)
+) ENGINE=InnoDB
+  DEFAULT CHARACTER SET utf8mb4
+  COLLATE utf8mb4_0900_ai_ci;
+
+CREATE TABLE attempt_answers (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  attempt_id BIGINT UNSIGNED NOT NULL,
+  question_id BIGINT UNSIGNED NOT NULL,
+  pos SMALLINT UNSIGNED NOT NULL,
+  presented_option_codes JSON NOT NULL,
+  status VARCHAR(12) COLLATE utf8mb4_bin NOT NULL DEFAULT 'not_reached',
+  selected_option_codes JSON NULL,
+  text_answer VARCHAR(500) NULL,
+  is_correct TINYINT(1) NULL,
+  answered_at DATETIME(6) NULL,
+  client_answered_at DATETIME(6) NULL,
+  CONSTRAINT fk_attempt_answers_attempt
+    FOREIGN KEY (attempt_id) REFERENCES attempts(id) ON DELETE CASCADE,
+  CONSTRAINT uq_attempt_answers_question UNIQUE (attempt_id, question_id),
+  CONSTRAINT uq_attempt_answers_position UNIQUE (attempt_id, pos),
+  CONSTRAINT chk_attempt_answers_position CHECK (pos > 0),
+  CONSTRAINT chk_attempt_answers_presented
+    CHECK (JSON_TYPE(presented_option_codes) = 'ARRAY'),
+  CONSTRAINT chk_attempt_answers_selected
+    CHECK (selected_option_codes IS NULL OR JSON_TYPE(selected_option_codes) = 'ARRAY'),
+  CONSTRAINT chk_attempt_answers_status
+    CHECK (status IN ('not_reached', 'answered', 'skipped')),
+  CONSTRAINT chk_attempt_answers_state
+    CHECK (
+      (status = 'not_reached' AND selected_option_codes IS NULL AND text_answer IS NULL AND is_correct IS NULL AND answered_at IS NULL)
+      OR (status = 'skipped' AND selected_option_codes IS NULL AND text_answer IS NULL AND is_correct = 0 AND answered_at IS NOT NULL)
+      OR (
+        status = 'answered'
+        AND (
+          (selected_option_codes IS NOT NULL AND JSON_LENGTH(selected_option_codes) > 0 AND text_answer IS NULL)
+          OR (selected_option_codes IS NULL AND text_answer IS NOT NULL AND CHAR_LENGTH(text_answer) > 0)
+        )
+        AND is_correct IN (0, 1)
+        AND answered_at IS NOT NULL
+      )
+    )
 ) ENGINE=InnoDB
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_0900_ai_ci;

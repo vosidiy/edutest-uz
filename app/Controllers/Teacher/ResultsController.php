@@ -93,8 +93,8 @@ final class ResultsController extends BaseController
         fwrite($stream, "\xEF\xBB\xBF");
         fputcsv($stream, [
             'Attempt ID', 'Name', 'Email', 'Phone', 'Status', 'Finish reason',
-            'Score', 'Maximum score', 'Percentage', 'Started at', 'Submitted at',
-            'Duration seconds', 'Integrity events',
+            'Score', 'Maximum score', 'Percentage', 'Started at', 'Finished at',
+            'Duration seconds', 'Integrity events', 'Late synchronization',
         ], ',', '"', '');
 
         foreach ($export['rows'] as $row) {

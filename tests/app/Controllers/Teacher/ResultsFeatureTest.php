@@ -109,7 +109,7 @@ final class ResultsFeatureTest extends CIUnitTestCase
         ]);
         $this->reportDb->table('quiz_papers')->insert([
             'id' => 1, 'quiz_id' => 1, 'public_id' => str_repeat('c', 32),
-            'revision' => 3, 'definition' => '{"schemaVersion":2,"quiz":{},"questions":[]}', 'created_at' => $now,
+            'revision' => 3, 'passcode_hash' => null, 'definition' => '{"schemaVersion":3,"quiz":{},"questions":[]}', 'created_at' => $now,
         ]);
         $this->reportDb->table('attempts')->insert([
             'id' => 1,
@@ -121,20 +121,16 @@ final class ResultsFeatureTest extends CIUnitTestCase
             'phone' => '+998900000000',
             'ip' => '203.0.113.50',
             'agent' => 'Sensitive Browser Agent',
-            'status' => 'submitted',
-            'phase' => 'complete',
-            'settings' => '{}',
-            'responses' => '{"schemaVersion":1,"items":[]}',
+            'status' => 'completed',
             'started_at' => '2026-01-01 00:00:00',
-            'total_due_at' => null,
-            'close_at' => null,
-            'due_at' => null,
-            'submitted_at' => '2026-01-01 00:05:00',
-            'finish_reason' => 'completed',
-            'score' => '0.70',
-            'max_score' => '1.00',
+            'last_activity_at' => '2026-01-01 00:05:00',
+            'expires_at' => '2026-01-01 08:00:00',
+            'deadline_reason' => 'stale_timeout',
+            'finished_at' => '2026-01-01 00:05:00',
+            'ended_reason' => 'completed',
+            'score' => 1,
+            'max_score' => 1,
             'percent' => '70.00',
-            'updated_at' => '2026-01-01 00:05:00',
         ]);
     }
 
@@ -144,8 +140,9 @@ final class ResultsFeatureTest extends CIUnitTestCase
         $queries = [
             "CREATE TABLE {$p('users')} (id INTEGER PRIMARY KEY, email TEXT NOT NULL, password_hash TEXT NOT NULL, display_name TEXT NOT NULL, phone TEXT NULL, bio TEXT NOT NULL, timezone TEXT NOT NULL, public_page INTEGER NOT NULL, active INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT NULL)",
             "CREATE TABLE {$p('quizzes')} (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, public_id TEXT NOT NULL UNIQUE, mode TEXT NOT NULL, status TEXT NOT NULL, title TEXT NOT NULL, deleted_at TEXT NULL, updated_at TEXT NOT NULL)",
-            "CREATE TABLE {$p('quiz_papers')} (id INTEGER PRIMARY KEY, quiz_id INTEGER NOT NULL, public_id TEXT NOT NULL UNIQUE, revision INTEGER NOT NULL, definition TEXT NOT NULL, created_at TEXT NOT NULL)",
-            "CREATE TABLE {$p('attempts')} (id INTEGER PRIMARY KEY, quiz_id INTEGER NOT NULL, paper_id INTEGER NOT NULL, public_id TEXT NOT NULL UNIQUE, name TEXT NOT NULL, email TEXT NULL, phone TEXT NULL, ip TEXT NULL, agent TEXT NULL, status TEXT NOT NULL, phase TEXT NOT NULL, settings TEXT NOT NULL, responses TEXT NOT NULL, started_at TEXT NOT NULL, total_due_at TEXT NULL, close_at TEXT NULL, due_at TEXT NULL, submitted_at TEXT NULL, finish_reason TEXT NULL, score NUMERIC NULL, max_score NUMERIC NOT NULL, percent NUMERIC NULL, updated_at TEXT NOT NULL)",
+            "CREATE TABLE {$p('quiz_papers')} (id INTEGER PRIMARY KEY, quiz_id INTEGER NOT NULL, public_id TEXT NOT NULL UNIQUE, revision INTEGER NOT NULL, passcode_hash TEXT NULL, definition TEXT NOT NULL, created_at TEXT NOT NULL)",
+            "CREATE TABLE {$p('attempts')} (id INTEGER PRIMARY KEY, quiz_id INTEGER NOT NULL, paper_id INTEGER NOT NULL, public_id TEXT NOT NULL UNIQUE, name TEXT NOT NULL, email TEXT NULL, phone TEXT NULL, ip TEXT NULL, agent TEXT NULL, status TEXT NOT NULL, started_at TEXT NOT NULL, last_activity_at TEXT NOT NULL, client_activity_at TEXT NULL, late_sync INTEGER NOT NULL DEFAULT 0, expires_at TEXT NOT NULL, deadline_reason TEXT NOT NULL, finished_at TEXT NULL, ended_reason TEXT NULL, score INTEGER NULL, max_score INTEGER NOT NULL, percent NUMERIC NULL)",
+            "CREATE TABLE {$p('attempt_answers')} (id INTEGER PRIMARY KEY, attempt_id INTEGER NOT NULL, question_id INTEGER NOT NULL, pos INTEGER NOT NULL, presented_option_codes TEXT NOT NULL, status TEXT NOT NULL, selected_option_codes TEXT NULL, text_answer TEXT NULL, is_correct INTEGER NULL, answered_at TEXT NULL)",
             "CREATE TABLE {$p('questions')} (id INTEGER PRIMARY KEY, quiz_id INTEGER NOT NULL, pos INTEGER NOT NULL, type TEXT NOT NULL, content TEXT NOT NULL, media_type TEXT NULL, media_src TEXT NULL, explanation TEXT NULL, text_answers TEXT NULL)",
             "CREATE TABLE {$p('question_options')} (id INTEGER PRIMARY KEY, question_id INTEGER NOT NULL, pos INTEGER NOT NULL, code TEXT NOT NULL, content TEXT NOT NULL, media_type TEXT NULL, media_src TEXT NULL, is_correct INTEGER NOT NULL)",
             "CREATE TABLE {$p('cheat_events')} (id INTEGER PRIMARY KEY, attempt_id INTEGER NOT NULL, type TEXT NOT NULL, happened_at TEXT NULL, received_at TEXT NOT NULL, duration_ms INTEGER NULL, data TEXT NOT NULL)",
@@ -157,7 +154,7 @@ final class ResultsFeatureTest extends CIUnitTestCase
 
     private function dropTables(): void
     {
-        foreach (['cheat_events', 'question_options', 'questions', 'attempts', 'quiz_papers', 'quizzes', 'users'] as $table) {
+        foreach (['cheat_events', 'attempt_answers', 'question_options', 'questions', 'attempts', 'quiz_papers', 'quizzes', 'users'] as $table) {
             $this->reportDb->query('DROP TABLE IF EXISTS ' . $this->reportDb->prefixTable($table));
         }
     }

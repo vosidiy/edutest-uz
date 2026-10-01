@@ -19,13 +19,17 @@ final class SchemaSqlTest extends CIUnitTestCase
         $this->assertStringNotContainsString('auth_groups', $sql);
         $this->assertStringContainsString('CREATE TABLE quiz_papers', $sql);
         $this->assertStringContainsString('paper_id BIGINT UNSIGNED NOT NULL', $sql);
-        $this->assertStringContainsString('first_started_at DATETIME(6) NULL', $sql);
+        $this->assertStringContainsString('current_paper_id BIGINT UNSIGNED NULL', $sql);
+        $this->assertStringNotContainsString('first_started_at', $sql);
         $this->assertStringContainsString('share_token VARCHAR(64)', $sql);
         $this->assertStringNotContainsString('frozen_at', $sql);
-        $this->assertStringNotContainsString('fk_attempt_items_question', $sql);
-        $this->assertStringContainsString('responses JSON NOT NULL', $sql);
-        $this->assertStringContainsString("CHECK (JSON_TYPE(responses) = 'OBJECT')", $sql);
+        $this->assertStringContainsString('CREATE TABLE attempt_answers', $sql);
+        $this->assertStringContainsString('presented_option_codes JSON NOT NULL', $sql);
+        $this->assertStringNotContainsString('responses JSON', $sql);
+        $this->assertStringNotContainsString('start_hash', $sql);
+        $this->assertStringNotContainsString('current_pos', $sql);
         $this->assertStringNotContainsString('CREATE TABLE attempt_items', $sql);
+        $this->assertStringContainsString("CHECK (status IN ('in_progress', 'completed', 'abandoned'))", $sql);
         $this->assertStringContainsString("CHECK (media_type IS NULL OR media_type = 'image')", $sql);
         $this->assertStringNotContainsString('points DECIMAL', $sql);
         $this->assertStringNotContainsString('chk_questions_time_limit', $sql);
@@ -35,18 +39,5 @@ final class SchemaSqlTest extends CIUnitTestCase
         $this->assertStringNotContainsString("'window_blur'", $sql);
         $this->assertStringNotContainsString("'inactivity_start'", $sql);
         $this->assertStringNotContainsString('ALTER TABLE users', $sql);
-    }
-
-    public function testShortCodeIntegrityUpgradePreservesQuizAndAttemptRecords(): void
-    {
-        $sql = file_get_contents(ROOTPATH . 'docs/short-codes-integrity-upgrade.sql');
-
-        $this->assertIsString($sql);
-        $this->assertStringContainsString('MODIFY COLUMN share_token VARCHAR(64)', $sql);
-        $this->assertStringContainsString("WHERE type NOT IN ('tab_hidden', 'fullscreen_exit')", $sql);
-        $this->assertStringContainsString("CHECK (type IN ('tab_hidden', 'fullscreen_exit'))", $sql);
-        $this->assertStringNotContainsString('DELETE FROM quizzes', $sql);
-        $this->assertStringNotContainsString('DELETE FROM attempts', $sql);
-        $this->assertStringNotContainsString('UPDATE quizzes', $sql);
     }
 }

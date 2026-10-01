@@ -1,13 +1,4 @@
 // Answer keys are deliberately client-visible. This is feedback, not an anti-cheat boundary.
-export function hundredths(value) {
-  const match = /^(\d{1,10})(?:\.(\d{1,2}))?$/.exec(String(value));
-  if (!match) throw new Error('Invalid decimal');
-  return BigInt(match[1]) * 100n + BigInt((match[2] || '').padEnd(2, '0'));
-}
-export function decimal(value) { return `${value / 100n}.${String(value % 100n).padStart(2, '0')}`; }
-export function roundedRatio(numerator, denominator) {
-  return numerator / denominator + (numerator % denominator * 2n >= denominator ? 1n : 0n);
-}
 export function normalize(value) { return value.replace(/\p{White_Space}+/gu, ' ').replace(/^ +| +$/g, '').toLowerCase(); }
 export function grade(question, input = {}) {
   const codes = input.answerCodes || [];
@@ -17,24 +8,20 @@ export function grade(question, input = {}) {
     if (codes.length) throw new Error('Invalid answer');
     const value = normalize(text);
     const correct = value !== '' && question.acceptedAnswers.some(answer => normalize(answer) === value);
-    return {result: !value ? 'unanswered' : correct ? 'correct' : 'wrong', credit: correct ? '1.00' : '0.00'};
+    return {result: !value ? 'unanswered' : correct ? 'correct' : 'wrong', isCorrect: correct};
   }
   if (text || codes.some(code => !question.options.some(option => option.code === code)) || (question.type === 'single_choice' && codes.length > 1)) throw new Error('Invalid answer');
-  if (!codes.length) return {result: 'unanswered', credit: '0.00'};
-  const right = codes.filter(code => question.correctCodes.includes(code)).length;
-  const totalRight = question.correctCodes.length;
-  if (!totalRight) throw new Error('Invalid question');
-  if (question.type === 'single_choice') return {result: right === 1 ? 'correct' : 'wrong', credit: right === 1 ? '1.00' : '0.00'};
-  const wrong = codes.length - right;
-  const totalWrong = question.options.length - totalRight;
-  const numerator = Math.max(0, right * Math.max(1, totalWrong) - wrong * totalRight);
-  const denominator = totalRight * Math.max(1, totalWrong);
-  const credit = roundedRatio(100n * BigInt(numerator), BigInt(denominator));
-  return {result: right === totalRight && !wrong ? 'correct' : credit > 0n ? 'partial' : 'wrong', credit: decimal(credit)};
+  if (!codes.length) return {result: 'unanswered', isCorrect: false};
+  const selected = [...codes].sort();
+  const correct = [...new Set(question.correctCodes)].sort();
+  if (!correct.length) throw new Error('Invalid question');
+  const isCorrect = JSON.stringify(selected) === JSON.stringify(correct);
+  return {result: isCorrect ? 'correct' : 'wrong', isCorrect};
 }
 export function summarize(questions, items) {
-  const results = questions.map((question, index) => ({questionId: question.id, ...grade(question, items[index])}));
-  const score = results.reduce((sum, item) => sum + hundredths(item.credit), 0n);
-  const maximum = BigInt(questions.length) * 100n;
-  return {confirmed: false, score: decimal(score), maxScore: decimal(maximum), percent: decimal(roundedRatio(score * 10000n, maximum)), items: results};
+  const results = questions.map((question, index) => ({questionId: question.id,
+    ...grade(question, items[index]?.answerStatus === 'answered' ? items[index] : {})}));
+  const score = results.filter(item => item.result === 'correct').length;
+  const maximum = questions.length;
+  return {confirmed: false, score:String(score), maxScore:String(maximum), percent:(score * 100 / maximum).toFixed(2), items:results};
 }

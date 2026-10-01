@@ -9,8 +9,8 @@ const spark = (...args) => execFileSync(php, ['-r', 'define("SUPPORTPATH", getcw
   {cwd, env: {...process.env, CI_ENVIRONMENT: 'testing'}, encoding: 'utf8'});
 const publicRoutes = ['/q/example', '/q/example/play', '/q/example/results', '/media/example'].map(route => ['GET', route, 'public']);
 const studentRoutes = [
-  ['GET', 'tickets/example'], ['POST', 'starts'], ['GET', 'assessments/example'], ['POST', 'assessments/example/sync'],
-  ['GET', 'assessments/example/results'], ['POST', 'assessments/example/events'], ['POST', 'assessments/example/media'], ['POST', 'practice/media'],
+  ['GET', 'tickets/example'], ['POST', 'starts'], ['GET', 'assessments/example'], ['PUT', 'assessments/example/answers/1'], ['POST', 'assessments/example/finish'],
+  ['GET', 'assessments/example/results'], ['POST', 'assessments/example/activity'], ['POST', 'assessments/example/events'], ['POST', 'assessments/example/media'], ['POST', 'practice/media'],
 ].map(([method, route]) => [method, '/api/v1/player/' + route, 'student']);
 const teacherRoutes = [
   ...['/dashboard', '/quizzes', '/quizzes/archived', '/quizzes/trash', '/quizzes/example/edit', '/results', '/results/quizzes/example', '/results/quizzes/example/export.csv', '/results/attempts/example', '/api/v1/csrf', '/api/v1/quizzes/example'].map(route => ['GET', route]),

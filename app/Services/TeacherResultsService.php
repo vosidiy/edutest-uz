@@ -46,10 +46,10 @@ final class TeacherResultsService
         $this->restoreAliases('q');
         $rowsBuilder = $builder
             ->select('q.id, q.public_id, q.title, q.mode, q.status, q.deleted_at, q.updated_at')
-            ->select("SUM(CASE WHEN a.status IN ('submitted', 'expired') THEN 1 ELSE 0 END) AS finalized_count", false)
+            ->select("SUM(CASE WHEN a.status IN ('completed', 'abandoned') THEN 1 ELSE 0 END) AS finalized_count", false)
             ->select("SUM(CASE WHEN a.status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress_count", false)
-            ->select("AVG(CASE WHEN a.status IN ('submitted', 'expired') THEN a.percent ELSE NULL END) AS average_percent", false)
-            ->select("MAX(CASE WHEN a.status IN ('submitted', 'expired') THEN a.submitted_at ELSE NULL END) AS latest_submission", false)
+            ->select("AVG(CASE WHEN a.status IN ('completed', 'abandoned') THEN a.percent ELSE NULL END) AS average_percent", false)
+            ->select("MAX(CASE WHEN a.status IN ('completed', 'abandoned') THEN a.finished_at ELSE NULL END) AS latest_submission", false)
             ->join('attempts a', 'a.quiz_id = q.id', 'left')
             ->groupBy('q.id, q.public_id, q.title, q.mode, q.status, q.deleted_at, q.updated_at');
 
@@ -67,9 +67,9 @@ final class TeacherResultsService
             ->getResultArray();
 
         $aggregate = $this->db->table('attempts a')
-            ->select("SUM(CASE WHEN a.status IN ('submitted', 'expired') THEN 1 ELSE 0 END) AS finalized_count", false)
+            ->select("SUM(CASE WHEN a.status IN ('completed', 'abandoned') THEN 1 ELSE 0 END) AS finalized_count", false)
             ->select("SUM(CASE WHEN a.status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress_count", false)
-            ->select("AVG(CASE WHEN a.status IN ('submitted', 'expired') THEN a.percent ELSE NULL END) AS average_percent", false)
+            ->select("AVG(CASE WHEN a.status IN ('completed', 'abandoned') THEN a.percent ELSE NULL END) AS average_percent", false)
             ->join('quizzes q', 'q.id = a.quiz_id')
             ->where('q.user_id', $userId)
             ->get()
@@ -109,6 +109,7 @@ final class TeacherResultsService
     public function quiz(int $userId, string $quizPublicId, array $input, string $timezone): array
     {
         $quiz = $this->ownedQuiz($userId, $quizPublicId);
+        $this->resolveOverdue((int) $quiz['id']);
         $filters = $this->normalizeAttemptFilters($input, true, $timezone);
         $attemptBuilder = $this->attemptBuilder((int) $quiz['id'], $filters);
         $total = (clone $attemptBuilder)->countAllResults();
@@ -155,8 +156,8 @@ final class TeacherResultsService
         }
 
         $attempt = $this->db->table('attempts a')
-            ->select('a.id, a.public_id, a.quiz_id, a.paper_id, a.name, a.email, a.phone, a.ip, a.agent, a.status, a.phase, a.settings, a.started_at, a.total_due_at, a.close_at, a.due_at, a.submitted_at, a.finish_reason, a.score, a.max_score, a.percent, a.updated_at')
-            ->select('a.responses, q.public_id AS quiz_public_id, q.title AS quiz_title, q.mode AS quiz_mode, q.status AS quiz_status, q.deleted_at AS quiz_deleted_at')
+            ->select('a.id, a.public_id, a.quiz_id, a.paper_id, a.name, a.email, a.phone, a.ip, a.agent, a.status, a.started_at, a.last_activity_at, a.client_activity_at, a.late_sync, a.expires_at, a.deadline_reason, a.finished_at, a.ended_reason, a.score, a.max_score, a.percent')
+            ->select('q.public_id AS quiz_public_id, q.title AS quiz_title, q.mode AS quiz_mode, q.status AS quiz_status, q.deleted_at AS quiz_deleted_at')
             ->select('p.public_id AS paper_public_id, p.revision AS paper_revision, p.definition AS paper_definition')
             ->join('quizzes q', 'q.id = a.quiz_id')
             ->join('quiz_papers p', 'p.id = a.paper_id AND p.quiz_id = a.quiz_id')
@@ -168,6 +169,8 @@ final class TeacherResultsService
         if ($attempt === null) {
             throw new ReportingException('attempt_not_found', 'Attempt not found.');
         }
+        $this->resolveOverdue((int) $attempt['quiz_id']);
+        $attempt = $this->db->table('attempts')->where('id', $attempt['id'])->get()->getRowArray() + $attempt;
 
         $paper = [
             'id' => $attempt['paper_id'], 'quiz_id' => $attempt['quiz_id'],
@@ -184,7 +187,7 @@ final class TeacherResultsService
             $snapshotById[(string) $question['id']] = $question;
         }
 
-        $items = \App\Services\Player\AttemptResponses::decode($attempt['responses']);
+        $items = $this->db->table('attempt_answers')->where('attempt_id', $attempt['id'])->orderBy('pos')->get()->getResultArray();
 
         $events = $this->db->table('cheat_events')
             ->select('type, happened_at, received_at, duration_ms, data')
@@ -193,15 +196,20 @@ final class TeacherResultsService
             ->get()->getResultArray();
 
         $questionReviews = [];
-        foreach ($items as $item) {
+        $activeAssigned = false;
+        foreach ($items as $index => $item) {
             $snapshot = $snapshotById[(string) $item['question_id']] ?? null;
             if (is_array($snapshot)) {
-                $questionReviews[] = $this->questionReview($item, $snapshot, $paper, $timezone);
+                $status = $item['status'] === 'not_reached'
+                    ? (! $activeAssigned && $attempt['status'] === 'in_progress' ? 'active' : 'pending')
+                    : 'locked';
+                if ($status === 'active') $activeAssigned = true;
+                $questionReviews[] = $this->questionReview($item, $snapshot, $paper, $status, $timezone);
             }
         }
 
-        $settings = $this->jsonArray($attempt['settings']);
-        $duration = $this->durationSeconds($attempt['started_at'], $attempt['submitted_at'] ?? $attempt['updated_at']);
+        $settings = $this->papers()->settings($paper);
+        $duration = $this->durationSeconds($attempt['started_at'], $attempt['finished_at'] ?? $attempt['last_activity_at']);
         $paperQuiz = $definition['quiz'];
 
         return [
@@ -209,15 +217,16 @@ final class TeacherResultsService
                 'publicId' => (string) $attempt['public_id'], 'name' => (string) $attempt['name'],
                 'email' => $this->nullableString($attempt['email']), 'phone' => $this->nullableString($attempt['phone']),
                 'ip' => $this->nullableString($attempt['ip']), 'agent' => $this->nullableString($attempt['agent']),
-                'status' => (string) $attempt['status'], 'phase' => (string) $attempt['phase'],
-                'finishReason' => $this->nullableString($attempt['finish_reason']),
+                'status' => (string) $attempt['status'],
+                'finishReason' => $this->nullableString($attempt['ended_reason']),
+                'lateSync' => (bool) $attempt['late_sync'],
                 'score' => $this->decimalOrNull($attempt['score']), 'maxScore' => $this->decimal((string) $attempt['max_score']),
                 'percent' => $this->decimalOrNull($attempt['percent']),
                 'startedAt' => $this->localDate($attempt['started_at'], $timezone),
-                'submittedAt' => $this->localDate($attempt['submitted_at'], $timezone),
-                'updatedAt' => $this->localDate($attempt['updated_at'], $timezone),
-                'totalDueAt' => $this->localDate($attempt['total_due_at'], $timezone),
-                'closeAt' => $this->localDate($attempt['close_at'], $timezone),
+                'submittedAt' => $this->localDate($attempt['finished_at'], $timezone),
+                'updatedAt' => $this->localDate($attempt['last_activity_at'], $timezone),
+                'expiresAt' => $this->localDate($attempt['expires_at'], $timezone),
+                'deadlineReason' => (string) $attempt['deadline_reason'],
                 'durationSec' => $duration, 'duration' => $this->formatDuration($duration),
                 'paperRevision' => (int) $attempt['paper_revision'],
             ],
@@ -237,7 +246,7 @@ final class TeacherResultsService
                 'description' => (string) ($paperQuiz['description'] ?? ''),
                 'instructions' => (string) ($paperQuiz['instructions'] ?? ''),
             ],
-            'policies' => $this->policySummary($settings, $attempt, $timezone),
+            'policies' => $this->policySummary($settings, $definition['quiz'], $timezone),
             'questions' => $questionReviews,
             'events' => array_map(fn (array $event): array => [
                 'type' => (string) $event['type'],
@@ -256,6 +265,7 @@ final class TeacherResultsService
     public function export(int $userId, string $quizPublicId, array $input, string $timezone): array
     {
         $quiz = $this->ownedQuiz($userId, $quizPublicId);
+        $this->resolveOverdue((int) $quiz['id']);
         $filters = $this->normalizeAttemptFilters($input, false, $timezone);
 
         return [
@@ -285,21 +295,22 @@ final class TeacherResultsService
             $rows = $builder->limit(self::EXPORT_BATCH_SIZE, $offset)->get()->getResultArray();
 
             foreach ($rows as $row) {
-                $duration = $this->durationSeconds($row['started_at'], $row['submitted_at'] ?? $row['updated_at']);
+                $duration = $this->durationSeconds($row['started_at'], $row['finished_at'] ?? $row['last_activity_at']);
                 yield [
                     'attemptPublicId' => (string) $row['public_id'],
                     'name'            => (string) $row['name'],
                     'email'           => $this->nullableString($row['email']) ?? '',
                     'phone'           => $this->nullableString($row['phone']) ?? '',
                     'status'          => (string) $row['status'],
-                    'finishReason'    => $this->nullableString($row['finish_reason']) ?? '',
+                    'finishReason'    => $this->nullableString($row['ended_reason']) ?? '',
                     'score'           => $this->decimalOrNull($row['score']) ?? '',
                     'maxScore'        => $this->decimal((string) $row['max_score']),
                     'percentage'      => $this->decimalOrNull($row['percent']) ?? '',
                     'startedAt'       => $this->localIso($row['started_at'], $timezone) ?? '',
-                    'submittedAt'     => $this->localIso($row['submitted_at'], $timezone) ?? '',
+                    'submittedAt'     => $this->localIso($row['finished_at'], $timezone) ?? '',
                     'durationSeconds' => $duration === null ? '' : (string) $duration,
                     'integrityEvents' => (string) (int) $row['integrity_count'],
+                    'lateSync' => (bool) $row['late_sync'] ? 'yes' : 'no',
                 ];
             }
 
@@ -311,9 +322,9 @@ final class TeacherResultsService
     private function quizMetrics(int $quizId): array
     {
         $aggregate = $this->db->table('attempts')
-            ->select("SUM(CASE WHEN status IN ('submitted', 'expired') THEN 1 ELSE 0 END) AS finalized_count", false)
+            ->select("SUM(CASE WHEN status IN ('completed', 'abandoned') THEN 1 ELSE 0 END) AS finalized_count", false)
             ->select("SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress_count", false)
-            ->select("AVG(CASE WHEN status IN ('submitted', 'expired') THEN percent ELSE NULL END) AS average_percent", false)
+            ->select("AVG(CASE WHEN status IN ('completed', 'abandoned') THEN percent ELSE NULL END) AS average_percent", false)
             ->where('quiz_id', $quizId)
             ->get()->getRowArray() ?? [];
 
@@ -327,11 +338,11 @@ final class TeacherResultsService
     /** @param array<string, mixed> $item
      *  @return array<string, mixed>
      */
-    private function questionReview(array $item, array $question, array $paper, string $timezone): array
+    private function questionReview(array $item, array $question, array $paper, string $status, string $timezone): array
     {
         $options = is_array($question['options'] ?? null) ? $question['options'] : [];
-        $choiceOrder = array_map('strval', $this->jsonArray($item['choice_order']));
-        $selectedCodes = array_map('strval', $this->jsonArray($item['answer_codes']));
+        $choiceOrder = array_map('strval', $this->jsonArray($item['presented_option_codes']));
+        $selectedCodes = array_map('strval', $this->jsonArray($item['selected_option_codes']));
         $byCode = [];
         foreach ($options as $option) {
             $byCode[(string) $option['code']] = $option;
@@ -377,7 +388,6 @@ final class TeacherResultsService
         }
 
         $accepted = array_values(array_filter(array_map(static fn (mixed $value): string => is_scalar($value) ? trim((string) $value) : '', $question['acceptedAnswers'] ?? []), static fn (string $value): bool => $value !== ''));
-        $duration = $this->durationSeconds($item['started_at'], $item['locked_at']);
         $isText = ($question['type'] ?? null) === 'short_text';
 
         return [
@@ -385,14 +395,11 @@ final class TeacherResultsService
             'type' => (string) $question['type'],
             'content' => (string) $question['content'],
             'explanation' => $this->nullableString($question['explanation'] ?? null),
-            'status' => (string) $item['status'],
-            'result' => $this->nullableString($item['result']),
-            'lockReason' => $this->nullableString($item['lock_reason']),
-            'responseTimeSec' => $duration, 'responseTime' => $this->formatDuration($duration),
-            'startedAt' => $this->localDate($item['started_at'], $timezone),
-            'lockedAt' => $this->localDate($item['locked_at'], $timezone),
-            'savedAt' => $this->localDate($item['saved_at'], $timezone),
+            'status' => $status,
+            'result' => $item['status'] === 'not_reached' ? null : ($item['status'] === 'skipped' ? 'unanswered' : ((bool) $item['is_correct'] ? 'correct' : 'wrong')),
             'answer' => $isText ? $this->nullableString($item['text_answer']) : $selectedAnswers,
+            'answeredAt' => $this->localDate($item['answered_at'], $timezone),
+            'clientAnsweredAt' => $this->localDate($item['client_answered_at'] ?? null, $timezone),
             'correctAnswer' => $isText ? $accepted : $correctAnswers,
             'options' => $renderedOptions,
             'media' => $this->paperMedia($paper, $question['media'] ?? null),
@@ -410,10 +417,10 @@ final class TeacherResultsService
             ->where('a.quiz_id', $quizId);
 
         match ($filters['status']) {
-            'finalized'   => $builder->whereIn('a.status', ['submitted', 'expired']),
+            'finalized'   => $builder->whereIn('a.status', ['completed', 'abandoned']),
             'in_progress' => $builder->where('a.status', 'in_progress'),
-            'submitted'   => $builder->where('a.status', 'submitted'),
-            'expired'     => $builder->where('a.status', 'expired'),
+            'completed'   => $builder->where('a.status', 'completed'),
+            'abandoned'   => $builder->where('a.status', 'abandoned'),
             default       => null,
         };
 
@@ -447,7 +454,7 @@ final class TeacherResultsService
 
     private function selectAttemptRows(BaseBuilder $builder, string $sort): BaseBuilder
     {
-        $builder->select('a.public_id, a.name, a.email, a.phone, a.status, a.finish_reason, a.score, a.max_score, a.percent, a.started_at, a.submitted_at, a.updated_at')
+        $builder->select('a.public_id, a.name, a.email, a.phone, a.status, a.ended_reason, a.score, a.max_score, a.percent, a.started_at, a.finished_at, a.last_activity_at, a.late_sync')
             ->select('p.revision AS paper_revision')
             ->select('COALESCE(ev.integrity_count, 0) AS integrity_count', false);
 
@@ -465,19 +472,20 @@ final class TeacherResultsService
     /** @return array<string, mixed> */
     private function attemptRow(array $row, string $timezone): array
     {
-        $duration = $this->durationSeconds($row['started_at'], $row['submitted_at'] ?? $row['updated_at']);
+        $duration = $this->durationSeconds($row['started_at'], $row['finished_at'] ?? $row['last_activity_at']);
         return [
             'publicId'      => (string) $row['public_id'],
             'name'          => (string) $row['name'],
             'email'         => $this->nullableString($row['email']),
             'phone'         => $this->nullableString($row['phone']),
             'status'        => (string) $row['status'],
-            'finishReason'  => $this->nullableString($row['finish_reason']),
+            'finishReason'  => $this->nullableString($row['ended_reason']),
+            'lateSync' => (bool) $row['late_sync'],
             'score'         => $this->decimalOrNull($row['score']),
             'maxScore'      => $this->decimal((string) $row['max_score']),
             'percent'       => $this->decimalOrNull($row['percent']),
             'startedAt'     => $this->localDate($row['started_at'], $timezone),
-            'submittedAt'   => $this->localDate($row['submitted_at'], $timezone),
+            'submittedAt'   => $this->localDate($row['finished_at'], $timezone),
             'durationSec'   => $duration,
             'duration'      => $this->formatDuration($duration),
             'integrityCount'=> (int) $row['integrity_count'],
@@ -564,7 +572,7 @@ final class TeacherResultsService
     private function normalizeAttemptFilters(array $input, bool $withPage, string $timezone): array
     {
         $status = (string) ($input['status'] ?? 'finalized');
-        if (! in_array($status, ['finalized', 'in_progress', 'submitted', 'expired', 'all'], true)) {
+        if (! in_array($status, ['finalized', 'in_progress', 'completed', 'abandoned', 'all'], true)) {
             $status = 'finalized';
         }
         $integrity = (string) ($input['integrity'] ?? 'all');
@@ -773,7 +781,7 @@ final class TeacherResultsService
             ['label' => lang('Results.showAnswers'), 'value' => $bool($read($settings, 'showAnswers', 'show_answers'))],
             ['label' => lang('Results.showExplanations'), 'value' => $bool($read($settings, 'showExplain', 'show_explain'))],
             ['label' => lang('Results.integrityMonitoring'), 'value' => $bool($read($settings, 'cheatCheck', 'cheat_check'))],
-            ['label' => lang('Results.capturedClosingTime'), 'value' => $this->localDate($attempt['close_at'], $timezone)['display'] ?? lang('Results.none')],
+            ['label' => lang('Results.capturedClosingTime'), 'value' => $this->localDate($attempt['closesAt'] ?? null, $timezone)['display'] ?? lang('Results.none')],
         ];
     }
 
@@ -814,6 +822,12 @@ final class TeacherResultsService
     private function media(): MediaService
     {
         return $this->media ?? service('media');
+    }
+
+    private function resolveOverdue(int $quizId): void
+    {
+        (new \App\Services\Player\PlayerRuntime($this->db, $this->media(), $this->papers()))
+            ->assessment->resolveQuizOverdue($quizId);
     }
 
     private function restoreAliases(string ...$aliases): void

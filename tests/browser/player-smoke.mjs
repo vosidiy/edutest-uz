@@ -48,22 +48,31 @@ const server = http.createServer(async (request, response) => {
     if (url.pathname.endsWith('/starts')) {
       starts++;
       const now = new Date().toISOString();
-      official = {mode, attemptId: mode === 'assessment' ? 'fixture' : null, credential: 'fixture-credential', version: 1, status: 'in_progress', phase: 'answering', startedAt: now,
-        totalDueAt: new Date(Date.now() + 600000).toISOString(), closeAt: null, result: null, finishReason: null,
+      official = {mode, attemptId: mode === 'assessment' ? 'fixture' : null, credential: 'fixture-credential', status: 'in_progress', startedAt: now,
+        expiresAt: new Date(Date.now() + 600000).toISOString(), deadlineReason: 'timer_expired', result: null, finishReason: null,
         quiz: {...quiz(), settings: {feedback, ...(typeof visibility === 'boolean' ? {showScore: visibility, showAnswers: visibility, showExplain: visibility} : visibility), cheatCheck: integrity}, questions: questions()},
-        items: questions().map((question, index) => ({questionId: question.id, status: index === 0 ? 'active' : 'pending', saveVer: 0, answerCodes: [], textAnswer: '', submitKey: null, reason: null, startedAt: index === 0 ? now : null}))};
+        items: questions().map((question, index) => ({questionId: question.id, status: index === 0 ? 'active' : 'pending', answerStatus: 'not_reached', answerCodes: [], textAnswer: ''}))};
       if (loseStartResponse) { loseStartResponse = false; response.writeHead(200, {'Content-Type': 'application/json'}).end('{"data":'); return; }
       json(response, official); return;
     }
-    if (url.pathname.endsWith('/sync')) {
+    if (url.pathname.includes('/assessments/') && url.pathname.includes('/answers/')) {
       if (forceConflict) {
-        forceConflict = false; official.version++;
-        Object.assign(official.items[0], {status: 'locked', answerCodes: ['berlin'], submitKey: 'b'.repeat(32), reason: 'answered', saveVer: 2});
+        forceConflict = false;
+        Object.assign(official.items[0], {status: 'locked', answerStatus: 'answered', answerCodes: ['berlin'], textAnswer: ''});
         response.writeHead(409, {'Content-Type': 'application/json'}).end(JSON.stringify({error: {code: 'progress_conflict', message: 'Conflict'}, meta: {timestamp: new Date().toISOString()}})); return;
       }
-      for (const item of body.items) Object.assign(official.items.find(row => row.questionId === item.questionId), item, {status: item.submitKey ? 'locked' : 'active'});
-      official.version++;
-      if (body.finishReason) { official.finishReason = body.finishReason; official.status = 'submitted'; official.phase = 'complete'; official.result = {...summarize(official.quiz.questions, official.items), confirmed: true, lateSync: false}; }
+      const questionId = decodeURIComponent(url.pathname.split('/').pop());
+      const item = official.items.find(row => row.questionId === questionId);
+      Object.assign(item, {answerCodes: body.answerCodes || [], textAnswer: body.textAnswer || '', answerStatus: body.status, status: 'locked'});
+      const next = official.items.find(row => row.status === 'pending');
+      if (next) next.status = 'active';
+      json(response, official); return;
+    }
+    if (url.pathname.endsWith('/finish')) {
+      if (official.items.some(item => item.status !== 'locked')) {
+        response.writeHead(409, {'Content-Type': 'application/json'}).end(JSON.stringify({error: {code: 'not_finished', message: 'Not finished'}, meta: {timestamp: new Date().toISOString()}})); return;
+      }
+      official.finishReason = 'completed'; official.status = 'completed'; official.result = {...summarize(official.quiz.questions, official.items), confirmed: true};
       json(response, official); return;
     }
     if (url.pathname.endsWith('/events')) { json(response, {accepted: true}); return; }
@@ -98,7 +107,7 @@ async function viewport(width, height) { await command('Emulation.setDeviceMetri
 async function navigate() {
   // Clear between independent fixtures after old-page pagehide has persisted its state.
   const marker = crypto.randomUUID();
-  const script = await command('Page.addScriptToEvaluateOnNewDocument', {source: `sessionStorage.clear(); window.__fixtureNavigation = ${JSON.stringify(marker)};`});
+  const script = await command('Page.addScriptToEvaluateOnNewDocument', {source: `localStorage.clear(); window.__fixtureNavigation = ${JSON.stringify(marker)};`});
   await command('Page.navigate', {url: `${origin}/q/${token}`});
   await until(() => evaluate(`window.__fixtureNavigation === ${JSON.stringify(marker)} && Boolean(document.querySelector("#quiz-admission"))`), 'introduction');
   await command('Page.removeScriptToEvaluateOnNewDocument', {identifier: script.identifier});
@@ -150,10 +159,10 @@ try {
   await evaluate('window.dispatchEvent(new Event("online"))');
   await until(() => evaluate('document.querySelector(".player-results-header").textContent.includes("Result confirmed")'), 'online confirmation');
   assert.equal(await evaluate('document.querySelector(".player-score").textContent'), '100.00%'); await screenshot('results-mobile');
-  assert.equal(await evaluate('document.querySelector(".player-results-header").textContent.includes("3.00 / 3.00 questions")'), true);
+  assert.equal(await evaluate('document.querySelector(".player-results-header").textContent.includes("3 / 3 questions")'), true);
   assert.equal(starts, 1);
   // Anonymous at-end mode with every result-visibility toggle off.
-  await evaluate('sessionStorage.clear()'); official = null; mode = 'practice'; feedback = 'at_end'; visibility = false; integrity = false;
+  await evaluate('localStorage.clear()'); official = null; mode = 'practice'; feedback = 'at_end'; visibility = false; integrity = false;
   const requestIndex = requests.length;
   await navigate(); await startQuiz();
   await clickText('Skip question'); assert.equal(await evaluate('document.querySelector(".player-feedback") === null'), true);
@@ -161,9 +170,9 @@ try {
   assert.equal(await evaluate('document.querySelector(".player-score") === null'), true);
   await evaluate('document.querySelector(".player-review-item").open = true'); await pause(100);
   assert.equal(await evaluate('document.querySelector(".player-feedback").textContent.includes("Correct answer")'), false);
-  assert.equal(requests.slice(requestIndex).some(request => /sync|events|results/.test(request.path)), false);
+  assert.equal(requests.slice(requestIndex).some(request => /answers|finish|events|results/.test(request.path)), false);
   // Real conflict UI and focus trap.
-  await evaluate('sessionStorage.clear()'); official = null; mode = 'assessment'; feedback = 'after_each'; visibility = true;
+  await evaluate('localStorage.clear()'); official = null; mode = 'assessment'; feedback = 'after_each'; visibility = true;
   await navigate(); await startQuiz(); forceConflict = true;
   await evaluate('document.querySelector("input[value=paris]").click()'); await clickText('Submit answer');
   await until(() => evaluate('document.querySelector("#player-conflict").open'), 'conflict dialog'); await screenshot('conflict-mobile');
@@ -177,7 +186,7 @@ try {
   await until(() => evaluate('Boolean(document.querySelector(".player-question fieldset:disabled"))'), 'refresh recovery');
   assert.equal(starts, previousStarts);
   // Every valid feedback/visibility combination (explanations require answer visibility).
-  await evaluate('sessionStorage.clear()'); mode = 'practice';
+  await evaluate('localStorage.clear()'); mode = 'practice';
   for (const timing of ['after_each', 'at_end']) for (const showScore of [false, true]) for (const [showAnswers, showExplain] of [[false, false], [true, false], [true, true]]) {
     feedback = timing; visibility = {showScore, showAnswers, showExplain}; official = null;
     await navigate(); await startQuiz(); await evaluate('document.querySelector("input[value=paris]").click()'); await clickText('Submit answer');
@@ -194,7 +203,7 @@ try {
     await until(() => evaluate('Boolean(document.querySelector(".player-feedback"))'), 'result review');
     assert.equal(await evaluate('document.querySelector(".player-feedback").textContent.includes("Correct answer")'), showAnswers);
     assert.equal(await evaluate('document.querySelector(".player-feedback").textContent.includes("Explanation")'), showExplain);
-    await evaluate('sessionStorage.clear()');
+    await evaluate('localStorage.clear()');
   }
   // A lost start acknowledgement recovers using the pre-stored bearer, not another start.
   mode = 'assessment'; feedback = 'after_each'; visibility = true; official = null; loseStartResponse = true;
@@ -205,15 +214,97 @@ try {
   const acceptedStarts = starts;
   await startQuiz(); assert.equal(starts, acceptedStarts);
   // No storage: continue in memory and explain the loss-of-recovery risk.
-  await evaluate('sessionStorage.clear()'); mode = 'practice'; official = null;
+  await evaluate('localStorage.clear()'); mode = 'practice'; official = null;
   const storageScript = await command('Page.addScriptToEvaluateOnNewDocument', {source: 'Storage.prototype.setItem = function () { throw new DOMException("Fixture quota", "QuotaExceededError"); };'});
   await navigate(); await startQuiz();
   assert.equal(await evaluate('document.querySelector("#player-alert").textContent.includes("storage")'), true);
   await clickText('Skip question'); await clickText('Next question');
   assert.equal(await evaluate('document.querySelector(".player-question-number").textContent'), 'Question 2 of 3');
   await command('Page.removeScriptToEvaluateOnNewDocument', {identifier: storageScript.identifier});
+  // Two real Chrome tabs: one active run per quiz, including offline finalization.
+  const primarySession=sessionId;
+  mode='assessment';feedback='at_end';visibility=true;integrity=false;official=null;
+  await navigate();await startQuiz();
+  const originalStarts=starts;
+  const stored=await evaluate(`localStorage.getItem('edutest:player:${token}')`);
+  const secondTarget=await command('Target.createTarget',{url:'about:blank'},null);
+  const secondarySession=(await command('Target.attachToTarget',{targetId:secondTarget.targetId,flatten:true},null)).sessionId;
+  sessionId=secondarySession;
+  await command('Page.enable');await command('Runtime.enable');await command('Network.enable');await viewport(390,844);
+  await navigate();
+  await until(()=>evaluate('Boolean(document.querySelector("#quiz-admission button:not(:disabled)"))'),'second tab ready');
+  await evaluate('document.querySelector("[name=name]").value="Second tab";document.querySelector("#quiz-admission button").click()');
+  await until(()=>evaluate('Boolean(document.querySelector("[data-tab-blocked]"))'),'second start blocked');
+  assert.equal(await evaluate('(()=>{const bounds=document.querySelector("[data-tab-blocked]").getBoundingClientRect();return bounds.top>=0 && bounds.bottom<=innerHeight})()'),true,'blocked message is visible even below a long introduction');
+  assert.equal(starts,originalStarts);await screenshot('second-tab-blocked');
+  // Simulate a duplicated tab's copied localStorage; its confirmations/events cannot sync.
+  const cloned=JSON.parse(stored);cloned.items[0].answerCodes=['paris'];
+  cloned.pendingAnswers.push({questionId:cloned.items[0].questionId,status:'answered',answerCodes:['paris'],textAnswer:''});
+  cloned.events=[{key:'fixture-duplicate-event',type:'tab_hidden',happenedAt:new Date().toISOString()}];
+  await evaluate(`localStorage.setItem('edutest:player:${token}',${JSON.stringify(JSON.stringify(cloned))})`);
+  const beforeBlocked=requests.length;
+  await command('Page.navigate',{url:`${origin}/q/${token}/play`});
+  await until(()=>evaluate('Boolean(document.querySelector("[data-tab-blocked]"))'),'duplicated tab blocked');
+  await evaluate('window.dispatchEvent(new Event("online"));document.dispatchEvent(new Event("visibilitychange"))');await pause(600);
+  assert.equal(requests.slice(beforeBlocked).some(row=>/answers|finish|events|media/.test(row.path)),false);
+  assert.equal(await evaluate(`JSON.parse(localStorage.getItem('edutest:player:${token}')).pendingAnswers.length`),cloned.pendingAnswers.length);
+  // Use the clean copy for resume after completion, avoiding an intentional answer conflict.
+  await evaluate(`localStorage.setItem('edutest:player:${token}',${JSON.stringify(stored)})`);
+  await command('Page.reload');await until(()=>evaluate('Boolean(document.querySelector("[data-tab-blocked]"))'),'blocked refresh');
+  sessionId=primarySession;
+  await command('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
+  await clickText('Skip question');await clickText('Skip question');await clickText('Skip question');
+  assert.equal(await evaluate('document.querySelector(".player-results-header").textContent.includes("Provisional")'),true);
+  assert.equal(await evaluate('(async()=> (await navigator.locks.query()).held.length)()'),1);
+  sessionId=secondarySession;await evaluate('document.querySelector("[data-tab-blocked] button").click()');
+  await until(()=>evaluate('Boolean(document.querySelector("[data-tab-blocked]"))'),'pending sync still blocks');
+  sessionId=primarySession;
+  await command('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
+  await evaluate('window.dispatchEvent(new Event("online"))');
+  await until(()=>evaluate('document.querySelector(".player-results-header").textContent.includes("Result confirmed")'),'owner sync complete');
+  await until(()=>evaluate('(async()=> (await navigator.locks.query()).held.length===0)()'),'completion releases lock');
+  sessionId=secondarySession;await evaluate('document.querySelector("[data-tab-blocked] button").click()');
+  await until(()=>evaluate('Boolean(document.querySelector(".player-results-header"))'),'duplicate resumes confirmed result');
+  assert.equal(starts,originalStarts);
+  // Closing an owning tab releases it. Practice completion and Try again release/reacquire.
+  mode='practice';official=null;
+  await navigate();await startQuiz();
+  sessionId=primarySession;await navigate();
+  await until(()=>evaluate('Boolean(document.querySelector("#quiz-admission button:not(:disabled)"))'),'practice second ready');
+  await evaluate('document.querySelector("#quiz-admission button").click()');
+  await until(()=>evaluate('Boolean(document.querySelector("[data-tab-blocked]"))'),'practice blocked');
+  await command('Target.closeTarget',{targetId:secondTarget.targetId},null);
+  await evaluate('document.querySelector("[data-tab-blocked] button").click()');
+  await until(()=>evaluate('Boolean(document.querySelector(".player-question"))'),'owner closure recovery');
+  await clickText('Skip question');await clickText('Skip question');await clickText('Skip question');
+  await until(()=>evaluate('(async()=> (await navigator.locks.query()).held.length===0)()'),'practice completion releases');
+  // An ambiguous practice restart keeps its old result and lock, including after refresh.
+  loseStartResponse=true;
+  await evaluate('document.querySelector("[data-try-again]").click()');
+  await until(()=>evaluate('!document.querySelector("#player-alert").hidden && !document.querySelector("[data-try-again]").disabled'),'practice retry lost response');
+  assert.equal(await evaluate('Boolean(document.querySelector(".player-results-header"))'),true);
+  assert.equal(await evaluate('(async()=> (await navigator.locks.query()).held.length)()'),1);
+  await command('Page.reload');
+  await until(()=>evaluate('Boolean(document.querySelector(".player-results-header"))'),'pending practice restart after refresh');
+  assert.equal(await evaluate('(async()=> (await navigator.locks.query()).held.length)()'),1);
+  const beforeRetry=starts;
+  await evaluate('document.querySelector("[data-try-again]").click()');
+  await until(()=>evaluate('Boolean(document.querySelector(".player-question"))'),'practice restart');
+  assert.equal(starts,beforeRetry+1);
+  assert.equal(await evaluate('(async()=> (await navigator.locks.query()).held.length)()'),1);
+  // Page lifecycle releases/reacquires; unsupported/denied APIs fail open with a notice.
+  await evaluate('window.dispatchEvent(new PageTransitionEvent("pagehide",{persisted:true}))');
+  await until(()=>evaluate('(async()=> (await navigator.locks.query()).held.length===0)()'),'pagehide releases');
+  await evaluate('window.dispatchEvent(new PageTransitionEvent("pageshow",{persisted:true}))');
+  await until(()=>evaluate('(async()=> (await navigator.locks.query()).held.length===1)()'),'pageshow reacquires');
+  for(const replacement of ['undefined','{request:()=>Promise.reject(new DOMException("Denied","SecurityError"))}']){
+    const fallback=await command('Page.addScriptToEvaluateOnNewDocument',{source:`Object.defineProperty(navigator,"locks",{value:${replacement},configurable:true})`});
+    official=null;await navigate();await startQuiz();
+    assert.equal(await evaluate('document.querySelector("#player-alert").textContent.includes("Duplicate-tab protection is unavailable")'),true);
+    await command('Page.removeScriptToEvaluateOnNewDocument',{identifier:fallback.identifier});
+  }
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({passed: true, widths: [1280, 768, 390], checks: ['actual PHP views', 'keyboard focus', 'reduced motion', 'offline completion', 'server confirmation', 'anonymous practice', '12 visibility combinations', 'conflict dialog', 'refresh recovery', 'lost start acknowledgement', 'storage unavailable'], artifacts}, null, 2));
+  console.log(JSON.stringify({passed: true, widths: [1280, 768, 390], checks: ['actual PHP views', 'keyboard focus', 'reduced motion', 'offline completion', 'server confirmation', 'anonymous practice', '12 visibility combinations', 'conflict dialog', 'refresh recovery', 'lost start acknowledgement', 'storage unavailable', 'two-tab start exclusion', 'duplicated tab progress preservation', 'offline pending-sync ownership', 'owner tab closure', 'practice retry ownership and ambiguous recovery', 'pagehide/pageshow reacquisition', 'missing/denied Web Locks fallback'], artifacts}, null, 2));
 } catch (error) {
   console.error(JSON.stringify({error: error.message, errors, networkFailures, requests: requests.slice(-12), artifacts, page: socket ? await evaluate('({text:document.body.innerText, scripts:[...document.scripts].map(s=>s.src)})').catch(() => '') : ''}, null, 2));
   if (socket) await screenshot('failure').catch(() => {});

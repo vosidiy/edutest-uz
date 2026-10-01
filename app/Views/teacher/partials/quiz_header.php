@@ -8,8 +8,8 @@
             <div class="builder-actions">
                 <button class="btn btn-neutral" type="button" @click="preview = !preview">{{ preview ? 'Edit' : 'Preview' }}</button>
                 <button class="btn" :class="saveButton.primary ? 'btn-primary' : 'btn-default'" type="button" data-save-quiz @click="save(true)" :disabled="saveButton.disabled">{{ workspaceMessages[saveButton.label] }}</button>
-                <button v-if="quiz.status === 'draft'" class="btn btn-primary" type="button" @click="lifecycle('publish')" :disabled="saving || mediaBusy || !publishReady" :aria-describedby="!publishReady ? 'publish-readiness' : null" :title="publishReadinessMessage">Publish</button>
-                <button v-else-if="quiz.status === 'published'" class="btn btn-default" type="button" @click="copyShare">Copy link</button>
+                <button v-if="quiz.status === 'draft' || quiz.hasUnpublishedChanges" class="btn btn-primary" type="button" @click="lifecycle('publish')" :disabled="saving || mediaBusy || !publishReady" :aria-describedby="!publishReady ? 'publish-readiness' : null" :title="publishReadinessMessage">{{ quiz.hasPublished ? 'Publish changes' : 'Publish' }}</button>
+                <button v-if="quiz.hasPublished" class="btn btn-default" type="button" @click="copyShare">Copy link</button>
             </div>
         </header>
 <?php else : ?>

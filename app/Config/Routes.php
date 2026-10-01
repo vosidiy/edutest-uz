@@ -14,7 +14,9 @@ $routes->group('api/v1/player', ['namespace' => 'App\Controllers\Student', 'filt
     $routes->get('tickets/(:segment)', 'PlayerController::ticket/$1');
     $routes->post('starts', 'PlayerController::start');
     $routes->get('assessments/(:segment)', 'PlayerController::show/$1');
-    $routes->post('assessments/(:segment)/sync', 'PlayerController::sync/$1');
+    $routes->put('assessments/(:segment)/answers/(:num)', 'PlayerController::answer/$1/$2');
+    $routes->post('assessments/(:segment)/finish', 'PlayerController::finish/$1');
+    $routes->post('assessments/(:segment)/activity', 'PlayerController::activity/$1');
     $routes->get('assessments/(:segment)/results', 'PlayerController::results/$1');
     $routes->post('assessments/(:segment)/events', 'PlayerController::events/$1');
     $routes->post('assessments/(:segment)/media', 'PlayerController::assessmentMedia/$1');

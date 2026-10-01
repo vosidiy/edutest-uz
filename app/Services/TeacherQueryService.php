@@ -24,11 +24,9 @@ final class TeacherQueryService
         $base = fn () => $this->db->table('quizzes')->where('user_id', $userId)->where('deleted_at', null);
         $total = $base()->where('status !=', 'archived')->countAllResults();
         $published = $base()->where('status', 'published')->countAllResults();
-        $practice = $base()->selectSum('practice_starts', 'total')->get()->getRowArray();
         $aggregate = $this->db->table('attempts a')
-            ->select("SUM(CASE WHEN a.status IN ('submitted', 'expired') THEN 1 ELSE 0 END) AS finalized_count", false)
+            ->select("SUM(CASE WHEN a.status IN ('completed', 'abandoned') THEN 1 ELSE 0 END) AS finalized_count", false)
             ->select("SUM(CASE WHEN a.status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress_count", false)
-            ->select("AVG(CASE WHEN a.status IN ('submitted', 'expired') THEN a.percent END) AS average_percent", false)
             ->join('quizzes q', 'q.id = a.quiz_id')->where('q.user_id', $userId)->get()->getRowArray();
         $filters = $this->normalizeFilters($input);
         return [
@@ -36,8 +34,6 @@ final class TeacherQueryService
                 'totalQuizzes' => $total, 'publishedQuizzes' => $published,
                 'assessmentSubmissions' => (int) ($aggregate['finalized_count'] ?? 0),
                 'inProgressAttempts' => (int) ($aggregate['in_progress_count'] ?? 0),
-                'averagePercent' => $this->decimal($aggregate['average_percent'] ?? null),
-                'practiceStarts' => (int) ($practice['total'] ?? 0),
             ],
             'library' => $this->library($userId, $input, $filters['view'], $timezone),
         ];
@@ -77,10 +73,10 @@ final class TeacherQueryService
         // Aggregate children separately: joining questions to attempts would multiply counts.
         $stats = $this->db->table('attempts a')->select('a.quiz_id')
             ->select('COUNT(*) AS attempt_count', false)
-            ->select("SUM(CASE WHEN a.status IN ('submitted', 'expired') THEN 1 ELSE 0 END) AS finalized_count", false)
+            ->select("SUM(CASE WHEN a.status IN ('completed', 'abandoned') THEN 1 ELSE 0 END) AS finalized_count", false)
             ->select("SUM(CASE WHEN a.status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress_count", false)
-            ->select("AVG(CASE WHEN a.status IN ('submitted', 'expired') THEN a.percent END) AS average_percent", false)
-            ->select("MAX(CASE WHEN a.status IN ('submitted', 'expired') THEN a.submitted_at END) AS latest_submission", false)
+            ->select("AVG(CASE WHEN a.status IN ('completed', 'abandoned') THEN a.percent END) AS average_percent", false)
+            ->select("MAX(CASE WHEN a.status IN ('completed', 'abandoned') THEN a.finished_at END) AS latest_submission", false)
             ->join('quizzes owner', 'owner.id = a.quiz_id')->where('owner.user_id', $userId)
             ->groupBy('a.quiz_id')->getCompiledSelect();
         $questions = $this->db->table('questions question')->select('question.quiz_id')->select('COUNT(*) AS question_count', false)
@@ -104,7 +100,7 @@ final class TeacherQueryService
         $pageCount = max(1, (int) ceil($total / self::PAGE_SIZE));
         $filters['page'] = min($filters['page'], $pageCount);
         foreach (['q', 'stats', 'qc'] as $alias) $this->db->addTableAlias($alias);
-        $builder->select('q.public_id, q.title, q.mode, q.status, q.deleted_at, q.first_started_at, q.practice_starts, q.updated_at')
+        $builder->select('q.public_id, q.title, q.mode, q.status, q.deleted_at, q.current_paper_id, q.practice_starts, q.updated_at')
             ->select('qc.question_count, stats.attempt_count, stats.finalized_count, stats.in_progress_count, stats.average_percent, stats.latest_submission');
         [$field, $direction] = match ($filters['sort']) {
             'created_desc' => ['q.created_at', 'DESC'], 'title_asc' => ['q.title', 'ASC'],
@@ -128,7 +124,7 @@ final class TeacherQueryService
             'publicId' => (string) $quiz['public_id'],
             'title' => trim((string) $quiz['title']) === '' ? lang('Results.untitledQuiz') : (string) $quiz['title'],
             'mode' => (string) $quiz['mode'], 'status' => (string) $quiz['status'], 'deleted' => $quiz['deleted_at'] !== null,
-            'hasStarted' => $quiz['first_started_at'] !== null, 'questionCount' => (int) ($quiz['question_count'] ?? 0),
+            'hasPublished' => $quiz['current_paper_id'] !== null, 'questionCount' => (int) ($quiz['question_count'] ?? 0),
             'assessmentSubmissions' => (int) ($quiz['finalized_count'] ?? 0), 'inProgressAttempts' => (int) ($quiz['in_progress_count'] ?? 0),
             'averagePercent' => $this->decimal($quiz['average_percent']), 'latestSubmission' => $this->localDate($quiz['latest_submission'], $timezone),
             'practiceStarts' => (int) $quiz['practice_starts'], 'updatedAt' => $this->localDate($quiz['updated_at'], $timezone),

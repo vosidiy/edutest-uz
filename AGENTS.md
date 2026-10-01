@@ -73,6 +73,8 @@ Do not alter the user's database unless explicitly asked. Import `docs/schema.sq
 - Escape output in context and keep authored quiz content as plain text.
 - Keep private media outside `public/`; validate uploads by actual content.
 - Update `docs/CHANGELOG.md` for notable product, architecture, schema, security, or operational changes.
+- Do not run any git commands
+- Do not test responsiveness of page layouts or visual appearance. It will be done by designers manually
 
 ## Verification
 

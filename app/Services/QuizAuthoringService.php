@@ -60,7 +60,7 @@ final class QuizAuthoringService
             'instructions'      => '',
             'revision'          => 1,
             'version'           => 1,
-            'first_started_at'  => null,
+            'current_paper_id'  => null,
             'time_limit_sec'    => null,
             'opens_at'          => null,
             'closes_at'         => null,
@@ -165,9 +165,6 @@ final class QuizAuthoringService
 
             $updated = $this->db->table('quizzes')->where('id', $quiz['id'])->get()->getRowArray();
             if ($updated === null) throw new AuthoringException('save_failed', 'The quiz could not be reloaded.', 500);
-            if ($quiz['status'] === 'published') {
-                $this->assertPublishable($updated);
-            }
             if ($paperFingerprint !== $this->paperFingerprint($updated)) {
                 $updated['revision'] = (int) $quiz['revision'] + 1;
                 $this->db->table('quizzes')->where('id', $quiz['id'])->update(['revision' => $updated['revision']]);
@@ -203,11 +200,15 @@ final class QuizAuthoringService
 
             switch ($action) {
                 case 'publish':
-                    if ($quiz['status'] !== 'draft' || $quiz['deleted_at'] !== null) {
-                        $this->invalidTransition('Only a draft can be published.');
+                    if (! in_array($quiz['status'], ['draft', 'published', 'closed'], true) || $quiz['deleted_at'] !== null) {
+                        $this->invalidTransition('This quiz cannot be published.');
                     }
                     $this->assertPublishable($quiz);
-                    $changes['status'] = 'published';
+                    $paper = ($this->papers ?? service('quizPapers'))->publish($quiz);
+                    $changes['current_paper_id'] = $paper['id'];
+                    if ($quiz['status'] === 'draft') {
+                        $changes['status'] = 'published';
+                    }
                     $changes['published_at'] = $quiz['published_at'] ?? $this->now();
                     break;
 
@@ -222,7 +223,9 @@ final class QuizAuthoringService
                     if ($quiz['status'] !== 'closed' || $quiz['deleted_at'] !== null) {
                         $this->invalidTransition('Only a closed quiz can be reopened.');
                     }
-                    $this->assertPublishable($quiz);
+                    if ($quiz['current_paper_id'] === null) {
+                        $this->invalidTransition('Publish this quiz before reopening it.');
+                    }
                     $changes['status'] = 'published';
                     break;
 
@@ -237,7 +240,7 @@ final class QuizAuthoringService
                     if ($quiz['status'] !== 'archived' || $quiz['deleted_at'] !== null) {
                         $this->invalidTransition('Only an archived quiz can be restored.');
                     }
-                    $changes['status'] = $quiz['first_started_at'] === null ? 'draft' : 'closed';
+                    $changes['status'] = $quiz['current_paper_id'] === null ? 'draft' : 'closed';
                     break;
 
                 case 'trash':
@@ -330,17 +333,14 @@ final class QuizAuthoringService
                         (int) $newQuiz['id'],
                         $copiedPaths,
                     );
-                    $this->db->table('question_options')->insert([
-                        'question_id' => $questionId,
-                        'pos'         => $option['position'],
-                        'code'        => bin2hex(random_bytes(8)),
-                        'content'     => $option['content'],
-                        'media_type'  => $option['media']['type'] ?? null,
-                        'media_src'   => $optionMedia,
-                        'is_correct'  => $option['isCorrect'] ? 1 : 0,
-                        'created_at'  => $now,
-                        'updated_at'  => $now,
-                    ]);
+                    $this->insertOption(
+                        $questionId,
+                        (int) $option['position'],
+                        $option,
+                        $now,
+                        $optionMedia,
+                        $option['media']['type'] ?? null,
+                    );
                 }
             }
 
@@ -378,11 +378,18 @@ final class QuizAuthoringService
         if ($row === null) {
             return null;
         }
-
-        $questionCount = $this->db->table('questions')->where('quiz_id', $row['id'])->countAllResults();
+        try {
+            $paper = ($this->papers ?? service('quizPapers'))->currentPublished($row);
+            $definition = ($this->papers ?? service('quizPapers'))->definition($paper);
+            $student = ($this->papers ?? service('quizPapers'))->studentDocument($paper, str_repeat('0', 32));
+        } catch (Throwable) {
+            return null;
+        }
+        $published = $definition['quiz'];
+        $questionCount = count($definition['questions']);
         $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
-        $opens = $row['opens_at'] === null ? null : new DateTimeImmutable((string) $row['opens_at'], new DateTimeZone('UTC'));
-        $closes = $row['closes_at'] === null ? null : new DateTimeImmutable((string) $row['closes_at'], new DateTimeZone('UTC'));
+        $opens = $published['opensAt'] === null ? null : new DateTimeImmutable((string) $published['opensAt'], new DateTimeZone('UTC'));
+        $closes = $published['closesAt'] === null ? null : new DateTimeImmutable((string) $published['closesAt'], new DateTimeZone('UTC'));
         $availability = 'available';
         if ($row['status'] === 'closed' || ($closes !== null && $now >= $closes)) {
             $availability = 'closed';
@@ -391,23 +398,23 @@ final class QuizAuthoringService
         }
 
         return [
-            'title'            => (string) $row['title'],
-            'description'      => (string) $row['description'],
-            'instructions'     => (string) $row['instructions'],
-            'mode'             => (string) $row['mode'],
+            'title'            => (string) $published['title'],
+            'description'      => (string) $published['description'],
+            'instructions'     => (string) $published['instructions'],
+            'mode'             => (string) $published['mode'],
             'status'           => (string) $row['status'],
             'teacher'          => (string) $row['display_name'],
             'questionCount'    => $questionCount,
-            'timeLimitMinutes' => $this->minutesFromSeconds($row['time_limit_sec']),
-            'opensAt'          => $this->utcAtom($row['opens_at']),
-            'closesAt'         => $this->utcAtom($row['closes_at']),
-            'passcodeRequired' => $row['passcode_hash'] !== null,
+            'timeLimitMinutes' => $this->minutesFromSeconds($published['timeLimitSec']),
+            'opensAt'          => $this->utcAtom($published['opensAt']),
+            'closesAt'         => $this->utcAtom($published['closesAt']),
+            'passcodeRequired' => $paper['passcode_hash'] !== null,
             'availability'     => $availability,
             'shareToken'       => $shareToken,
-            'emailMode'        => (string) $row['email_mode'],
-            'phoneMode'        => (string) $row['phone_mode'],
-            'cheatCheck'       => (bool) $row['cheat_check'],
-            'cover'            => $this->media?->descriptor(($row['cover_src'] ?? null) === null ? null : 'image', $row['cover_src'] ?? null, 'cover', (int) $row['id']),
+            'emailMode'        => (string) $published['emailMode'],
+            'phoneMode'        => (string) $published['phoneMode'],
+            'cheatCheck'       => (bool) $published['cheatCheck'],
+            'cover'            => $student['cover'],
         ];
     }
 
@@ -717,18 +724,7 @@ final class QuizAuthoringService
                 continue;
             }
             $now = $this->now();
-            $this->db->table('question_options')->insert([
-                'question_id' => $questionId,
-                'pos'         => $position + 1,
-                'code'        => bin2hex(random_bytes(8)),
-                'content'     => $option['content'],
-                'media_type'  => null,
-                'media_src'   => null,
-                'is_correct'  => $option['isCorrect'] ? 1 : 0,
-                'created_at'  => $now,
-                'updated_at'  => $now,
-            ]);
-            $kept[] = (int) $this->db->insertID();
+            $kept[] = $this->insertOption($questionId, $position + 1, $option, $now);
         }
 
         foreach ($existing as $id => $row) {
@@ -758,20 +754,61 @@ final class QuizAuthoringService
         return $paths;
     }
 
+    /** @param array<string, mixed> $option */
+    private function insertOption(
+        int $questionId,
+        int $position,
+        array $option,
+        string $now,
+        ?string $mediaSrc = null,
+        ?string $mediaType = null,
+    ): int {
+        for ($attempt = 0; $attempt < 20; $attempt++) {
+            try {
+                if ($this->db->table('question_options')->insert([
+                    'question_id' => $questionId,
+                    'pos'         => $position,
+                    'code'        => bin2hex(random_bytes(8)),
+                    'content'     => $option['content'],
+                    'media_type'  => $mediaType,
+                    'media_src'   => $mediaSrc,
+                    'is_correct'  => $option['isCorrect'] ? 1 : 0,
+                    'created_at'  => $now,
+                    'updated_at'  => $now,
+                ])) {
+                    return (int) $this->db->insertID();
+                }
+            } catch (Throwable $exception) {
+                if (! $this->isDuplicateKey($exception)) {
+                    throw $exception;
+                }
+            }
+        }
+        throw new AuthoringException('save_failed', 'A unique answer code could not be generated. Please try again.', 500);
+    }
+
     /** @param array<string, mixed> $quiz
      *  @return array<string, mixed>
      */
     private function serializeDocument(array $quiz): array
     {
         $timezone = $this->userTimezone((int) $quiz['user_id']);
-        $hasAssessmentHistory = $quiz['mode'] !== 'assessment'
-            && $this->db->table('attempts')
+        $hasAssessmentHistory = $this->db->table('attempts')
                 ->select('id')
                 ->where('quiz_id', $quiz['id'])
                 ->limit(1)
                 ->get()
                 ->getRowArray() !== null;
-        $resultsAvailable = $quiz['mode'] === 'assessment' || $hasAssessmentHistory;
+        $publishedMode = null;
+        $paper = null;
+        if ($quiz['current_paper_id'] !== null) {
+            $paper = $this->db->table('quiz_papers')->where('id', $quiz['current_paper_id'])->where('quiz_id', $quiz['id'])->get()->getRowArray();
+            if ($paper !== null) {
+                $definition = ($this->papers ?? service('quizPapers'))->definition($paper);
+                $publishedMode = (string) $definition['quiz']['mode'];
+            }
+        }
+        $resultsAvailable = $publishedMode === 'assessment' || $hasAssessmentHistory;
         $questions = $this->db->table('questions')->where('quiz_id', $quiz['id'])->orderBy('pos')->get()->getResultArray();
         $serialized = [];
         foreach ($questions as $question) {
@@ -820,10 +857,13 @@ final class QuizAuthoringService
             'resultsUrl'       => $resultsAvailable ? site_url('results/quizzes/' . $quiz['public_id']) : null,
             'version'          => (int) $quiz['version'],
             'revision'         => (int) $quiz['revision'],
+            'publishedRevision'=> $quiz['current_paper_id'] === null ? null : (int) ($paper['revision'] ?? 0),
+            'hasPublished'     => $quiz['current_paper_id'] !== null,
+            'hasUnpublishedChanges' => $quiz['current_paper_id'] === null || (int) ($paper['revision'] ?? 0) !== (int) $quiz['revision'],
+            'publishedMode'    => $publishedMode,
             'mode'             => (string) $quiz['mode'],
             'status'           => (string) $quiz['status'],
             'deleted'          => $quiz['deleted_at'] !== null,
-            'hasStarted'        => $quiz['first_started_at'] !== null,
             'listed'           => (bool) $quiz['listed'],
             'title'            => (string) $quiz['title'],
             'description'      => (string) $quiz['description'],
@@ -851,15 +891,6 @@ final class QuizAuthoringService
             ],
             'questions'        => $serialized,
         ];
-    }
-
-    /** @param array<string, mixed> $quiz */
-    /** Enforces that an already-published quiz remains startable after a related mutation. */
-    public function assertPublishedReady(array $quiz): void
-    {
-        if (($quiz['status'] ?? null) === 'published') {
-            $this->assertPublishable($quiz);
-        }
     }
 
     private function assertPublishable(array $quiz): void

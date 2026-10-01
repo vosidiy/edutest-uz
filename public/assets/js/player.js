@@ -1,6 +1,7 @@
-import {grade, normalize, summarize} from './player-scoring.js';
-import {createState, PlayerClock, editAnswer, submitAnswer, nextQuestion, finishTimed, deadlines, hasPending, uniqueKey, mergeServer, isFullscreenExit} from './player-state.js';
-import {PlayerSync} from './player-sync.js';
+import {grade, normalize, summarize} from './player-scoring.js?v=4';
+import {createState, PlayerClock, editAnswer, submitAnswer, nextQuestion, finishTimed, deadlines, hasPending, uniqueKey, isFullscreenExit, recordActivity, receiptOnly} from './player-state.js?v=4';
+import {PlayerSync} from './player-sync.js?v=4';
+import {PlayerTabGuard} from './player-tab-guard.js';
 
 const config = JSON.parse(document.querySelector('#player-config').textContent);
 const ui = config.ui;
@@ -10,7 +11,11 @@ const alert = document.querySelector('#player-alert');
 const intro = document.querySelector('#quiz-introduction');
 const announcer = document.querySelector('#player-announcer');
 const storageKey = `edutest:player:${config.shareToken}`;
+const tabGuard = new PlayerTabGuard(config.shareToken);
+let pageActive = true, pageGeneration = 0, runActive = false, resumeOnReturn = false;
+let blockedRetry = null, startReservation = false;
 let state = null, clock = null, storageAvailable = true, lastError = '', timer = null, mediaTimer = null, remoteConflict = null;
+let connectionLost = !navigator.onLine;
 let renderedPhase = '', warnedDeadline = '', starting = false, admission = null, mediaBusy = false;
 let integrityReady = false, fullscreenWasActive = Boolean(document.fullscreenElement);
 let blobBytes = 0;
@@ -59,7 +64,7 @@ function fullscreenControl() {
   return wrapper;
 }
 function recordIntegrity(type) {
-  if (!integrityReady || !state || state.mode !== 'assessment' || !state.quiz.settings.cheatCheck || state.finishReason) return;
+  if (!canRun() || !integrityReady || !state || state.mode !== 'assessment' || !state.quiz.settings.cheatCheck || state.finishReason) return;
   if (state.events.length >= 1000) return;
   state.events.push({key: uniqueKey(), type, happenedAt: clock.iso(), durationMs: null});
   changed();
@@ -72,24 +77,28 @@ function handleFullscreenChange() {
 }
 
 function readStorage(key) {
-  try { return JSON.parse(sessionStorage.getItem(key) || 'null'); }
+  try { return JSON.parse(localStorage.getItem(key) || 'null'); }
   catch (_) { storageAvailable = false; return null; }
 }
 function store(key, value) {
-  try { sessionStorage.setItem(key, JSON.stringify(value)); }
+  try { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(value)); }
   catch (_) { storageAvailable = false; showAlert(); }
 }
 function persist() { if (state) { clock?.now(); store(storageKey, state); } }
 function showAlert() {
   const messages = [];
+  if (tabGuard.unavailable) messages.push(t('tabGuardUnavailable'));
   if (!storageAvailable) messages.push(t('storageUnavailable'));
-  if (!navigator.onLine && state) messages.push(t('offline'));
+  if ((connectionLost || !navigator.onLine) && state) messages.push(t('offline'));
+  alert.classList.toggle('alert-error', Boolean(state && (connectionLost || !navigator.onLine)));
+  alert.classList.toggle('alert-warning', !state || (!connectionLost && navigator.onLine));
   if (lastError) messages.push(lastError);
   alert.textContent = messages.join(' ');
   alert.hidden = !messages.length;
 }
 
 async function request(path, {method = 'GET', body, credential} = {}) {
+  if (method !== 'GET' && (!pageActive || !tabGuard.allowed)) throw Object.assign(new Error(t('tabBlocked')), {code:'tab_inactive'});
   const headers = {'X-EduTest-Player': '1', Accept: 'application/json'};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (credential) headers.Authorization = `Bearer ${credential}`;
@@ -101,42 +110,98 @@ async function request(path, {method = 'GET', body, credential} = {}) {
     let value;
     try { value = await response.json(); } catch (_) { throw new Error(t('networkError')); }
     if (!response.ok) throw Object.assign(new Error(value.error?.message || t('networkError')), {status: response.status, code: value.error?.code, fields: value.error?.fields});
+    connectionLost = false;
+    if (lastError === t('networkError')) lastError = '';
+    showAlert();
     return value;
   } catch (error) {
-    if (!error.status) error.message = t('networkError');
+    if (!error.status || error.status >= 500) { connectionLost = true; error.message = t('networkError'); }
     throw error;
   } finally { clearTimeout(timeout); }
 }
 
 const worker = new PlayerSync(() => state, request, {
+  canSend: () => canRun(),
   persist,
   error(error) { lastError = error.message; showAlert(); },
   conflict(server) { remoteConflict = server; document.querySelector('#player-conflict').showModal(); },
   change() {
     updateStatus();
-    if (state && (renderedPhase !== viewSignature())) render();
+    if (runActive && !blockedRetry && state && (renderedPhase !== viewSignature())) render();
   }
 });
 
-function updateStatus() {
-  if (!state) return;
+function canRun() { return pageActive && runActive && tabGuard.allowed && !blockedRetry; }
+function needsOwnership() { return startReservation || state?.practiceRetry?.needsRecovery || (state && (!state.finishReason || hasPending(state))); }
+function releaseCompleted() {
+  if (state?.finishReason && !needsOwnership() && !worker.busy && !mediaBusy && !starting) tabGuard.release();
+}
+function showBlocked() {
+  runActive = false;
+  clearInterval(timer); clearInterval(mediaTimer); clearTimeout(worker.timer);
+  document.querySelector('#player-conflict').close();
+  const panel = node('section', 'card player-error');
+  panel.dataset.tabBlocked = '';
+  panel.setAttribute('role', 'alert');
+  panel.append(node('p', '', t('tabBlocked')), button(t('retry'), () => blockedRetry?.(), 'btn-primary'));
+  root.replaceChildren(panel);
   status.replaceChildren();
-  let label = state.mode === 'practice' ? t('practiceNotice') : worker.busy ? t('saving') : hasPending(state) ? t('pending') : t('saved');
+  root.focus({preventScroll:true});
+  root.scrollIntoView({block:'start', behavior:'instant'});
+}
+async function claimTab(retry) {
+  if (!pageActive) return false;
+  const generation = pageGeneration;
+  const acquired = await tabGuard.acquire();
+  if (!pageActive || generation !== pageGeneration) return false;
+  if (!acquired) { blockedRetry = retry; showBlocked(); return false; }
+  blockedRetry = null;
+  root.querySelector('[data-tab-blocked]')?.remove();
+  showAlert();
+  return true;
+}
+function updateStatus() {
+  releaseCompleted();
+  if (!state || blockedRetry || !runActive) return;
+  status.replaceChildren();
+  let label = state.mode === 'practice' ? t('practiceNotice') : worker.busy ? t(connectionLost ? 'reconnecting' : 'saving') : hasPending(state) ? t('pending') : t('saved');
   status.append(node('span', '', label));
   if (state.mode === 'assessment' && hasPending(state) && !worker.busy) status.append(button(t('retry'), () => { lastError = ''; worker.paused = false; showAlert(); worker.flush(); }, 'btn-default btn-sm'));
   showAlert();
 }
 
-function viewSignature() { return `${state.index}:${state.phase}:${Boolean(state.finishReason)}:${Boolean(state.result)}`; }
-function activate() {
-  if (!state || state.format !== 1 || state.quiz.shareToken !== config.shareToken) return missing();
+function viewSignature() { return `${state.index}:${state.phase}:${Boolean(state.finishReason)}:${Boolean(state.result)}:${state.finishReason && hasPending(state)}`; }
+async function activate(refresh = true, explicitResume = false) {
+  if (!state || state.format !== 4 || state.quiz.shareToken !== config.shareToken) return missing();
+  if (!pageActive) return;
+  if (needsOwnership() && !await claimTab(() => activate(refresh, explicitResume))) return;
+  blockedRetry = null;
+  runActive = true;
   if (intro) intro.hidden = true;
   clock = new PlayerClock(state);
   lastError = '';
   render();
   clearInterval(timer); timer = setInterval(tick, 250);
   clearInterval(mediaTimer); mediaTimer = setInterval(() => { if (navigator.onLine) refreshMedia().catch(() => {}); }, 240000);
-  tick(); worker.flush(); setupIntegrity();
+  tick();
+  if (explicitResume && !state.finishReason) { recordActivity(state, clock.now()); persist(); }
+  setupIntegrity();
+  if (refresh && state.mode === 'assessment') worker.recover();
+  else worker.flush();
+}
+function showLegacy() {
+  worker.stop();
+  if (intro) intro.hidden = true;
+  const box = node('section', 'card player-error');
+  box.append(node('p', '', t('legacyProgress')));
+  // Keep the original storage value available for support/review; never invent occurrence times.
+  if (state?.quiz?.questions && state?.items) {
+    const pre = node('pre', 'player-local-backup', JSON.stringify({title:state.quiz.title, questions:state.quiz.questions.map((q, i) => ({
+      question:q.content, selected:state.items[i]?.answerCodes || [], text:state.items[i]?.textAnswer || ''
+    }))}, null, 2));
+    const disclosure = node('details'); disclosure.append(node('summary', '', t('localProgress')), pre); box.append(disclosure);
+  }
+  root.replaceChildren(box);
 }
 function missing() {
   root.replaceChildren(node('p', 'card player-error', t('missingState')));
@@ -145,11 +210,15 @@ function missing() {
 
 async function start(event) {
   event.preventDefault();
+  if (state && state.format !== 4) { showLegacy(); return; }
   if (starting) return;
-  if (state?.format === 1 && (!state.finishReason || hasPending(state))) { activate(); return; }
+  if (state?.format === 4 && (!state.finishReason || hasPending(state))) { await activate(); return; }
   const form = event.currentTarget;
-  if (!form.reportValidity()) return;
+  if (!await claimTab(() => start({preventDefault(){},currentTarget:form}))) return;
+  if (starting) return;
   starting = true;
+  startReservation = true;
+  let definitiveFailure = false;
   const startButton = form.querySelector('button[type="submit"]');
   startButton.disabled = true; startButton.textContent = t('starting'); lastError = ''; showAlert();
   form.querySelectorAll('[aria-invalid]').forEach(input => input.removeAttribute('aria-invalid'));
@@ -160,28 +229,40 @@ async function start(event) {
         const recovered = await request(`/assessments/${admission.attemptId}`, {credential: admission.credential});
         recovered.data.credential = admission.credential;
         state = createState(recovered.data, recovered.meta.timestamp);
-        persist(); activate(); return;
+        startReservation = false;
+        persist(); await activate(false); return;
       } catch (error) { if (error.status !== 401) throw error; }
     }
+    if (!form.reportValidity()) { definitiveFailure = true; return; }
     if (!admission) { admission = (await request(`/tickets/${config.shareToken}`)).data; store(storageKey + ':admission', admission); }
     const body = {ticket: admission.ticket};
     if (config.mode === 'assessment') for (const [key, value] of new FormData(form)) body[key] = value;
     const response = await request('/starts', {method: 'POST', body});
     state = createState(response.data, response.meta.timestamp);
     store(storageKey + ':admission', null); admission = null;
-    persist(); activate();
+    startReservation = false;
+    persist(); await activate(false);
   } catch (error) {
+    definitiveFailure = Boolean(error.status && error.status < 500);
     if (['quiz_changed', 'credential_expired'].includes(error.code)) { admission = null; store(storageKey + ':admission', null); }
     lastError = error.message;
     for (const key of Object.keys(error.fields || {})) form.elements.namedItem(key)?.setAttribute('aria-invalid', 'true');
     form.querySelector('[aria-invalid="true"]')?.focus();
     showAlert();
-  } finally { starting = false; startButton.disabled = false; startButton.textContent = t('start'); }
+  } finally {
+    starting = false; startButton.disabled = false; startButton.textContent = t('start');
+    if (definitiveFailure) { startReservation = false; tabGuard.release(); }
+    releaseCompleted();
+  }
 }
 
 async function retryPractice() {
   if (starting || state?.mode !== 'practice' || !state.finishReason) return;
+  if (!await claimTab(async () => { await activate(); await retryPractice(); })) return;
+  if (starting) return;
   starting = true;
+  startReservation = true;
+  let definitiveFailure = false;
   const retryButton = root.querySelector('[data-try-again]');
   retryButton.disabled = true; retryButton.textContent = t('starting');
   lastError = ''; showAlert();
@@ -199,36 +280,57 @@ async function retryPractice() {
       pending = {fromStartedAt: state.startedAt, ticket: ticket.ticket};
       state.practiceRetry = pending; store(retryKey, pending); persist();
     }
+    pending.needsRecovery = true;
+    state.practiceRetry = pending; store(retryKey, pending); persist();
     const response = await request('/starts', {method: 'POST', body: {ticket: pending.ticket}});
     const fresh = createState(response.data, response.meta.timestamp);
     state = fresh;
+    startReservation = false;
     warnedDeadline = ''; renderedPhase = ''; remoteConflict = null;
     announcer.textContent = '';
     persist(); store(retryKey, null);
-    activate();
+    await activate(false);
   } catch (error) {
+    definitiveFailure = Boolean(error.status && error.status < 500);
+    if (definitiveFailure && state.practiceRetry) {
+      state.practiceRetry.needsRecovery = false; store(retryKey, state.practiceRetry); persist();
+    }
     if (['quiz_changed', 'credential_expired', 'invalid_credential'].includes(error.code)) {
       delete state.practiceRetry; store(retryKey, null); persist();
     }
     lastError = error.message; showAlert();
   } finally {
     starting = false;
+    if (definitiveFailure) { startReservation = false; tabGuard.release(); }
     retryButton.disabled = false; retryButton.textContent = t('tryAgain');
     // A recovered start may already have timed out and rendered a new results button.
     const visibleRetry = root.querySelector('[data-try-again]');
     if (visibleRetry) { visibleRetry.disabled = false; visibleRetry.textContent = t('tryAgain'); }
+    releaseCompleted();
   }
 }
 
-function changed(immediate = false) { persist(); updateStatus(); if (state.mode === 'assessment') worker.schedule(immediate ? 0 : 400); }
+function changed(immediate = false) {
+  if (!canRun()) return;
+  persist(); updateStatus(); if (state.mode === 'assessment') worker.schedule(immediate ? 0 : 400);
+  if (renderedPhase !== viewSignature()) render();
+}
 function submit(reason = 'answered') {
-  if (!submitAnswer(state, reason)) return;
+  if (!canRun()) return;
+  if (!submitAnswer(state, reason, clock.now())) { changed(true); render(); return; }
+  persist(); // Confirmation and its outbox entry are durable before navigation.
   const result = grade(state.quiz.questions[state.index], state.items[state.index]);
-  if (state.quiz.settings.feedback === 'at_end') nextQuestion(state, clock.iso());
-  else notify(t(result.result));
+  if (state.quiz.settings.feedback === 'at_end') nextQuestion(state);
+  else if (!receiptOnly(state.quiz.settings)) notify(t(result.result));
   changed(true); render(); tick();
 }
-function next() { if (nextQuestion(state, clock.iso())) { changed(true); render(); tick(); } }
+function next() { if (canRun() && (nextQuestion(state, clock.now()) || state.finishReason)) { changed(true); render(); tick(); } }
+
+function startAnotherAssessment() {
+  if (!state || state.mode !== 'assessment' || !state.result?.confirmed || hasPending(state)) return;
+  store(storageKey, null); store(storageKey + ':admission', null); state = null; tabGuard.release();
+  window.location.assign(config.quizUrl);
+}
 
 function render() {
   if (!state) return;
@@ -266,7 +368,7 @@ function renderQuestion() {
   submitButton.disabled = !valid();
   if (question.type === 'short_text') {
     const input = node('input', 'form-control'); input.type = 'text'; input.maxLength = 500; input.value = item.textAnswer; input.autocomplete = 'off'; input.setAttribute('aria-label', t('textHint'));
-    input.addEventListener('input', () => { editAnswer(state, {textAnswer: input.value}); submitButton.disabled = !valid(); changed(); });
+    input.addEventListener('input', () => { if (!canRun()) return; editAnswer(state, {textAnswer: input.value}, clock.now()); submitButton.disabled = !valid(); changed(); });
     answers.append(input);
   } else {
     for (const [optionIndex, option] of question.options.entries()) {
@@ -279,8 +381,9 @@ function renderQuestion() {
       // Media-only choices still need an accessible option label.
       input.setAttribute('aria-label', `${letter}) ${option.content || t('mediaImage')}`);
       input.addEventListener('change', () => {
+        if (!canRun()) return;
         const selected = [...answers.querySelectorAll('input:checked')].map(element => element.value);
-        editAnswer(state, {answerCodes: selected});
+        editAnswer(state, {answerCodes: selected}, clock.now());
         answers.querySelectorAll('.player-option').forEach(row => row.classList.toggle('is-selected', row.querySelector('input').checked));
         submitButton.disabled = !valid(); changed();
       });
@@ -294,7 +397,7 @@ function renderQuestion() {
   }
   paper.append(form);
   if (item.status === 'locked') {
-    if (state.quiz.settings.feedback === 'after_each') paper.append(feedback(question, item, grade(question, item)));
+    if (state.quiz.settings.feedback === 'after_each' && !receiptOnly(state.quiz.settings)) paper.append(feedback(question, item, grade(question, item)));
     const actions = node('div', 'player-actions'); actions.append(button(t(state.index === state.items.length - 1 ? 'finish' : 'next'), next, 'btn-primary btn-lg')); paper.append(actions);
   }
   root.append(paper);
@@ -302,6 +405,7 @@ function renderQuestion() {
 }
 
 function answerText(question, item) {
+  if (item.answerStatus === 'not_reached') return t('unanswered');
   return question.type === 'short_text'
     ? item.textAnswer || t('unanswered')
     : question.options
@@ -335,7 +439,6 @@ function renderResults() {
   if (state.quiz.settings.showScore) card.append(node('div', 'player-score', `${result.percent}%`), node('p', '', `${result.score} / ${result.maxScore} ${t('questionsScore')}`));
   else card.append(node('p', '', t('hiddenScore')));
   card.append(node('p', 'player-help', t(state.mode === 'practice' ? 'practiceResult' : state.result ? 'confirmed' : 'provisional')));
-  if (state.result?.lateSync) card.append(node('p', 'alert alert-warning', t('lateSync')));
   if (state.result && state.quiz.settings.showScore && state.result.score !== local.score) card.append(node('p', 'alert alert-warning', t('scoreChanged')));
   if (state.finishReason !== 'completed') card.append(node('p', '', t(state.finishReason)));
   if (state.mode === 'practice') {
@@ -343,12 +446,16 @@ function renderResults() {
     const retryButton = button(t('tryAgain'), retryPractice, 'btn-primary btn-lg');
     retryButton.dataset.tryAgain = ''; retryButton.disabled = starting;
     actions.append(retryButton); card.append(actions);
+  } else if (state.result?.confirmed && !hasPending(state)) {
+    const actions = node('div', 'player-actions');
+    actions.append(button(t('startAnother'), startAnotherAssessment, 'btn-primary btn-lg')); card.append(actions);
   }
   root.append(card);
+  if (receiptOnly(state.quiz.settings)) return;
   const review = node('section', 'player-review'); review.append(node('h2', '', t('review')));
   state.quiz.questions.forEach((question, index) => {
     const item = state.items[index];
-    const award = result.items.find(row => row.questionId === question.id) || grade(question, item);
+    const award = result.items.find(row => row.questionId === question.id) || grade(question, item.answerStatus === 'answered' ? item : {});
     const details = node('details', 'card player-review-item'); const summary = node('summary');
     summary.append(node('span', 'player-question-number', String(index + 1)), node('strong', '', question.content), node('span', 'badge', t(award.result)));
     details.append(summary);
@@ -363,10 +470,10 @@ function renderResults() {
 }
 
 function tick() {
-  if (!state || state.finishReason || !clock) return;
+  if (!canRun() || !state || state.finishReason || !clock) return;
   const now = clock.now();
   for (const box of root.querySelectorAll('[data-deadline]')) {
-    const remaining = Math.max(0, Math.ceil((Number(box.dataset.deadline) - now) / 1000));
+    const remaining = Math.max(0, Math.ceil((Date.parse(state.expiresAt) - now) / 1000));
     box.querySelector('strong').textContent = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`;
     box.classList.toggle('is-urgent', remaining <= 30);
   }
@@ -382,14 +489,18 @@ function getMedia(key) {
   if (kind === 'q') return state.quiz.questions.find(question => question.id === id)?.media;
   return state.quiz.questions.flatMap(question => question.options).find(option => option.id === id)?.media;
 }
+function directVideo(url) {
+  try { return new URL(url).pathname.toLowerCase().endsWith('.mp4'); }
+  catch (_) { return false; }
+}
 function appendMedia(parent, key, descriptor) {
   if (!descriptor) return;
   const wrapper = node('div', 'player-media'); wrapper.dataset.mediaKey = key;
   let media;
   if (descriptor.type === 'image') { media = node('img'); media.alt = t('mediaImage'); }
   else if (descriptor.type === 'audio') { media = node('audio'); media.controls = true; media.preload = 'metadata'; }
-  else if (new URL(descriptor.url).pathname.toLowerCase().endsWith('.mp4')) { media = node('video'); media.controls = true; media.preload = 'metadata'; }
-  else { media = node('iframe'); media.title = t('mediaVideo'); media.allow = 'fullscreen; picture-in-picture'; media.referrerPolicy = 'no-referrer'; media.setAttribute('allowfullscreen', ''); }
+  else if (directVideo(descriptor.embedUrl || descriptor.url)) { media = node('video'); media.controls = true; media.preload = 'metadata'; }
+  else { media = node('iframe'); media.title = t('mediaVideo'); media.loading = 'lazy'; media.referrerPolicy = 'strict-origin-when-cross-origin'; media.allow = 'fullscreen; picture-in-picture'; media.setAttribute('allowfullscreen', ''); }
   media.src = blobs.get(key)?.url || descriptor.embedUrl || descriptor.url;
   media.addEventListener('error', () => {
     if (wrapper.querySelector('button')) return;
@@ -409,6 +520,8 @@ function appendMedia(parent, key, descriptor) {
 }
 async function refreshMedia() {
   if (!state || mediaBusy) return;
+  if (!await claimTab(async () => { await activate(); if (runActive) await refreshMedia(); })) return;
+  if (mediaBusy) return;
   const originalState = state;
   mediaBusy = true;
   try {
@@ -423,7 +536,7 @@ async function refreshMedia() {
       for (const option of question.options) option.media = options.get(option.id)?.media || null;
     }
     persist();
-  } finally { mediaBusy = false; }
+  } finally { mediaBusy = false; releaseCompleted(); }
 }
 
 function setupIntegrity() {
@@ -441,10 +554,22 @@ document.querySelector('#use-server').addEventListener('click', () => {
   state = createState({...remoteConflict, credential}, new Date(clock.now()).toISOString());
   worker.paused = false; remoteConflict = null; document.querySelector('#player-conflict').close(); persist(); activate();
 });
-window.addEventListener('online', () => { lastError = ''; updateStatus(); worker.flush(); });
-window.addEventListener('offline', updateStatus);
+window.addEventListener('online', () => { updateStatus(); worker.flush(); });
+window.addEventListener('offline', () => { connectionLost = true; updateStatus(); });
 window.addEventListener('beforeunload', event => { persist(); if (state && hasPending(state)) { event.preventDefault(); event.returnValue = ''; } });
-window.addEventListener('pagehide', persist);
+window.addEventListener('pagehide', () => {
+  persist();
+  resumeOnReturn = runActive || startReservation || Boolean(blockedRetry);
+  pageActive = false; pageGeneration++; runActive = false;
+  clearInterval(timer); clearInterval(mediaTimer); clearTimeout(worker.timer);
+  tabGuard.release();
+});
+window.addEventListener('pageshow', event => {
+  if (!event.persisted) return;
+  pageActive = true;
+  if (resumeOnReturn && state) activate();
+  else if (resumeOnReturn && admissionForm) start({preventDefault(){},currentTarget:admissionForm});
+});
 document.querySelectorAll('.player-schedule time').forEach(element => { element.textContent = new Intl.DateTimeFormat(undefined, {dateStyle: 'medium', timeStyle: 'short'}).format(new Date(element.dateTime)); });
 document.querySelectorAll('[data-fullscreen-button]').forEach(control => control.addEventListener('click', enableFullscreen));
 document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -456,14 +581,11 @@ if (admissionForm) {
 }
 
 state = readStorage(storageKey);
-if (config.page === 'intro') {
+if (state && state.format !== 4) { showLegacy(); }
+else if (config.page === 'intro') {
   const resume = document.querySelector('#resume-quiz');
-  if (state?.format === 1) { resume.hidden = false; resume.addEventListener('click', activate); }
-} else if (state?.format === 1) {
+  if (state?.format === 4) { resume.hidden = false; resume.addEventListener('click', () => activate(true, true)); }
+} else if (state?.format === 4) {
   activate();
-  if (state.mode === 'assessment') request(`/assessments/${state.attemptId}`, {credential: state.credential}).then(response => {
-    if (!mergeServer(state, response.data)) { worker.paused = true; remoteConflict = response.data; document.querySelector('#player-conflict').showModal(); }
-    persist(); render(); tick(); worker.flush();
-  }).catch(error => { lastError = error.message; showAlert(); });
 } else missing();
 showAlert();

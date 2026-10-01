@@ -3,6 +3,13 @@
 declare(strict_types=1);
 
 return [
+    'receivedScore' => 'Score from received answers',
+    'officialScore' => 'Official score',
+    'lateSync' => 'Synced late',
+    'lateSyncNotice' => 'Delayed browser work was recovered after a server deadline. Scoring is server-calculated; offline timing is browser-reported.',
+    'abandonedNotice' => 'Abandoned results show only received answers and may change when saved offline work reconnects. Completed means the final browser record was received, including runs ended by timeout.',
+    'receivedAt' => 'Received by server',
+    'clientAnsweredAt' => 'Confirmed in browser (reported)',
     'nav'                   => 'Results',
     'overviewTitle'         => 'Results overview',
     'overviewEyebrow'       => 'Assessment reporting',

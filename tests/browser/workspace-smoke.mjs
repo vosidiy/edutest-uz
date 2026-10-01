@@ -28,7 +28,7 @@ function data(page, url) {
   const filters = {q:'',view:'active',status:'',mode:'',reports:'',sort:'updated_desc',page:1};
   const row = {publicId:id,title:saved.title,mode:'assessment',status:'published',deleted:false,hasStarted:true,questionCount:20,
     assessmentSubmissions:128,inProgressAttempts:3,averagePercent:'78.50',practiceStarts:14,latestSubmission:'27 Sep 2026, 21:30',updatedAt:'27 Sep 2026, 20:40',editUrl:quiz.builderUrl,resultsUrl:quiz.url};
-  const attempt = {name:'Alex Morgan',email:'alex@example.test',phone:null,ip:'192.0.2.1',agent:'Fixture browser',status:'submitted',paperRevision:1,score:'15.70',maxScore:'20.00',percent:'78.50',duration:'5m 10s',finishReason:'completed',startedAt:{display:'27 Sep 2026, 21:24'},submittedAt:{display:'27 Sep 2026, 21:30'},integrityCount:0,url:'/results/attempts/'+id};
+  const attempt = {name:'Alex Morgan',email:'alex@example.test',phone:null,ip:'192.0.2.1',agent:'Fixture browser',status:'completed',paperRevision:1,score:'16',maxScore:'20',percent:'80.00',duration:'5m 10s',finishReason:'completed',startedAt:{display:'27 Sep 2026, 21:24'},submittedAt:{display:'27 Sep 2026, 21:30'},integrityCount:0,url:'/results/attempts/'+id};
   const report = {quiz, metrics:{finalizedAttempts:128,inProgressAttempts:3,averagePercent:'78.50'}, attempts:[attempt],
     filters:{query:'',status:'finalized',dateFrom:null,dateTo:null,minScore:null,maxScore:null,integrity:'all',sort:'newest'},
     pagination:{page:1,pageCount:1,total:1},exportUrl:'/results/quizzes/'+id+'/export.csv',attempt,
@@ -37,7 +37,7 @@ function data(page, url) {
   return {title:'Teacher workspace — EduTest',user:{display_name:'Sarah Williams',timezone:'Asia/Tashkent'},
     quizWorkspace:page!=='dashboard',builderHeader:page==='builder',quiz:saved,report,
     dateLabel:'Sunday, 27 September',
-    dashboard:{metrics:{totalQuizzes:12,publishedQuizzes:8,assessmentSubmissions:128,inProgressAttempts:3,averagePercent:'78.50',practiceStarts:14},
+    dashboard:{metrics:{totalQuizzes:12,publishedQuizzes:8,assessmentSubmissions:128,inProgressAttempts:3},
       library:{rows:url.searchParams.has('empty')?[]:[row,{...row,publicId:'b'.repeat(32),title:'Anonymous revision practice',mode:'practice',resultsUrl:null,assessmentSubmissions:0,inProgressAttempts:0,averagePercent:null,latestSubmission:null}],filters,view:'active',pagination:{page:1,pageCount:1,total:2}}}};
 }
 const server = http.createServer(async (request, response) => {

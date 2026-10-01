@@ -25,6 +25,7 @@ final class StudentPlayerFeatureTest extends PlayerTestCase
         $quiz = $this->quiz();
         $doc = $quiz['document']; $doc['title'] = '<script>alert(1)</script>';
         $this->authoring->save($quiz['owner'], $quiz['publicId'], $doc);
+        $this->authoring->transition($quiz['owner'], $quiz['publicId'], 'publish');
         $response = $this->get('/q/' . $quiz['share']);
         $response->assertOK();
         $this->assertStringContainsString('&lt;script&gt;alert(1)&lt;/script&gt;', $response->response()->getBody());
@@ -107,5 +108,24 @@ final class StudentPlayerFeatureTest extends PlayerTestCase
             $response->assertStatus(400);
             $response->assertSee('invalid_json');
         }
+    }
+
+    public function testActivityAndSmallAnswerAcknowledgementsUseBearerJsonBoundary(): void
+    {
+        $attempt = $this->startQuiz($this->quiz());
+        $base = '/api/v1/player/assessments/' . $attempt['attemptId'];
+        $headers = ['X-EduTest-Player' => '1', 'Content-Type' => 'application/json', 'Authorization' => 'Bearer ' . $attempt['credential']];
+        $at = \App\Services\Player\PlayerStore::iso(\App\Services\Player\PlayerStore::now());
+        $this->withHeaders($headers)->withBodyFormat('json')->post($base . '/activity', ['clientActivityAt' => $at])->assertOK();
+        $response = $this->withHeaders($headers)->withBodyFormat('json')->put($base . '/answers/' . $attempt['items'][0]['questionId'], $this->confirmation($this->submission($attempt, 0)));
+        $response->assertOK();
+        $data = json_decode($response->response()->getBody(), true)['data'];
+        self::assertSame($attempt['attemptId'], $data['attemptId']);
+        self::assertArrayNotHasKey('quiz', $data);
+        self::assertArrayNotHasKey('items', $data);
+        $this->withHeaders(['X-EduTest-Player' => '1', 'Content-Type' => 'text/plain'])
+            ->withBodyFormat('')->withBody('{}')->put($base . '/answers/' . $attempt['items'][0]['questionId'])->assertStatus(415);
+        $this->withHeaders(['X-EduTest-Player' => '1', 'Content-Type' => 'application/json'])
+            ->withBodyFormat('json')->post($base . '/activity', ['clientActivityAt' => $at])->assertStatus(401);
     }
 }

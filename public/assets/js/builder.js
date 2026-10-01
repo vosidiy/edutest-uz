@@ -187,7 +187,7 @@
         const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
         for (const key of Object.keys(server)) {
           if (['questions', 'passcode'].includes(key)) continue;
-          if (['version', 'revision', 'status', 'resultsAvailable', 'resultsUrl', 'updatedAt', 'hasStarted'].includes(key) || same(this.quiz[key], sent[key])) this.quiz[key] = server[key];
+          if (['version', 'revision', 'status', 'resultsAvailable', 'resultsUrl', 'updatedAt', 'hasPublished', 'publishedRevision', 'hasUnpublishedChanges', 'publishedMode'].includes(key) || same(this.quiz[key], sent[key])) this.quiz[key] = server[key];
         }
         if (same(this.quiz.passcode, sent.passcode) && this.passcodeValue === sentPasscode) {
           this.quiz.passcode = server.passcode;
@@ -557,7 +557,7 @@
           return;
         }
         if (!await this.save(true)) return;
-        if (!window.confirm(action === 'publish' ? 'Publish this quiz and activate its stable share page?' : `${action} this quiz?`)) return;
+        if (!window.confirm(action === 'publish' ? (this.quiz.hasPublished ? 'Publish these saved changes for future starts?' : 'Publish this quiz and activate its stable share page?') : `${action} this quiz?`)) return;
         const sent = JSON.parse(JSON.stringify(this.quiz));
         const sentPasscode = this.passcodeValue;
         const references = this.quiz.questions.map(question => ({question, options:[...question.options]}));
@@ -567,7 +567,7 @@
           const response = await EduTestApi.request(`/api/v1/quizzes/${this.publicId}/${action}`, { method: 'POST', body: '{}' });
           await this.acceptSaved(response.data.quiz, sent, references, sentPasscode);
           this.saveState = this.hasChanges ? 'dirty' : 'saved';
-          EduTestApi.toast(action === 'publish' ? 'Quiz published.' : 'Quiz updated.');
+          EduTestApi.toast(action === 'publish' ? (sent.hasPublished ? 'Quiz changes published.' : 'Quiz published.') : 'Quiz updated.');
         } catch (error) {
           this.fieldErrors = error.fields || {};
           this.globalError = error.message;

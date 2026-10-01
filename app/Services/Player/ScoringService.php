@@ -6,29 +6,9 @@ namespace App\Services\Player;
 
 use App\Exceptions\PlayerException;
 
-/** Equal-weight scoring in exact hundredths; mirrored by player-scoring.js. */
+/** Equal-weight, all-or-nothing scoring mirrored by player-scoring.js. */
 final class ScoringService
 {
-    public const FULL_CREDIT = 100;
-
-    public static function hundredths(string $decimal): int
-    {
-        if (! preg_match('/^([0-9]{1,10})(?:\.([0-9]{1,2}))?$/D', $decimal, $parts)) {
-            throw new PlayerException('invalid_quiz', 409);
-        }
-        return (int) $parts[1] * 100 + (int) str_pad($parts[2] ?? '', 2, '0');
-    }
-
-    public static function decimal(int $hundredths): string
-    {
-        return intdiv($hundredths, 100) . '.' . str_pad((string) ($hundredths % 100), 2, '0', STR_PAD_LEFT);
-    }
-
-    public static function roundedRatio(int $numerator, int $denominator): int
-    {
-        return intdiv($numerator, $denominator) + (($numerator % $denominator) * 2 >= $denominator ? 1 : 0);
-    }
-
     public static function normalize(string $text): string
     {
         return mb_strtolower(trim(preg_replace('/[\p{Z}\x{0009}-\x{000D}\x{0085}]+/u', ' ', $text) ?? ''), 'UTF-8');
@@ -63,37 +43,32 @@ final class ScoringService
         return ['answerCodes' => $codes, 'textAnswer' => ''];
     }
 
-    /** @return array{result: string, credit: string} */
+    /** @return array{result: string, isCorrect: bool} */
     public function grade(array $question, array $input): array
     {
         $answer = $this->answer($question, $input);
         if ($question['type'] === 'short_text') {
             $text = self::normalize($answer['textAnswer']);
             $correct = $text !== '' && in_array($text, array_map(self::normalize(...), $question['acceptedAnswers']), true);
-            return [
-                'result' => $text === '' ? 'unanswered' : ($correct ? 'correct' : 'wrong'),
-                'credit' => self::decimal($correct ? self::FULL_CREDIT : 0),
-            ];
+            return ['result' => $text === '' ? 'unanswered' : ($correct ? 'correct' : 'wrong'), 'isCorrect' => $correct];
         }
         $codes = $answer['answerCodes'];
-        if ($codes === []) return ['result' => 'unanswered', 'credit' => '0.00'];
-        $right = count(array_intersect($codes, $question['correctCodes']));
-        $totalRight = count($question['correctCodes']);
-        if ($totalRight < 1) throw new PlayerException('invalid_quiz', 409);
-        if ($question['type'] === 'single_choice') {
-            return [
-                'result' => $right === 1 ? 'correct' : 'wrong',
-                'credit' => self::decimal($right === 1 ? self::FULL_CREDIT : 0),
-            ];
-        }
-        $wrong = count($codes) - $right;
-        $totalWrong = count($question['options']) - $totalRight;
-        $denominator = $totalRight * max(1, $totalWrong);
-        $numerator = max(0, $right * max(1, $totalWrong) - $wrong * $totalRight);
-        $credit = self::roundedRatio(self::FULL_CREDIT * $numerator, $denominator);
-        return [
-            'result' => $right === $totalRight && $wrong === 0 ? 'correct' : ($credit > 0 ? 'partial' : 'wrong'),
-            'credit' => self::decimal($credit),
-        ];
+        if ($codes === []) return ['result' => 'unanswered', 'isCorrect' => false];
+        $correct = array_values(array_unique(array_map('strval', $question['correctCodes'])));
+        sort($correct, SORT_STRING);
+        if ($correct === []) throw new PlayerException('invalid_quiz', 409);
+        $isCorrect = $codes === $correct;
+        return ['result' => $isCorrect ? 'correct' : 'wrong', 'isCorrect' => $isCorrect];
+    }
+
+    public static function percent(int $score, int $maximum): string
+    {
+        if ($maximum < 1) throw new PlayerException('invalid_quiz', 409);
+        return number_format(round(($score * 100) / $maximum, 2, PHP_ROUND_HALF_UP), 2, '.', '');
+    }
+
+    public static function score(int $value): string
+    {
+        return number_format($value, 0, '.', '');
     }
 }

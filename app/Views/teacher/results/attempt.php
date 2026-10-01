@@ -11,9 +11,11 @@
 </header>
 
 <div class="content-area results-workspace attempt-review">
+    <?php if ($report['attempt']['status'] === 'abandoned') : ?><p class="alert alert-warning"><?= esc(lang('Results.abandonedNotice')) ?></p><?php endif ?>
+    <?php if ($report['attempt']['lateSync']) : ?><p class="alert alert-warning"><?= esc(lang('Results.lateSyncNotice')) ?></p><?php endif ?>
     <section class="attempt-summary-grid" aria-label="Attempt summary">
         <article class="card attempt-score-card">
-            <span>Official score</span>
+            <span><?= esc(lang($report['attempt']['status'] === 'abandoned' ? 'Results.receivedScore' : 'Results.officialScore')) ?></span>
             <?php if ($report['attempt']['percent'] === null) : ?>
                 <strong>—</strong><small><?= esc(lang('Results.ungraded')) ?> while this attempt remains in progress.</small>
             <?php else : ?>
@@ -30,7 +32,7 @@
                 <div><dt>Finish reason</dt><dd><?= esc($report['attempt']['finishReason'] === null ? lang('Results.notAvailable') : ucwords(str_replace('_', ' ', $report['attempt']['finishReason']))) ?></dd></div>
                 <div><dt>Duration</dt><dd><?= esc($report['attempt']['duration'] ?? lang('Results.notAvailable')) ?></dd></div>
                 <div><dt>Started</dt><dd><?= esc($report['attempt']['startedAt']['display'] ?? lang('Results.notAvailable')) ?></dd></div>
-                <div><dt>Submitted</dt><dd><?= esc($report['attempt']['submittedAt']['display'] ?? lang('Results.notAvailable')) ?></dd></div>
+                <div><dt>Finished</dt><dd><?= esc($report['attempt']['submittedAt']['display'] ?? lang('Results.notAvailable')) ?></dd></div>
             </dl>
         </article>
     </section>
@@ -86,10 +88,8 @@
                 <?php if ($question['explanation'] !== null) : ?><div class="answer-explanation"><strong>Explanation</strong><p><?= nl2br(esc($question['explanation'])) ?></p></div><?php endif ?>
                 <footer class="answer-metadata">
                     <span>State: <?= esc(ucfirst($question['status'])) ?></span>
-                    <span>Lock: <?= esc($question['lockReason'] === null ? lang('Results.notAvailable') : ucwords(str_replace('_', ' ', $question['lockReason']))) ?></span>
-                    <span>Started: <?= esc($question['startedAt']['display'] ?? lang('Results.notAvailable')) ?></span>
-                    <span>Locked: <?= esc($question['lockedAt']['display'] ?? lang('Results.notAvailable')) ?></span>
-                    <span>Response time: <?= esc($question['responseTime'] ?? lang('Results.notAvailable')) ?></span>
+                    <?php if ($question['clientAnsweredAt'] !== null) : ?><span><?= esc(lang('Results.clientAnsweredAt')) ?>: <?= esc($question['clientAnsweredAt']['display']) ?></span><?php endif ?>
+                    <?php if ($question['answeredAt'] !== null) : ?><span><?= esc(lang('Results.receivedAt')) ?>: <?= esc($question['answeredAt']['display']) ?></span><?php endif ?>
                 </footer>
             </article>
         <?php endforeach ?>

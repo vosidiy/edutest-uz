@@ -31,7 +31,7 @@ return [
             'coverFailed' => 'Submitted quiz content is saved, but the cover change could not be saved. Your cover change is retained. Try Save changes again.',
             'unsavedMedia' => 'Newer edits are still unsaved. Save them before changing question media.',
         ],
-        'existingAttemptsNotice' => 'Saved content and mode changes apply to future starts. Existing runs keep the mode and paper revision they received.',
+        'publishedWorkingCopyNotice' => 'You are editing a working copy. Saved changes remain private until you select Publish changes; existing attempts keep the paper they received.',
         'navigation' => [
             'builder' => 'Quiz builder',
             'responses' => 'Responses',

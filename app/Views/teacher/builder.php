@@ -32,8 +32,8 @@
 
             <section id="builder-editor" class="editor-canvas" ref="editorPanel" tabindex="0" aria-label="<?= esc(lang('EduTest.builder.workspace.editor'), 'attr') ?>">
                 <div class="builder-notices">
-                    <p v-if="quiz.status === 'draft' && !publishReady" id="publish-readiness" class="builder-publish-readiness" role="status">{{ publishReadinessMessage }}</p>
-                    <div v-if="quiz.hasStarted" class="alert alert-primary builder-banner"><?= esc(lang('EduTest.builder.existingAttemptsNotice')) ?></div>
+                    <p v-if="(quiz.status === 'draft' || quiz.hasUnpublishedChanges) && !publishReady" id="publish-readiness" class="builder-publish-readiness" role="status">{{ publishReadinessMessage }}</p>
+                    <div v-if="quiz.hasPublished" class="alert alert-primary builder-banner"><?= esc(lang('EduTest.builder.publishedWorkingCopyNotice')) ?></div>
                     <div v-if="quiz.mediaLimits.serverBytes < quiz.mediaLimits.audioBytes" class="alert alert-warning builder-banner">The current PHP upload limit is {{ formatBytes(quiz.mediaLimits.serverBytes) }}. Raise <code>upload_max_filesize</code> and <code>post_max_size</code> above 20 MiB to accept the full supported audio size.</div>
                     <div v-if="globalError" class="alert alert-danger builder-banner" role="alert">{{ globalError }} <button class="btn btn-link btn-sm" v-if="saveState === 'retry'" @click="save(true)">Retry</button></div>
                 </div>

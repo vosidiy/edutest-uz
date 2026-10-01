@@ -21,12 +21,15 @@ final class PracticeService
         } else {
             $now = (new \DateTimeImmutable($existing['expires_at'], new \DateTimeZone('UTC')))->modify('-86400 seconds')->format('Y-m-d H:i:s.u');
         }
+        $settings = $this->papers->settings($paper);
+        [$expiresAt, $deadlineReason] = $this->deadline($now, $settings);
         $ticketClaims = ['quizId' => (string) $quiz['id'], 'paperId' => (string) $paper['public_id'],
-            'requestKey' => (string) $claims['startKey'], 'settings' => $claims['settings'],
+            'requestKey' => (string) $claims['startKey'],
             'seed' => $claims['seed'], 'startedAt' => PlayerStore::iso($now)];
         return ['mode' => 'practice', 'credential' => $this->credentials->sign('practice', $ticketClaims, 86400),
-            'startedAt' => PlayerStore::iso($now), 'totalDueAt' => PlayerStore::iso(PlayerStore::due($now, $claims['settings']['timeLimitSec'])),
-            'closeAt' => $claims['settings']['closesAt'], 'quiz' => $this->papers->studentDocument($paper, $claims['settings'], $claims['seed'])];
+            'status' => 'in_progress', 'startedAt' => PlayerStore::iso($now),
+            'expiresAt' => PlayerStore::iso($expiresAt), 'deadlineReason' => $deadlineReason,
+            'quiz' => $this->papers->studentDocument($paper, (string) $claims['seed'])];
     }
 
     public function media(string $credential): array
@@ -47,8 +50,22 @@ final class PracticeService
             if ($this->store->db->affectedRows() !== 1) {
                 throw new PlayerException('invalid_credential', 401);
             }
+            $settings = $this->papers->settings($paper);
+            [$expiresAt, $deadlineReason] = $this->deadline(PlayerStore::date((string) $claims['startedAt']), $settings);
             return ['credential' => $this->credentials->sign('practice', $claims, 86400),
-                'quiz' => $this->papers->studentDocument($paper, $claims['settings'], $claims['seed'])];
+                'expiresAt' => PlayerStore::iso($expiresAt), 'deadlineReason' => $deadlineReason,
+                'quiz' => $this->papers->studentDocument($paper, (string) $claims['seed'])];
         });
+    }
+
+    /** @return array{string,string} */
+    private function deadline(string $startedAt, array $settings): array
+    {
+        $reason = $settings['timeLimitSec'] === null ? 'stale_timeout' : 'timer_expired';
+        $deadline = (string) PlayerStore::due($startedAt, $settings['timeLimitSec'] ?? 28800);
+        $closing = $settings['closesAt'] === null ? null : PlayerStore::date((string) $settings['closesAt']);
+        return $closing !== null && strcmp($closing, $deadline) < 0
+            ? [$closing, 'scheduled_close']
+            : [$deadline, $reason];
     }
 }

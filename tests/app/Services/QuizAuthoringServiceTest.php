@@ -50,8 +50,8 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         $this->assertSame('draft', $document['status']);
         $this->assertSame(1, $document['version']);
         $this->assertSame([], $document['questions']);
-        $this->assertTrue($document['resultsAvailable']);
-        $this->assertSame(site_url('results/quizzes/' . $created['publicId']), $document['resultsUrl']);
+        $this->assertFalse($document['resultsAvailable']);
+        $this->assertNull($document['resultsUrl']);
         $this->assertMatchesRegularExpression('/^[0-9]{9}$/D', basename($document['shareUrl']));
 
         $document['questions'] = [[
@@ -112,7 +112,7 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         $this->assertSame('closed', $this->authoring->transition($owner, $created['publicId'], 'close')['quiz']['status']);
         $this->assertSame('published', $this->authoring->transition($owner, $created['publicId'], 'reopen')['quiz']['status']);
         $this->assertSame('archived', $this->authoring->transition($owner, $created['publicId'], 'archive')['quiz']['status']);
-        $this->assertSame('draft', $this->authoring->transition($owner, $created['publicId'], 'unarchive')['quiz']['status']);
+        $this->assertSame('closed', $this->authoring->transition($owner, $created['publicId'], 'unarchive')['quiz']['status']);
         $this->assertTrue($this->authoring->transition($owner, $created['publicId'], 'trash')['quiz']['deleted']);
         $this->assertFalse($this->authoring->transition($owner, $created['publicId'], 'restore')['quiz']['deleted']);
     }
@@ -140,8 +140,8 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
 
         $saved['mode'] = 'assessment';
         $assessment = $this->authoring->save($owner, $created['publicId'], $saved);
-        $this->assertTrue($assessment['resultsAvailable']);
-        $this->assertSame(site_url('results/quizzes/' . $created['publicId']), $assessment['resultsUrl']);
+        $this->assertFalse($assessment['resultsAvailable']);
+        $this->assertNull($assessment['resultsUrl']);
     }
 
     public function testShareCodeCollisionRetriesWithoutOverwritingAQuiz(): void
@@ -206,7 +206,7 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         }
     }
 
-    public function testOwnershipAndPostStartContentAndModeChangesAreEnforced(): void
+    public function testOwnershipAndPublishedWorkingCopyChangesRemainEditable(): void
     {
         $owner = $this->insertUser('owner2@example.test');
         $other = $this->insertUser('other@example.test');
@@ -219,11 +219,8 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
             $this->assertSame(404, $exception->status);
         }
 
-        $this->authoringDb->table('quizzes')->where('public_id', $created['publicId'])->update([
-            'first_started_at' => '2026-01-01 00:00:00',
-        ]);
         $quizId = (int) $this->authoringDb->table('quizzes')->select('id')->where('public_id', $created['publicId'])->get()->getRow('id');
-        $this->authoringDb->table('attempts')->insert(['quiz_id' => $quizId, 'status' => 'submitted']);
+        $this->authoringDb->table('attempts')->insert(['quiz_id' => $quizId, 'status' => 'completed']);
         $document = $this->authoring->document($owner, $created['publicId']);
         $originalRevision = $document['revision'];
         $document['title'] = 'Changed after a start';
@@ -246,8 +243,8 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         $this->assertSame('hidden', $practice['phoneMode']);
         $this->assertFalse($practice['cheatCheck']);
         $this->assertSame($listingOnly['revision'] + 1, $practice['revision']);
-        $this->assertTrue($practice['hasStarted']);
-        $this->assertArrayNotHasKey('modeLocked', $practice);
+        $this->assertArrayNotHasKey('hasStarted', $practice);
+        $this->assertFalse($practice['hasPublished']);
         $this->assertTrue($practice['resultsAvailable']);
         $this->assertSame(site_url('results/quizzes/' . $created['publicId']), $practice['resultsUrl']);
 
@@ -432,7 +429,7 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
             'title' => ['type' => 'VARCHAR', 'constraint' => 200], 'description' => ['type' => 'TEXT'],
             'instructions' => ['type' => 'TEXT'], 'revision' => ['type' => 'INTEGER'], 'version' => ['type' => 'INTEGER'],
             'cover_src' => ['type' => 'TEXT', 'null' => true],
-            'first_started_at' => ['type' => 'DATETIME', 'null' => true], 'time_limit_sec' => ['type' => 'INTEGER', 'null' => true],
+            'current_paper_id' => ['type' => 'INTEGER', 'null' => true], 'time_limit_sec' => ['type' => 'INTEGER', 'null' => true],
             'opens_at' => ['type' => 'DATETIME', 'null' => true], 'closes_at' => ['type' => 'DATETIME', 'null' => true],
             'passcode_hash' => ['type' => 'VARCHAR', 'constraint' => 255, 'null' => true],
             'email_mode' => ['type' => 'VARCHAR', 'constraint' => 8], 'phone_mode' => ['type' => 'VARCHAR', 'constraint' => 8],
@@ -466,7 +463,7 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         $this->forge->addField([
             'id' => ['type' => 'INTEGER', 'constraint' => 11, 'auto_increment' => true],
             'quiz_id' => ['type' => 'INTEGER'], 'public_id' => ['type' => 'VARCHAR', 'constraint' => 32],
-            'revision' => ['type' => 'INTEGER'], 'definition' => ['type' => 'TEXT'],
+            'revision' => ['type' => 'INTEGER'], 'passcode_hash' => ['type' => 'VARCHAR', 'constraint' => 255, 'null' => true], 'definition' => ['type' => 'TEXT'],
             'created_at' => ['type' => 'DATETIME'],
         ]);
         $this->forge->addKey('id', true); $this->forge->createTable('quiz_papers');
@@ -474,7 +471,7 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
             'id' => ['type' => 'INTEGER', 'constraint' => 11, 'auto_increment' => true], 'quiz_id' => ['type' => 'INTEGER'],
             'status' => ['type' => 'VARCHAR', 'constraint' => 12],
             'percent' => ['type' => 'DECIMAL', 'constraint' => '5,2', 'null' => true],
-            'submitted_at' => ['type' => 'DATETIME', 'null' => true],
+            'finished_at' => ['type' => 'DATETIME', 'null' => true],
         ]);
         $this->forge->addKey('id', true); $this->forge->createTable('attempts');
     }
