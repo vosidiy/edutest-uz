@@ -5,7 +5,7 @@
 <header class="page-header results-page-header">
     <div>
         <p class="eyebrow"><a href="<?= site_url('dashboard') ?>"><?= esc(lang('Workspace.dashboardTitle')) ?></a> <span aria-hidden="true">/</span> <a href="<?= esc($report['quiz']['url'], 'attr') ?>"><?= esc($report['quiz']['title']) ?></a></p>
-        <div class="results-title-line"><h1><?= esc(lang('Results.attemptTitle')) ?>: <?= esc($report['attempt']['name']) ?></h1><span class="badge attempt-status <?= esc($report['attempt']['status'], 'attr') ?>"><?= esc(ucwords(str_replace('_', ' ', $report['attempt']['status']))) ?></span></div>
+        <div class="results-title-line"><h1><?= esc(lang('Results.attemptTitle')) ?>: <?= esc($report['attempt']['name']) ?></h1><span class="badge attempt-status <?= esc($report['attempt']['status'], 'attr') ?>"><?= esc($report['attempt']['finishReason'] === 'quit' ? lang('Results.quitStatus') : ucwords(str_replace('_', ' ', $report['attempt']['status']))) ?></span></div>
         <p><?= esc(lang('Results.paperRevision')) ?> <?= esc((string) $report['attempt']['paperRevision']) ?> · <?= esc(lang('Results.receivedMode')) ?>: <?= esc(ucfirst($report['paper']['mode'])) ?> · <?= esc(lang('Results.currentMode')) ?>: <?= esc(ucfirst($report['quiz']['currentMode'])) ?>. Times use <?= esc($report['timezone']) ?>.</p>
     </div>
 </header>
@@ -29,7 +29,7 @@
                 <div><dt>Email</dt><dd><?= esc($report['attempt']['email'] ?? lang('Results.notAvailable')) ?></dd></div>
                 <div><dt>Phone</dt><dd><?= esc($report['attempt']['phone'] ?? lang('Results.notAvailable')) ?></dd></div>
                 <div><dt>Status</dt><dd><?= esc(ucwords(str_replace('_', ' ', $report['attempt']['status']))) ?></dd></div>
-                <div><dt>Finish reason</dt><dd><?= esc($report['attempt']['finishReason'] === null ? lang('Results.notAvailable') : ucwords(str_replace('_', ' ', $report['attempt']['finishReason']))) ?></dd></div>
+                <div><dt>Finish reason</dt><dd><?= esc($report['attempt']['finishReason'] === null ? lang('Results.notAvailable') : lang('Player.ui.' . $report['attempt']['finishReason'])) ?></dd></div>
                 <div><dt>Duration</dt><dd><?= esc($report['attempt']['duration'] ?? lang('Results.notAvailable')) ?></dd></div>
                 <div><dt>Started</dt><dd><?= esc($report['attempt']['startedAt']['display'] ?? lang('Results.notAvailable')) ?></dd></div>
                 <div><dt>Finished</dt><dd><?= esc($report['attempt']['submittedAt']['display'] ?? lang('Results.notAvailable')) ?></dd></div>

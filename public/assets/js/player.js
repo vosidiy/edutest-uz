@@ -1,6 +1,6 @@
 import {grade, normalize, summarize} from './player-scoring.js?v=4';
-import {createState, PlayerClock, editAnswer, submitAnswer, nextQuestion, finishTimed, deadlines, hasPending, uniqueKey, isFullscreenExit, recordActivity, receiptOnly} from './player-state.js?v=4';
-import {PlayerSync} from './player-sync.js?v=4';
+import {createState, PlayerClock, editAnswer, submitAnswer, nextQuestion, finishTimed, quitQuiz, deadlines, visibleDeadlines, hasPending, hasUploadPending, uniqueKey, isFullscreenExit, recordActivity, receiptOnly} from './player-state.js?v=5';
+import {PlayerSync} from './player-sync.js?v=5';
 import {PlayerTabGuard} from './player-tab-guard.js';
 
 const config = JSON.parse(document.querySelector('#player-config').textContent);
@@ -17,6 +17,7 @@ let blockedRetry = null, startReservation = false;
 let state = null, clock = null, storageAvailable = true, lastError = '', timer = null, mediaTimer = null, remoteConflict = null;
 let connectionLost = !navigator.onLine;
 let renderedPhase = '', warnedDeadline = '', starting = false, admission = null, mediaBusy = false;
+let statusSignature = '';
 let integrityReady = false, fullscreenWasActive = Boolean(document.fullscreenElement);
 let blobBytes = 0;
 const blobs = new Map();
@@ -145,7 +146,7 @@ function showBlocked() {
   panel.setAttribute('role', 'alert');
   panel.append(node('p', '', t('tabBlocked')), button(t('retry'), () => blockedRetry?.(), 'btn-primary'));
   root.replaceChildren(panel);
-  status.replaceChildren();
+  status.replaceChildren(); statusSignature = '';
   root.focus({preventScroll:true});
   root.scrollIntoView({block:'start', behavior:'instant'});
 }
@@ -163,14 +164,19 @@ async function claimTab(retry) {
 function updateStatus() {
   releaseCompleted();
   if (!state || blockedRetry || !runActive) return;
+  const uploadPending = hasUploadPending(state);
+  let label = state.mode === 'practice' ? t('practiceNotice') : uploadPending && worker.busy ? t(connectionLost ? 'reconnecting' : 'saving') : uploadPending ? t('pending') : t('saved');
+  const retryVisible = state.mode === 'assessment' && !worker.busy && (uploadPending || lastError);
+  const signature = `${label}:${retryVisible}`;
+  if (signature === statusSignature) { showAlert(); return; }
+  statusSignature = signature;
   status.replaceChildren();
-  let label = state.mode === 'practice' ? t('practiceNotice') : worker.busy ? t(connectionLost ? 'reconnecting' : 'saving') : hasPending(state) ? t('pending') : t('saved');
   status.append(node('span', '', label));
-  if (state.mode === 'assessment' && hasPending(state) && !worker.busy) status.append(button(t('retry'), () => { lastError = ''; worker.paused = false; showAlert(); worker.flush(); }, 'btn-default btn-sm'));
+  if (retryVisible) status.append(button(t('retry'), () => { lastError = ''; worker.paused = false; showAlert(); worker.flush(); }, 'btn-default btn-sm'));
   showAlert();
 }
 
-function viewSignature() { return `${state.index}:${state.phase}:${Boolean(state.finishReason)}:${Boolean(state.result)}:${state.finishReason && hasPending(state)}`; }
+function viewSignature() { return `${state.index}:${state.phase}:${Boolean(state.finishReason)}:${Boolean(state.result)}:${state.finishReason && hasPending(state)}:${state.student?.name || ''}:${state.student?.email || ''}`; }
 async function activate(refresh = true, explicitResume = false) {
   if (!state || state.format !== 4 || state.quiz.shareToken !== config.shareToken) return missing();
   if (!pageActive) return;
@@ -326,6 +332,12 @@ function submit(reason = 'answered') {
 }
 function next() { if (canRun() && (nextQuestion(state, clock.now()) || state.finishReason)) { changed(true); render(); tick(); } }
 
+function quit() {
+  if (!canRun() || !window.confirm(t('quitConfirm'))) return;
+  quitQuiz(state, clock.now());
+  persist(); changed(true); render(); tick();
+}
+
 function startAnotherAssessment() {
   if (!state || state.mode !== 'assessment' || !state.result?.confirmed || hasPending(state)) return;
   store(storageKey, null); store(storageKey + ':admission', null); state = null; tabGuard.release();
@@ -347,9 +359,12 @@ function renderQuestion() {
   const item = state.items[state.index];
   const top = node('div', 'player-topbar');
   const timers = node('div', 'player-timers');
-  top.append(node('p', 'player-quiz-title', state.quiz.title), timers);
+  const identity = node('div', 'player-current-user');
+  identity.append(node('p', 'player-quiz-title', state.quiz.title));
+  if (state.mode === 'assessment' && state.student?.name) identity.append(node('small', '', state.student.email ? `${state.student.name} · ${state.student.email}` : state.student.name));
+  top.append(identity, timers);
   root.append(top);
-  for (const deadline of deadlines(state)) {
+  for (const deadline of visibleDeadlines(state)) {
     const box = node('div', 'player-timer'); box.dataset.deadline = String(deadline.at); box.setAttribute('aria-live', 'off');
     box.append(node('span', '', t(deadline.label)), node('strong', '', ''));
     timers.append(box);
@@ -393,12 +408,12 @@ function renderQuestion() {
   form.append(answers);
   form.addEventListener('submit', event => { event.preventDefault(); if (valid()) submit(); });
   if (item.status !== 'locked') {
-    const actions = node('div', 'player-actions'); actions.append(button(t('skip'), () => submit('skipped'), 'btn-default'), submitButton); form.append(actions);
+    const actions = node('div', 'player-actions'); actions.append(button(t('skip'), () => submit('skipped'), 'btn-default'), submitButton, button(t('quitAction'), quit, 'btn-link danger')); form.append(actions);
   }
   paper.append(form);
   if (item.status === 'locked') {
     if (state.quiz.settings.feedback === 'after_each' && !receiptOnly(state.quiz.settings)) paper.append(feedback(question, item, grade(question, item)));
-    const actions = node('div', 'player-actions'); actions.append(button(t(state.index === state.items.length - 1 ? 'finish' : 'next'), next, 'btn-primary btn-lg')); paper.append(actions);
+    const actions = node('div', 'player-actions'); actions.append(button(t(state.index === state.items.length - 1 ? 'finish' : 'next'), next, 'btn-primary btn-lg'), button(t('quitAction'), quit, 'btn-link danger')); paper.append(actions);
   }
   root.append(paper);
   const help = node('p', 'player-help', t('questionHint')); root.append(help);
@@ -435,7 +450,8 @@ function renderResults() {
   const result = state.result || local;
   const card = node('section', 'card player-results-header');
   const icon = node('span', 'player-completion-icon', '✓'); icon.setAttribute('aria-hidden', 'true'); card.append(icon);
-  const heading = node('h1', '', t('complete')); heading.tabIndex = -1; card.append(heading, node('p', '', state.quiz.title));
+  const heading = node('h1', '', t(state.finishReason === 'quit' ? 'quitComplete' : 'complete')); heading.tabIndex = -1; card.append(heading, node('p', '', state.quiz.title));
+  if (state.mode === 'assessment' && state.student?.name) card.append(node('p', 'player-student-identity', state.student.email ? `${state.student.name} · ${state.student.email}` : state.student.name));
   if (state.quiz.settings.showScore) card.append(node('div', 'player-score', `${result.percent}%`), node('p', '', `${result.score} / ${result.maxScore} ${t('questionsScore')}`));
   else card.append(node('p', '', t('hiddenScore')));
   card.append(node('p', 'player-help', t(state.mode === 'practice' ? 'practiceResult' : state.result ? 'confirmed' : 'provisional')));
@@ -479,7 +495,7 @@ function tick() {
   }
   const due = deadlines(state)[0];
   if (!due) return;
-  if (due.at - now <= 30000 && warnedDeadline !== `${due.at}`) { warnedDeadline = `${due.at}`; notify(t('timeWarning')); }
+  if (due.reason !== 'stale_timeout' && due.at - now <= 30000 && warnedDeadline !== `${due.at}`) { warnedDeadline = `${due.at}`; notify(t('timeWarning')); }
   if (now < due.at) return;
   finishTimed(state, due.reason); changed(true); render(); notify(t(due.reason));
 }

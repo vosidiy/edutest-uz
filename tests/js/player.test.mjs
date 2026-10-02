@@ -2,14 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {grade, summarize} from '../../public/assets/js/player-scoring.js';
-import {createState, editAnswer, submitAnswer, nextQuestion, finishTimed, deadlines, mergeServer, hasPending, PlayerClock, isFullscreenExit, acknowledge, recordActivity, receiptOnly} from '../../public/assets/js/player-state.js';
+import {createState, editAnswer, submitAnswer, nextQuestion, finishTimed, quitQuiz, deadlines, visibleDeadlines, mergeServer, hasPending, hasUploadPending, PlayerClock, isFullscreenExit, acknowledge, recordActivity, receiptOnly} from '../../public/assets/js/player-state.js';
 import {PlayerSync} from '../../public/assets/js/player-sync.js';
 
 const cases = JSON.parse(fs.readFileSync(new URL('../fixtures/player-scoring.json', import.meta.url), 'utf8'));
 const startedAt = '2026-09-26T10:00:00.000000Z', expiresAt = '2026-09-26T10:02:00.000000Z';
 const questions = [cases[0].question, {...cases[0].question, id:'second'}];
 const data = () => ({mode:'assessment', attemptId:'attempt', credential:'secret', status:'in_progress', startedAt, expiresAt,
-  clientActivityAt:startedAt, deadlineReason:'timer_expired', quiz:{shareToken:'quiz',title:'Quiz',settings:{feedback:'after_each',timeLimitSec:120,closesAt:null},questions}});
+  clientActivityAt:startedAt, deadlineReason:'timer_expired', student:{name:'Alex Morgan',email:'alex@example.test'}, quiz:{shareToken:'quiz',title:'Quiz',settings:{feedback:'after_each',timeLimitSec:120,closesAt:null},questions}});
 const fresh = () => createState(data(), startedAt, Date.parse(startedAt));
 const clone = value => JSON.parse(JSON.stringify(value));
 const server = state => ({...data(), items:clone(state.items), result:null, finishReason:null});
@@ -62,6 +62,38 @@ test('untimed meaningful activity extends local deadline but respects scheduled 
   state.quiz.settings.closesAt='2026-09-26T12:00:00Z';
   recordActivity(state,Date.parse(startedAt)+3601000);
   assert.equal(state.expiresAt,'2026-09-26T12:00:00.000Z'); assert.equal(state.deadlineReason,'scheduled_close');
+});
+test('only authored timer and closing deadlines are visible', () => {
+  const untimed=fresh(); untimed.quiz.settings.timeLimitSec=null; untimed.deadlineReason='stale_timeout';
+  untimed.expiresAt='2026-09-26T18:00:00Z';
+  assert.deepEqual(visibleDeadlines(untimed),[]);
+  untimed.deadlineReason='scheduled_close'; untimed.quiz.settings.closesAt=untimed.expiresAt;
+  assert.equal(visibleDeadlines(untimed)[0].label,'closingTimer');
+  const timed=fresh(); assert.equal(visibleDeadlines(timed)[0].label,'quizTimer');
+});
+test('routine activity is internal pending work, not an answer upload', () => {
+  const state=fresh(); state.quiz.settings.timeLimitSec=null; state.expiresAt='2026-09-26T18:00:00Z';
+  recordActivity(state,Date.parse(startedAt)+1000);
+  assert.equal(hasPending(state),true); assert.equal(hasUploadPending(state),false);
+});
+test('quit keeps the confirmed prefix, ignores the current draft and yields to expiry', () => {
+  const empty=fresh(); assert.equal(quitQuiz(empty,Date.parse(startedAt)+1000),true);
+  assert.equal(empty.finishReason,'quit'); assert.equal(empty.finishRecord.confirmedCount,0);
+
+  const partial=fresh(); submit(partial); nextQuestion(partial); editAnswer(partial,{answerCodes:['wrong']},Date.parse(startedAt)+2000);
+  assert.equal(quitQuiz(partial,Date.parse(startedAt)+3000),true);
+  assert.equal(partial.finishRecord.confirmedCount,1); assert.equal(partial.pendingAnswers.length,1);
+  assert.equal(summarize(partial.quiz.questions,partial.items).score,'1');
+
+  const expired=fresh(); assert.equal(quitQuiz(expired,Date.parse(expiresAt)),false);
+  assert.equal(expired.finishReason,'timer_expired');
+});
+test('legacy local state receives authenticated identity during recovery', () => {
+  const legacyData=data(); delete legacyData.student;
+  const state=createState(legacyData,startedAt,Date.parse(startedAt));
+  assert.equal(state.student,null);
+  const remote=server(state); remote.student={name:'<Alex>',email:'alex@example.test'};
+  assert.equal(mergeServer(state,remote),true); assert.deepEqual(state.student,remote.student);
 });
 test('small acknowledgement removes only its operation and never resets a newer draft', () => {
   const state=fresh(); submit(state); nextQuestion(state);

@@ -76,6 +76,7 @@ final class StudentPlayerFeatureTest extends PlayerTestCase
         $response = $this->withHeaders(['X-EduTest-Player' => '1'])->get('/api/v1/player/tickets/' . $quiz['share']);
         $response->assertOK();
         $response->assertDontSee('csrfToken');
+        self::assertArrayNotHasKey('student', json_decode($response->response()->getBody(), true)['data']);
     }
 
     public function testPracticeStartsWithoutTeacherSessionOrCsrfAndRejectsAnswerBodies(): void
@@ -127,5 +128,32 @@ final class StudentPlayerFeatureTest extends PlayerTestCase
             ->withBodyFormat('')->withBody('{}')->put($base . '/answers/' . $attempt['items'][0]['questionId'])->assertStatus(415);
         $this->withHeaders(['X-EduTest-Player' => '1', 'Content-Type' => 'application/json'])
             ->withBodyFormat('json')->post($base . '/activity', ['clientActivityAt' => $at])->assertStatus(401);
+    }
+
+    public function testAssessmentStartReturnsIdentityOnlyInTheAuthenticatedFullState(): void
+    {
+        $quiz = $this->quiz(settings: ['emailMode' => 'optional']);
+        $ticket = $this->player->admission->ticket($quiz['share']);
+        $response = $this->withHeaders(['X-EduTest-Player' => '1', 'Content-Type' => 'application/json'])
+            ->withBodyFormat('json')->post('/api/v1/player/starts', [
+                'ticket' => $ticket['ticket'],
+                'name' => '<Student>',
+                'email' => 'student@example.test',
+            ]);
+        $response->assertOK();
+        $data = json_decode($response->response()->getBody(), true)['data'];
+        self::assertSame(['name' => '<Student>', 'email' => 'student@example.test'], $data['student']);
+
+        $answer = $this->confirmation($this->submission($data, 0));
+        $ack = $this->withHeaders([
+            'X-EduTest-Player' => '1',
+            'Content-Type' => 'application/json',
+            'Authorization' => 'Bearer ' . $data['credential'],
+        ])->withBodyFormat('json')->put(
+            '/api/v1/player/assessments/' . $data['attemptId'] . '/answers/' . $data['items'][0]['questionId'],
+            $answer,
+        );
+        $ack->assertOK();
+        self::assertArrayNotHasKey('student', json_decode($ack->response()->getBody(), true)['data']);
     }
 }

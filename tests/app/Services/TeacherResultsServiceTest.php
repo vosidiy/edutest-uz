@@ -31,7 +31,13 @@ final class TeacherResultsServiceTest extends PlayerTestCase
         $report = $this->results->quiz($quiz['owner'], $quiz['publicId'], [], 'UTC');
         $this->assertSame(2, $report['metrics']['finalizedAttempts']);
         $this->assertSame(1, $report['metrics']['inProgressAttempts']);
-        $this->assertSame(['abandoned', 'completed'], array_column($report['attempts'], 'status'));
+        $this->assertSame('all', $report['filters']['status']);
+        $this->assertCount(3, $report['attempts']);
+        $byStatus = array_column($report['attempts'], null, 'status');
+        $this->assertSame(2, $byStatus['completed']['responsesReceived']);
+        $this->assertSame(2, $byStatus['completed']['correctReceived']);
+        $this->assertSame(0, $byStatus['in_progress']['responsesReceived']);
+        $this->assertSame(0, $byStatus['abandoned']['responsesReceived']);
     }
 
     public function testStatusFiltersAndCsvUseNewLifecycleNames(): void
@@ -78,6 +84,31 @@ final class TeacherResultsServiceTest extends PlayerTestCase
             try { $this->results->attempt($quiz['owner'] + 999, $id === 'bad-id' ? $id : $attempt['attemptId'], 'UTC'); self::fail(); }
             catch (ReportingException $error) { self::assertSame(404, $error->status); }
         }
+    }
+
+    public function testQuitIsACompletedResultWithReceivedProgressAndCsvReason(): void
+    {
+        $quiz = $this->quiz(count: 2);
+        $attempt = $this->startQuiz($quiz);
+        $submission = $this->submission($attempt, 0);
+        $this->player->assessment->answer(
+            $attempt['attemptId'],
+            $submission['questionId'],
+            $attempt['credential'],
+            $this->confirmation($submission),
+        );
+        $this->player->assessment->finish($attempt['attemptId'], $attempt['credential'], $this->finishBody($attempt, 'quit', count: 1));
+
+        $report = $this->results->quiz($quiz['owner'], $quiz['publicId'], [], 'UTC');
+        $this->assertSame('completed', $report['attempts'][0]['status']);
+        $this->assertSame('quit', $report['attempts'][0]['finishReason']);
+        $this->assertSame(1, $report['attempts'][0]['responsesReceived']);
+        $this->assertSame(1, $report['attempts'][0]['correctReceived']);
+        $this->assertSame('50.00', $report['attempts'][0]['percent']);
+
+        $rows = iterator_to_array($this->results->export($quiz['owner'], $quiz['publicId'], [], 'UTC')['rows']);
+        $this->assertSame('quit', $rows[0]['finishReason']);
+        $this->assertSame('1.00', $rows[0]['score']);
     }
 
     private function complete(array $attempt): void

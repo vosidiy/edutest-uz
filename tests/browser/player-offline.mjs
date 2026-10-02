@@ -12,10 +12,10 @@ const artifacts = await fs.mkdtemp('/private/tmp/edutest-player-browser-');
 const chromePath = process.env.PLAYER_CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const php = process.env.PLAYER_PHP || 'php';
 const token = 'a'.repeat(64);
-let mode = 'assessment', feedback = 'after_each', visibility = true, integrity = true, official = null, forceConflict = false, loseStartResponse = false, starts = 0;
+let mode = 'assessment', feedback = 'after_each', visibility = true, integrity = true, timerSeconds = 600, official = null, forceConflict = false, loseStartResponse = false, starts = 0;
 const requests = [];
 const quiz = () => ({title: 'A little curiosity goes a long way', description: 'Explore geography in three quick questions. Take your time, trust what you know, and learn something new.',
-  instructions: 'Choose your answer, then submit it. You cannot return to a submitted question.', teacher: 'Sarah Williams', questionCount: 3, timeLimitMinutes: '10',
+  instructions: 'Choose your answer, then submit it. You cannot return to a submitted question.', teacher: 'Sarah Williams', questionCount: 3, timeLimitMinutes: timerSeconds === null ? null : String(timerSeconds / 60),
   opensAt: null, closesAt: null, passcodeRequired: false, availability: 'available', shareToken: token, emailMode: 'optional', phoneMode: 'hidden', cheatCheck: integrity, cover: null, mode});
 const questions = () => [
   {id: '9007199254740993', type: 'single_choice', content: 'What is the capital of France?', media: null, explanation: 'Paris has been the political and cultural centre of France for centuries.', acceptedAnswers: [], correctCodes: ['paris'],
@@ -49,8 +49,9 @@ const server = http.createServer(async (request, response) => {
       starts++;
       const now = new Date().toISOString();
       official = {mode, attemptId: mode === 'assessment' ? 'fixture' : null, credential: 'fixture-credential', status: 'in_progress', startedAt: now,
-        expiresAt: new Date(Date.now() + 600000).toISOString(), deadlineReason: 'timer_expired', result: null, finishReason: null,
-        quiz: {...quiz(), settings: {feedback, timeLimitSec: 600, closesAt: null, ...(typeof visibility === 'boolean' ? {showScore: visibility, showAnswers: visibility, showExplain: visibility} : visibility), cheatCheck: integrity}, questions: questions()},
+        expiresAt: new Date(Date.now() + (timerSeconds ?? 28800) * 1000).toISOString(), deadlineReason: timerSeconds === null ? 'stale_timeout' : 'timer_expired', result: null, finishReason: null,
+        ...(mode === 'assessment' ? {student:{name:body.name,email:body.email || null}} : {}),
+        quiz: {...quiz(), settings: {feedback, timeLimitSec: timerSeconds, closesAt: null, ...(typeof visibility === 'boolean' ? {showScore: visibility, showAnswers: visibility, showExplain: visibility} : visibility), cheatCheck: integrity}, questions: questions()},
         items: questions().map((question, index) => ({questionId: question.id, status: index === 0 ? 'active' : 'pending', answerStatus: 'not_reached', answerCodes: [], textAnswer: ''}))};
       if (loseStartResponse) { loseStartResponse = false; response.writeHead(200, {'Content-Type': 'application/json'}).end('{"data":'); return; }
       json(response, official); return;
@@ -69,10 +70,10 @@ const server = http.createServer(async (request, response) => {
       json(response, {attemptId: official.attemptId, questionId, answerStatus: body.status, status: official.status, expiresAt: official.expiresAt, deadlineReason: official.deadlineReason, clientActivityAt: body.clientActivityAt, lateSync: official.status === 'abandoned', receivedAt: new Date().toISOString()}); return;
     }
     if (url.pathname.endsWith('/finish')) {
-      if (official.items.some(item => item.status !== 'locked')) {
+      const confirmed = official.items.filter(item => item.status === 'locked').length;
+      if ((body.finishReason === 'completed' && confirmed !== official.items.length) || confirmed !== body.confirmedCount) {
         response.writeHead(409, {'Content-Type': 'application/json'}).end(JSON.stringify({error: {code: 'not_finished', message: 'Not finished'}, meta: {timestamp: new Date().toISOString()}})); return;
       }
-      assert.equal(body.confirmedCount, official.items.length);
       official.finishReason = body.finishReason; official.status = 'completed'; official.result = {...summarize(official.quiz.questions, official.items), confirmed: true};
       json(response, official); return;
     }
@@ -157,7 +158,7 @@ try {
   assert.equal(starts,1);
   assert.equal(official.items.filter(item=>item.answerStatus==='answered').length,3);
   for (const modeValue of ['assessment','practice']) {
-    mode=modeValue; feedback='after_each'; visibility=false; integrity=false; official=null;
+    mode=modeValue; feedback='after_each'; visibility=false; integrity=false; timerSeconds=600; official=null;
     const offset=requests.length;
     await navigate(); await startQuiz();
     await clickText('Skip question');
@@ -169,8 +170,20 @@ try {
     if(modeValue==='practice') assert.equal(requests.slice(offset).some(row=>/answers|finish|events/.test(row.path)),false);
     else await until(()=>official.status==='completed','receipt-only assessment sync');
   }
+  mode='assessment'; feedback='after_each'; visibility=true; integrity=false; timerSeconds=null; official=null;
+  await navigate(); await startQuiz();
+  assert.equal(await evaluate('document.querySelector(".player-current-user").textContent.includes("Alex Morgan")'),true);
+  assert.equal(await evaluate('document.querySelector(".player-timer") === null'),true);
+  await evaluate('document.querySelector("input[value=paris]").click()'); await clickText('Submit answer');
+  await evaluate('window.confirm=()=>true'); await clickText('Quit quiz');
+  await until(()=>evaluate('document.querySelector(".player-results-header")?.textContent.includes("Quiz ended")'),'quit result');
+  await until(()=>official?.status==='completed' && official?.finishReason==='quit','quit synchronization');
+  assert.equal(official.items.filter(item=>item.answerStatus!=='not_reached').length,1);
+  await until(()=>evaluate('Array.from(document.querySelectorAll("button")).some(button=>button.textContent.trim()==="Start again")'),'quit acknowledgement');
+  await clickText('Start again');
+  await until(()=>evaluate('Boolean(document.querySelector("#quiz-admission"))'),'fresh admission after quit');
   assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({passed:true, checks:['offline immediate feedback','persistent connection warning','reload with pending confirmation and draft','provisional abandonment reconciliation','offline results','late upload acknowledgements','receipt-only assessment/practice','practice privacy'],artifacts},null,2));
+  console.log(JSON.stringify({passed:true, checks:['offline immediate feedback','persistent connection warning','reload with pending confirmation and draft','provisional abandonment reconciliation','offline results','late upload acknowledgements','receipt-only assessment/practice','practice privacy','student identity','hidden inactivity timer','quit and fresh admission'],artifacts},null,2));
 } catch(error) {
   console.error(JSON.stringify({error:error.message,errors,requests:requests.slice(-12),page:socket?await evaluate('document.body.innerText').catch(()=>''):''},null,2));
   throw error;

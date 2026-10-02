@@ -30,6 +30,7 @@ final class SchemaSqlTest extends CIUnitTestCase
         $this->assertStringNotContainsString('current_pos', $sql);
         $this->assertStringNotContainsString('CREATE TABLE attempt_items', $sql);
         $this->assertStringContainsString("CHECK (status IN ('in_progress', 'completed', 'abandoned'))", $sql);
+        $this->assertStringContainsString("ended_reason IN ('completed', 'quit', 'timer_expired', 'scheduled_close', 'stale_timeout')", $sql);
         $this->assertStringContainsString("CHECK (media_type IS NULL OR media_type = 'image')", $sql);
         $this->assertStringNotContainsString('points DECIMAL', $sql);
         $this->assertStringNotContainsString('chk_questions_time_limit', $sql);

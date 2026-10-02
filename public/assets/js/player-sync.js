@@ -1,4 +1,4 @@
-import {hasPending, mergeServer, acknowledge} from './player-state.js?v=4';
+import {hasPending, mergeServer, acknowledge} from './player-state.js?v=5';
 
 /** One coordinator for recovery, confirmations, Finish, activity and integrity. */
 export class PlayerSync {

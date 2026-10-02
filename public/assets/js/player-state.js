@@ -17,7 +17,7 @@ export function createState(data, serverTime, wallTime = Date.now()) {
   if (!finished && items[index]?.answerStatus === 'not_reached') items[index].status = 'active';
   return {
     format: 4, mode: data.mode, attemptId: data.attemptId || null, credential: data.credential,
-    quiz: data.quiz, startedAt: data.startedAt, expiresAt: data.expiresAt, deadlineReason: data.deadlineReason,
+    quiz: data.quiz, student: data.student || null, startedAt: data.startedAt, expiresAt: data.expiresAt, deadlineReason: data.deadlineReason,
     clientActivityAt: data.clientActivityAt || data.startedAt, activityPending: false, activitySentAt: 0,
     serverStatus: data.status, lateSync: Boolean(data.lateSync),
     items, index, phase: finished ? 'complete' : allConfirmed ? 'feedback' : 'answering', pendingAnswers: [], finishPending: false, finishRecord: null,
@@ -28,8 +28,13 @@ export function createState(data, serverTime, wallTime = Date.now()) {
 
 export function deadlines(state) {
   if (!state.expiresAt) return [];
-  const labels = {timer_expired: 'quizTimer', scheduled_close: 'closingTimer', stale_timeout: 'inactivityTimer'};
+  const labels = {timer_expired: 'quizTimer', scheduled_close: 'closingTimer'};
   return [{at: time(state.expiresAt), reason: state.deadlineReason, label: labels[state.deadlineReason] || 'quizTimer'}];
+}
+
+// Inactivity remains an enforced deadline, but it is an internal recovery rule rather than a quiz timer.
+export function visibleDeadlines(state) {
+  return deadlines(state).filter(deadline => deadline.reason !== 'stale_timeout');
 }
 
 function setFinish(state, reason, at) {
@@ -42,6 +47,13 @@ function setFinish(state, reason, at) {
 export function finishTimed(state, reason = state.deadlineReason) {
   if (state.finishReason) return false;
   setFinish(state, reason, state.expiresAt);
+  return true;
+}
+
+export function quitQuiz(state, now = state.lastClock) {
+  if (expireIfDue(state, now) || state.finishReason) return false;
+  recordActivity(state, now);
+  setFinish(state, 'quit', state.clientActivityAt);
   return true;
 }
 
@@ -102,6 +114,9 @@ export function hasPending(state) {
   if (state.format !== 4) return state.mode === 'assessment'; // Preserve unsupported work on exit, too.
   return state.mode === 'assessment' && (state.pendingAnswers.length > 0 || state.finishPending || state.events.length > 0 || state.activityPending);
 }
+export function hasUploadPending(state) {
+  return state?.mode === 'assessment' && (state.pendingAnswers.length > 0 || state.finishPending);
+}
 export function isFullscreenExit(previouslyActive, currentlyActive) { return Boolean(previouslyActive) && !currentlyActive; }
 
 function sameAnswer(item, operation) {
@@ -160,6 +175,7 @@ export function mergeServer(state, server) {
   const positions = new Map(items.map((item,index) => [item.questionId,index]));
   state.pendingAnswers.sort((a,b) => positions.get(a.questionId) - positions.get(b.questionId));
   state.serverStatus = server.status; state.serverResult = server.result; state.lateSync ||= Boolean(server.lateSync);
+  if (server.student) state.student = copy(server.student);
   if (time(server.clientActivityAt) >= time(state.clientActivityAt)) {
     state.activityPending = false; state.clientActivityAt = server.clientActivityAt;
     state.expiresAt = server.expiresAt; state.deadlineReason = server.deadlineReason;

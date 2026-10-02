@@ -121,6 +121,13 @@ final class TeacherResultsService
             ->limit(self::ATTEMPT_PAGE_SIZE, ($filters['page'] - 1) * self::ATTEMPT_PAGE_SIZE)
             ->get()
             ->getResultArray();
+        $progress = $this->answerProgress(array_column($rows, 'internal_attempt_id'));
+        foreach ($rows as &$row) {
+            $counts = $progress[(string) $row['internal_attempt_id']] ?? ['response_count' => 0, 'correct_count' => 0];
+            $row['response_count'] = $counts['response_count'];
+            $row['correct_count'] = $counts['correct_count'];
+        }
+        unset($row);
 
         $metrics = $this->quizMetrics((int) $quiz['id']);
         $query = $this->attemptFilterQuery($filters);
@@ -454,7 +461,7 @@ final class TeacherResultsService
 
     private function selectAttemptRows(BaseBuilder $builder, string $sort): BaseBuilder
     {
-        $builder->select('a.public_id, a.name, a.email, a.phone, a.status, a.ended_reason, a.score, a.max_score, a.percent, a.started_at, a.finished_at, a.last_activity_at, a.late_sync')
+        $builder->select('a.id AS internal_attempt_id, a.public_id, a.name, a.email, a.phone, a.status, a.ended_reason, a.score, a.max_score, a.percent, a.started_at, a.finished_at, a.last_activity_at, a.late_sync')
             ->select('p.revision AS paper_revision')
             ->select('COALESCE(ev.integrity_count, 0) AS integrity_count', false);
 
@@ -481,6 +488,8 @@ final class TeacherResultsService
             'status'        => (string) $row['status'],
             'finishReason'  => $this->nullableString($row['ended_reason']),
             'lateSync' => (bool) $row['late_sync'],
+            'responsesReceived' => (int) $row['response_count'],
+            'correctReceived' => (int) $row['correct_count'],
             'score'         => $this->decimalOrNull($row['score']),
             'maxScore'      => $this->decimal((string) $row['max_score']),
             'percent'       => $this->decimalOrNull($row['percent']),
@@ -492,6 +501,39 @@ final class TeacherResultsService
             'paperRevision' => (int) $row['paper_revision'],
             'url'           => site_url('results/attempts/' . $row['public_id']),
         ];
+    }
+
+    /**
+     * Count only the normalized answer rows for the attempts shown on this page.
+     * No answer payload, paper JSON, or question content is loaded.
+     *
+     * @param list<int|string> $attemptIds
+     * @return array<string, array{response_count:int, correct_count:int}>
+     */
+    private function answerProgress(array $attemptIds): array
+    {
+        if ($attemptIds === []) {
+            return [];
+        }
+
+        $rows = $this->db->table('attempt_answers')
+            ->select('attempt_id')
+            ->select("SUM(CASE WHEN status <> 'not_reached' THEN 1 ELSE 0 END) AS response_count", false)
+            ->select('SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) AS correct_count', false)
+            ->whereIn('attempt_id', $attemptIds)
+            ->groupBy('attempt_id')
+            ->get()
+            ->getResultArray();
+
+        $result = [];
+        foreach ($rows as $row) {
+            $result[(string) $row['attempt_id']] = [
+                'response_count' => (int) $row['response_count'],
+                'correct_count' => (int) $row['correct_count'],
+            ];
+        }
+
+        return $result;
     }
 
     /** @return array<string, mixed> */
@@ -571,9 +613,9 @@ final class TeacherResultsService
      */
     private function normalizeAttemptFilters(array $input, bool $withPage, string $timezone): array
     {
-        $status = (string) ($input['status'] ?? 'finalized');
+        $status = (string) ($input['status'] ?? 'all');
         if (! in_array($status, ['finalized', 'in_progress', 'completed', 'abandoned', 'all'], true)) {
-            $status = 'finalized';
+            $status = 'all';
         }
         $integrity = (string) ($input['integrity'] ?? 'all');
         if (! in_array($integrity, ['all', 'flagged', 'clear'], true)) {
@@ -611,7 +653,7 @@ final class TeacherResultsService
     {
         $query = array_filter([
             'q'         => $filters['query'],
-            'status'    => $filters['status'] !== 'finalized' ? $filters['status'] : null,
+            'status'    => $filters['status'] !== 'all' ? $filters['status'] : null,
             'dateFrom'  => $filters['dateFrom'],
             'dateTo'    => $filters['dateTo'],
             'minScore'  => $filters['minScore'],

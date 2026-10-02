@@ -50,7 +50,7 @@ The service locks the attempt, resolves expiry, validates against the bound pape
 
 The response is a small acknowledgement: `attemptId`, `questionId`, `answerStatus`, `receivedAt`, current status/deadline/reason, client activity, and late-sync flag. It contains neither the full paper nor other answers. Grading reads the bound paper directly, without shuffling or creating signed media URLs.
 
-After all queued confirmations, Finish sends `finishReason`, `clientFinishedAt`, `clientActivityAt`, and `confirmedCount`. Normal completion requires every row; timeout requires a confirmed prefix followed by unreached rows. Missing confirmations return retryable `incomplete_sync`. The server regrades confirmed rows and returns the official result without a quiz payload. Identical retries return the same result; conflicting final records are rejected. The browser removes only acknowledged operations and preserves newer local work.
+After all queued confirmations, Finish sends `finishReason`, `clientFinishedAt`, `clientActivityAt`, and `confirmedCount`. Normal completion requires every row; timeout or explicit Quit requires a confirmed prefix followed by unreached rows, and Quit may use an empty prefix. Missing confirmations return retryable `incomplete_sync`. The server regrades confirmed rows and returns the official result without a quiz payload. An acknowledged Quit is `status=completed`, `ended_reason=quit`; this means synchronization is final, not that every question was reached. Identical retries return the same result; conflicting final records are rejected. The browser removes only acknowledged operations and preserves newer local work.
 
 ## Deadlines and terminal state
 
@@ -59,19 +59,19 @@ After all queued confirmations, Finish sends `finishReason`, `clientFinishedAt`,
 - Timed: `started_at + total timer`, capped by the paper's closing time.
 - Untimed: accepted `client_activity_at + 8 hours`, capped by the paper's closing time.
 
-Meaningful interactions, not receipt/retry time, extend inactivity. Untimed clients coalesce bearer-protected activity updates at most once per minute while changes exist. Server load, media, integrity, and passive visibility do not extend it. Timestamps are bounded by start and server time plus five seconds; continuous offline activity cannot be independently verified.
+Meaningful interactions, not receipt/retry time, extend inactivity. Untimed clients coalesce bearer-protected activity updates at most once per minute while changes exist. This internal deadline remains enforced but is not displayed as a student countdown, and routine activity waiting is excluded from pending-answer/Retry presentation. Server load, media, integrity, and passive visibility do not extend it. Timestamps are bounded by start and server time plus five seconds; continuous offline activity cannot be independently verified.
 
 Every attempt endpoint checks expiry under the attempt lock. Expiry produces provisional `abandoned` results from received work. Delayed confirmations recorded before the browser deadline remain acceptable; `late_sync` flags reconciliation. Untimed activity may revive In progress. A validated final record becomes immutable `completed`, including timeout outcomes. `finished_at` is the effective ending time, while receipt timestamps remain separate. Invalid actions still commit legitimate lazy expiry; unrelated database failures roll back. Teacher report access also resolves overdue rows. No background worker is required.
 
 ## Historical review and scoring
 
-Teacher and student review combine the immutable paper with `attempt_answers`. Presented positions and option-code order reproduce the exact historical question and A/B/C layout even if the live working copy is later edited or deleted.
+Teacher and student review combine the immutable paper with `attempt_answers`. Presented positions and option-code order reproduce the exact historical question and A/B/C layout even if the live working copy is later edited or deleted. Per-quiz reporting defaults to all statuses and obtains response/correct counts with a grouped query limited to the displayed attempt IDs. Unfinished score fields remain null; running correctness is a projection only, and browser-local unsynchronized answers cannot appear until received.
 
 Single choice and short text are full-or-zero. Multi-select uses exact-set, all-or-nothing comparison. Attempt `score` and `max_score` are integers; `percent` is an exact two-decimal summary. Client-reported correctness is never accepted.
 
 ## Deployment
 
-Fresh databases import only [`schema.sql`](schema.sql). For an existing normalized-answer database, back up, stop student traffic, and deploy code with the additive [`offline-continuity-upgrade.sql`](offline-continuity-upgrade.sql), applied manually in phpMyAdmin. It preserves records, backfills client activity from previous activity, and leaves unknown historical answer occurrence times null. Do not use the older destructive reset for this update. The application never runs schema changes automatically.
+Fresh databases import only [`schema.sql`](schema.sql). For an existing normalized-answer database, back up and stop student traffic. Apply [`offline-continuity-upgrade.sql`](offline-continuity-upgrade.sql) if it is not already installed, then apply the independent [`quit-attempt-upgrade.sql`](quit-attempt-upgrade.sql) and deploy matching code. The first adds offline-continuity fields; the second replaces only the ended-reason constraint. Both preserve records and are run manually in phpMyAdmin. Do not use the older destructive reset for this update. The application never runs schema changes automatically.
 
 ## Storage benchmark
 

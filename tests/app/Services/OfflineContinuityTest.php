@@ -139,4 +139,46 @@ final class OfflineContinuityTest extends PlayerTestCase
         $this->assertSame(1, $this->db->table('cheat_events')->countAllResults());
         $this->assertSame('completed', $this->db->table('attempts')->get()->getRow('status'));
     }
+
+    public function testQuitFinalizesZeroOrPartialConfirmedPrefixesAndIsRetrySafe(): void
+    {
+        $quiz = $this->quiz(count: 3);
+        $empty = $this->startQuiz($quiz, ['name' => '<Alex>', 'email' => 'alex@example.test']);
+        $this->assertSame(['name' => '<Alex>', 'email' => 'alex@example.test'], $empty['student']);
+        $emptyBody = $this->finishBody($empty, 'quit', count: 0);
+        $emptyDone = $this->player->assessment->finish($empty['attemptId'], $empty['credential'], $emptyBody);
+        $this->assertSame('completed', $emptyDone['status']);
+        $this->assertSame('quit', $emptyDone['finishReason']);
+        $this->assertSame('0', $emptyDone['result']['score']);
+        $this->assertSame($emptyDone, $this->player->assessment->finish($empty['attemptId'], $empty['credential'], $emptyBody));
+        $this->error('finish_conflict', fn () => $this->player->assessment->finish(
+            $empty['attemptId'],
+            $empty['credential'],
+            array_replace($emptyBody, ['finishReason' => 'completed']),
+        ));
+
+        $partial = $this->startQuiz($quiz);
+        $answer = $this->confirmation($this->submission($partial, 0));
+        $this->player->assessment->answer($partial['attemptId'], $partial['quiz']['questions'][0]['id'], $partial['credential'], $answer);
+        $partialDone = $this->player->assessment->finish($partial['attemptId'], $partial['credential'], $this->finishBody($partial, 'quit', count: 1));
+        $this->assertSame('1', $partialDone['result']['score']);
+        $attemptId = $this->db->table('attempts')->select('id')->where('public_id', $partial['attemptId'])->get()->getRow('id');
+        $this->assertSame(
+            ['answered', 'not_reached', 'not_reached'],
+            array_column($this->db->table('attempt_answers')->where('attempt_id', $attemptId)->orderBy('pos')->get()->getResultArray(), 'status'),
+        );
+    }
+
+    public function testDelayedQuitCanReconcileProvisionalAbandonment(): void
+    {
+        $attempt = $this->startQuiz($this->quiz(settings: ['timeLimitMinutes' => '0.5']));
+        [, $at] = $this->age($attempt);
+        $this->assertSame('abandoned', $this->player->assessment->load($attempt['attemptId'], $attempt['credential'])['status']);
+        $answer = $this->confirmation($this->submission($attempt, 0), $at(5));
+        $this->player->assessment->answer($attempt['attemptId'], $attempt['quiz']['questions'][0]['id'], $attempt['credential'], $answer);
+        $done = $this->player->assessment->finish($attempt['attemptId'], $attempt['credential'], $this->finishBody($attempt, 'quit', $at(10), $at(10), 1));
+        $this->assertSame('completed', $done['status']);
+        $this->assertSame('quit', $done['finishReason']);
+        $this->assertTrue($done['lateSync']);
+    }
 }

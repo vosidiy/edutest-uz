@@ -9,7 +9,7 @@
         <p>Finalized totals and saved work in progress. <?= esc(lang('Results.revisionRetentionNotice')) ?></p>
     </div>
 </header>
-<p class="alert alert-warning"><?= esc(lang('Results.abandonedNotice')) ?></p>
+<p class="alert alert-warning"><?= esc(lang('Results.progressNotice')) ?> <?= esc(lang('Results.abandonedNotice')) ?></p>
 
 <div class="content-area results-workspace">
     <?php $metrics = $report['metrics']; ?>
@@ -21,7 +21,7 @@
 
     <form class="card attempt-filters" method="get">
         <label class="form-field attempt-search"><span class="form-label">Student search</span><input class="form-control" type="search" name="q" value="<?= esc($report['filters']['query'], 'attr') ?>" placeholder="Name, email, or phone"></label>
-        <label class="form-field"><span class="form-label">Status</span><select class="form-control" name="status"><?php foreach (['finalized' => 'Finalized', 'in_progress' => 'In progress', 'completed' => 'Completed', 'abandoned' => 'Abandoned', 'all' => 'All statuses'] as $value => $label) : ?><option value="<?= esc($value, 'attr') ?>" <?= $report['filters']['status'] === $value ? 'selected' : '' ?>><?= esc($label) ?></option><?php endforeach ?></select></label>
+        <label class="form-field"><span class="form-label">Status</span><select class="form-control" name="status"><?php foreach (['all' => 'All statuses', 'finalized' => 'Finalized', 'in_progress' => 'In progress', 'completed' => 'Completed', 'abandoned' => 'Abandoned'] as $value => $label) : ?><option value="<?= esc($value, 'attr') ?>" <?= $report['filters']['status'] === $value ? 'selected' : '' ?>><?= esc($label) ?></option><?php endforeach ?></select></label>
         <label class="form-field"><span class="form-label">Started from</span><input class="form-control" type="date" name="dateFrom" value="<?= esc((string) $report['filters']['dateFrom'], 'attr') ?>"></label>
         <label class="form-field"><span class="form-label">Started to</span><input class="form-control" type="date" name="dateTo" value="<?= esc((string) $report['filters']['dateTo'], 'attr') ?>"></label>
         <label class="form-field"><span class="form-label">Minimum score %</span><input class="form-control" type="number" min="0" max="100" step="0.01" name="minScore" value="<?= esc($report['filters']['minScore'] === null ? '' : (string) $report['filters']['minScore'], 'attr') ?>"></label>
@@ -36,12 +36,13 @@
         <?php if ($report['attempts'] === []) : ?>
             <div class="empty-state"><span aria-hidden="true">◎</span><h3><?= esc(lang('Results.emptyAttemptsTitle')) ?></h3><p><?= esc(lang('Results.emptyAttemptsBody')) ?></p></div>
         <?php else : ?>
-            <div class="table-wrap"><table class="table results-table"><thead><tr><th scope="col">Student</th><th scope="col">Paper</th><th scope="col">Status</th><th scope="col">Score</th><th scope="col">Duration</th><th scope="col">Finished</th><th scope="col">Integrity</th><th scope="col"><span class="sr-only">Open attempt</span></th></tr></thead><tbody>
+            <div class="table-wrap"><table class="table results-table"><thead><tr><th scope="col">Student</th><th scope="col">Paper</th><th scope="col">Status</th><th scope="col"><?= esc(lang('Results.responsesReceived')) ?></th><th scope="col">Score</th><th scope="col">Duration</th><th scope="col">Finished</th><th scope="col">Integrity</th><th scope="col"><span class="sr-only">Open attempt</span></th></tr></thead><tbody>
             <?php foreach ($report['attempts'] as $attempt) : ?>
                 <tr>
                     <td><a class="result-title-link" href="<?= esc($attempt['url'], 'attr') ?>"><?= esc($attempt['name']) ?></a><small><?= esc($attempt['email'] ?? $attempt['phone'] ?? 'No optional contact') ?></small></td>
                     <td><?= esc(lang('Results.paperRevision')) ?> <?= esc((string) $attempt['paperRevision']) ?></td>
-                    <td><span class="badge attempt-status <?= esc($attempt['status'], 'attr') ?>"><?= esc(ucwords(str_replace('_', ' ', $attempt['status']))) ?></span><small><?= esc($attempt['finishReason'] ? lang('Player.ui.' . $attempt['finishReason']) : '') ?></small><?php if ($attempt['lateSync']) : ?><small><?= esc(lang('Results.lateSync')) ?></small><?php endif ?></td>
+                    <td><span class="badge attempt-status <?= esc($attempt['status'], 'attr') ?>"><?= esc($attempt['finishReason'] === 'quit' ? lang('Results.quitStatus') : ucwords(str_replace('_', ' ', $attempt['status']))) ?></span><small><?= esc($attempt['finishReason'] ? lang('Player.ui.' . $attempt['finishReason']) : '') ?></small><?php if ($attempt['lateSync']) : ?><small><?= esc(lang('Results.lateSync')) ?></small><?php endif ?></td>
+                    <td><?= esc((string) $attempt['responsesReceived']) ?> / <?= esc($attempt['maxScore']) ?><small><?= esc((string) $attempt['correctReceived']) ?> <?= esc(lang($attempt['status'] === 'in_progress' ? 'Results.correctSoFar' : 'Results.correctReceived')) ?></small></td>
                     <td><?= $attempt['percent'] === null ? esc(lang('Results.ungraded')) : esc($attempt['score']) . ' / ' . esc($attempt['maxScore']) . ' questions (' . esc($attempt['percent']) . '%)' ?></td>
                     <td><?= esc($attempt['duration'] ?? lang('Results.notAvailable')) ?></td>
                     <td><?= esc($attempt['submittedAt']['display'] ?? 'Not finished') ?></td>

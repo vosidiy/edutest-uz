@@ -1,6 +1,6 @@
 -- EduTest canonical application schema
 -- Target: MySQL 8.4, InnoDB, utf8mb4
--- Last updated: 2026-10-01
+-- Last updated: 2026-10-02
 --
 -- Fresh-install use in phpMyAdmin:
 --   1. Select the intended empty database.
@@ -251,7 +251,7 @@ CREATE TABLE attempts (
   CONSTRAINT chk_attempts_ended_reason
     CHECK (
       ended_reason IS NULL
-      OR ended_reason IN ('completed', 'timer_expired', 'scheduled_close', 'stale_timeout')
+      OR ended_reason IN ('completed', 'quit', 'timer_expired', 'scheduled_close', 'stale_timeout')
     ),
   CONSTRAINT chk_attempts_terminal_fields
     CHECK (

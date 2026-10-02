@@ -76,7 +76,7 @@ final class AssessmentService
     {
         return $this->mutate($this->authorize($publicId, $token), function (array $attempt) use ($input): array {
             if (! $this->hasExactKeys($input, ['finishReason', 'clientFinishedAt', 'clientActivityAt', 'confirmedCount'])
-                || ! in_array($input['finishReason'], ['completed', 'timer_expired', 'scheduled_close', 'stale_timeout'], true)
+                || ! in_array($input['finishReason'], ['completed', 'quit', 'timer_expired', 'scheduled_close', 'stale_timeout'], true)
                 || ! is_int($input['confirmedCount']) || $input['confirmedCount'] < 0 || $input['confirmedCount'] > (int) $attempt['max_score']) throw new PlayerException('invalid_progress');
             $now = PlayerStore::now();
             $finished = $this->clientTime($input['clientFinishedAt'], $attempt, $now);
@@ -100,6 +100,8 @@ final class AssessmentService
             $changes = $this->activityChanges($attempt, $settings, $activity, $now);
             if ($input['finishReason'] === 'completed') {
                 if ($input['confirmedCount'] !== (int) $attempt['max_score']) throw new PlayerException('incomplete_sync', 409);
+                if ($finished >= $changes['expires_at']) throw new PlayerException('invalid_timing');
+            } elseif ($input['finishReason'] === 'quit') {
                 if ($finished >= $changes['expires_at']) throw new PlayerException('invalid_timing');
             } elseif ($input['finishReason'] !== $changes['deadline_reason'] || $finished !== $changes['expires_at']) {
                 throw new PlayerException('invalid_timing');
@@ -269,6 +271,7 @@ final class AssessmentService
             'mode' => 'assessment', 'attemptId' => (string) $attempt['public_id'], 'status' => (string) $attempt['status'],
             'startedAt' => PlayerStore::iso($attempt['started_at']), 'expiresAt' => PlayerStore::iso($attempt['expires_at']),
             'deadlineReason' => (string) $attempt['deadline_reason'], 'finishReason' => $attempt['ended_reason'],
+            'student' => ['name' => (string) $attempt['name'], 'email' => $attempt['email'] === null ? null : (string) $attempt['email']],
             'quiz' => $document, 'items' => $items,
             'result' => $attempt['status'] === 'in_progress' ? null : $this->result($attempt, $rows, $this->papers->settings($paper)),
         ];

@@ -4,6 +4,10 @@
 
 ### Added
 
+- Explicit Assessment and Practice Quit controls. Assessment Quit durably finalizes the confirmed prefix with `ended_reason=quit`, waits for pending uploads before offering fresh admission, and remains safely retryable after offline use; Practice Quit stays local.
+- Authenticated student name/email projection in Assessment start/recovery state and player/result headers, with backward-compatible recovery for older local runs.
+- Teacher response progress showing received confirmations/skips and running correctness, with all statuses/newest starts as the default and clear offline/connectivity caveats.
+- Non-destructive `quit-attempt-upgrade.sql` plus canonical ended-reason support for Quit.
 - Recoverable offline assessment synchronization: durable format-4 local progress/outbox, immediate local feedback/results, serialized resume and upload coordination, small answer acknowledgements, and direct paper grading.
 - Additive manual `offline-continuity-upgrade.sql` and canonical client activity/answer-occurrence fields plus a late-sync flag; no application-triggered database changes or data reset.
 - Provisional Abandoned results can reconcile delayed work; Completed final records remain immutable. Timeout scores exclude unconfirmed drafts. Teacher detail/CSV distinguish occurrence, receipt, finish reason, and late synchronization.
@@ -68,6 +72,9 @@
 
 ### Changed
 
+- Student countdowns now represent only authored total timers or scheduled closing; the eight-hour inactivity deadline remains enforced internally without a visible countdown or warning.
+- Routine coalesced activity synchronization is silent. Pending/upload/Retry controls now reflect confirmed-answer or final-record delivery and real request failures, while drafts are explicitly described as saved in the browser.
+- Response-list progress uses grouped `attempt_answers` aggregates limited to the displayed page and never decodes answer bodies or paper JSON.
 - Replaced aggregate assessment-response JSON and sync batches with per-question `PUT` confirmations plus a separate Finish endpoint.
 - Simplified teacher attempt review around published papers plus `attempt_answers`, preserving historical question order, answers, correctness, timestamps, overall timing, finish reason, IP/device details, and integrity history.
 
