@@ -589,7 +589,7 @@ img {
 
 .faq-list p {
     margin-bottom: 0;
-    color: var(--muted);
+    color: #000;
 }
 
 /* Footer */

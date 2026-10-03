@@ -139,9 +139,9 @@ $placeholderImage = base_url('images/landing/placeholder.jpg');
                 <article class="workflow-copy">
                     <h2 id="build-title">Savollarni tayyorlang</h2>
                     <ul class="workflow-list">
-                        <li><span aria-hidden="true">💻</span><p>Savollar va javob variantlarini yozing. Togri javoblarni belgilang va tushuntirish qoshing.</p></li>
-                        <li><span aria-hidden="true">🎧</span><p>Savollarga rasm yoki audio qoshing. Video uchun YouTube havolasidan foydalaning.</p></li>
-                        <li><span aria-hidden="true">✓</span><p>AI (Suniy Intelekt)  yordamida istalgan mavzu bo'yicha test savollari yarating</p></li>
+                        <li><span aria-hidden="true">❓</span><p>Savollar va javob variantlarini yozing. Togri javoblarni belgilang va tushuntirish qoshing.</p></li>
+                        <li><span aria-hidden="true">🖼️</span><p>Savollarga rasm yoki audio qoshing. Video uchun YouTube havolasidan foydalaning.</p></li>
+                        <li><span aria-hidden="true">🪄</span><p>AI (Suniy Intelekt)  yordamida istalgan mavzu bo'yicha test savollari yarating</p></li>
                     </ul>
                     <a class="button button-primary button-large" href="<?= esc($accountUrl, 'attr') ?>"><?= esc($accountLabel) ?></a>
                 </article>
@@ -157,7 +157,7 @@ $placeholderImage = base_url('images/landing/placeholder.jpg');
                     <h2 id="results-title">Natijalarni kuzating</h2>
                     <ul class="workflow-list">
                         <li><span aria-hidden="true">📊</span><p>Baholash natijalari va har bir ishtirokchining javoblarini bitta ish maydonida korib chiqing.</p></li>
-                        <li><span aria-hidden="true">🔍</span><p>Urinishlar va javoblarni tekshiring va yakunlangan baholash natijalarini yuklab oling.</p></li>
+                        <li><span aria-hidden="true">📖</span><p>Urinishlar va javoblarni tekshiring va yakunlangan baholash natijalarini yuklab oling.</p></li>
                         <li><span aria-hidden="true">⏱️</span><p>Batafsil statistikani oling. Har bir ishtirokchi sarflagan vaqt haqida bilib oling</p></li>
                     </ul>
                     <a class="button button-primary button-large" href="<?= esc($accountUrl, 'attr') ?>"><?= esc($accountLabel) ?></a>
@@ -185,39 +185,60 @@ $placeholderImage = base_url('images/landing/placeholder.jpg');
         </header>
         <div class="compact-grid">
             <article class="compact-card" style="background:#e0e7ff">
-                <div class="compact-icon" aria-hidden="true">⌖</div>
+                <div class="compact-icon" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-link preview-icon"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                </div>
                 <div><h3>Imtihon uchun link</h3><p>Testni umumiy havola yoki maxsus raqamli kod orqali ulashing.</p></div>
             </article>
             <article class="compact-card" style="background:#eed8f4">
-                <div class="compact-icon" aria-hidden="true">▯</div>
+                <div class="compact-icon" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" color="#666" fill="none">
+                            <defs></defs>
+                            <path fill="currentColor" d="M7.306,10.275 L3.861,4.977 C5.832,2.694 8.747,1.25 12,1.25 C16.132,1.25 19.719,3.581 21.519,7 L12,7 C9.845,7 8.008,8.364 7.306,10.275 Z M22.326,9 C22.602,9.952 22.75,10.959 22.75,12 C22.75,17.937 17.937,22.75 12,22.75 C11.723,22.75 11.448,22.739 11.176,22.719 L16.346,14.534 C16.404,14.441 16.446,14.342 16.471,14.241 C16.81,13.567 17,12.806 17,12 C17,10.874 16.628,9.836 16.001,9 Z M1.25,12 C1.25,10.09 1.748,8.295 2.622,6.741 L7.688,14.532 C8.557,16.009 10.163,17 12,17 C12.146,17 12.291,16.994 12.434,16.982 L9.05,22.34 C4.547,21.058 1.25,16.914 1.25,12 Z M12,9 C13.657,9 15,10.343 15,12 C15,13.657 13.657,15 12,15 C10.343,15 9,13.657 9,12 C9,10.343 10.343,9 12,9 Z"></path>
+                        </svg>
+                </div>
                 <div><h3>Brauzerda ishlaydi</h3><p>Telefon, planshet yoki kompyuter brauzerida javob bering.</p></div>
             </article>
             <article class="compact-card" style="background:#e1f5ff">
-                <div class="compact-icon" aria-hidden="true">↖</div>
+                <div class="compact-icon" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-lock-keyhole-open preview-icon"><circle cx="12" cy="16" r="1"/><rect width="18" height="12" x="3" y="10" rx="2"/><path d="M7 10V7a5 5 0 0 1 9.33-2.5"/></svg>
+                </div>
                 <div><h3>Ochiq va yopiq test</h3><p>Test barcha uchun ochiq (public) yoki yopiq guruh uchun yaratish mumkin</p></div>
             </article>
             <article class="compact-card"  style="background:#f4e7d3">
-                <div class="compact-icon" aria-hidden="true">◫</div>
+                <div class="compact-icon" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-alarm-clock preview-icon"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/><path d="M6.38 18.7 4 21"/><path d="M17.64 18.67 20 21"/></svg>
+                </div>
                 <div><h3>Vaqt cheklovi</h3><p>Vaqt chegarasi, savollar tartibi va fikr-mulohazani sozlang.</p></div>
             </article>
             <article class="compact-card" style="background:#ccf6d5">
-                <div class="compact-icon" aria-hidden="true">◫</div>
+                <div class="compact-icon" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-wifi-off preview-icon"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg>
+                </div>
                 <div><h3>Offline rejim</h3><p>Imtihon payti internet uzilishlariga qaramay test dasturi ishlayveradi</p></div>
             </article>
             <article class="compact-card" style="background:#ffe6e6">
-                <div class="compact-icon" aria-hidden="true">◎</div>
+                <div class="compact-icon" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image preview-icon"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                </div>
                 <div><h3>Rasm va audio savol</h3><p>Savollarga rasm, audio va video fayllar qoshing. Masalan Youtube link</p></div>
             </article>
             <article class="compact-card" style="background:#fadfff">
-                <div class="compact-icon" aria-hidden="true">⇩</div>
+                <div class="compact-icon" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-down preview-icon"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>
+                </div>
                 <div><h3>Excel hisobotlar</h3><p>Yakunlangan baholash natijalarini CSV formatida oling.</p></div>
             </article>
             <article class="compact-card" style="background:#edf0c2">
-                <div class="compact-icon" aria-hidden="true">◫</div>
+                <div class="compact-icon" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye preview-icon"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+                </div>
                 <div><h3>G'irromlikka qarshi</h3><p>'Anti-cheating' - ya'ni o'quvchi brauzerdan chiqsa ustoz xabardor bo'ladi</p></div>
             </article>
             <article class="compact-card"  style="background:#e3e3e3">
-                <div class="compact-icon" aria-hidden="true">◫</div>
+                <div class="compact-icon" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-playing-cards-fan preview-icon"><path d="M12.65 7.65a2 2 0 012.629-1.046l5.51 2.374a2 2 0 011.046 2.628l-3.957 9.184a2 2 0 01-2.628 1.046l-5.51-2.374a2 2 0 01-1.046-2.628z"/><path d="M18 7.777V4a2 2 0 00-2-2h-6a2 2 0 00-2 2v10a2 2 0 001.137 1.805"/><path d="m8 4.389-4.364.809a2 2 0 00-1.602 2.33l1.822 9.833a2 2 0 002.331 1.602l2.542-.47"/></svg>
+                </div>
                 <div><h3>Avtomatik aralash</h3><p>Savol va variantlar har bir ishtirokchi uchun aralashtirish imkoni mavjud</p></div>
             </article>
         </div>
