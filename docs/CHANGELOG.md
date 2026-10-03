@@ -72,6 +72,7 @@
 
 ### Changed
 
+- Rebuilt the public landing page in Uzbek from the prepared prototype, with session-aware dashboard actions, an audience strip, self-hosted Inter fonts, local presentation imagery, and a focused indigo landing stylesheet.
 - Student countdowns now represent only authored total timers or scheduled closing; the eight-hour inactivity deadline remains enforced internally without a visible countdown or warning.
 - Routine coalesced activity synchronization is silent. Pending/upload/Retry controls now reflect confirmed-answer or final-record delivery and real request failures, while drafts are explicitly described as saved in the browser.
 - Response-list progress uses grouped `attempt_answers` aggregates limited to the displayed page and never decodes answer bodies or paper JSON.

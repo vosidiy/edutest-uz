@@ -100,6 +100,6 @@ The aggregate counter represents deduplicated starts, not unique people or compl
 
 ## Defaults and exclusions
 
-Defaults: assessment mode, unlisted quiz, disabled public profile, English translation-ready UI, `Asia/Tashkent` timezone, required name, optional email, hidden phone, no total timer/shuffle/integrity monitoring, feedback at end, score visible, and correct answers/explanations hidden.
+Defaults: assessment mode, unlisted quiz, disabled public profile, an Uzbek marketing landing with an English translation-ready application UI, `Asia/Tashkent` timezone, required name, optional email, hidden phone, no total timer/shuffle/integrity monitoring, feedback at end, score visible, and correct answers/explanations hidden.
 
 The MVP excludes organizations/workspaces, team roles, student accounts, per-person attempt limits, global discovery, leaderboards, certificates, surveillance, billing, uploaded video, and offline result imports.
