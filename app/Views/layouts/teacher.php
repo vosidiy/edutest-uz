@@ -8,7 +8,7 @@
     <meta name="theme-color" content="#0f172a">
     <title><?= esc($title ?? 'EduTest') ?></title>
     <link rel="icon" href="/favicon.ico" sizes="any">
-    <link rel="stylesheet" href="<?= esc(base_url('assets/css/teacher.css') . '?v=' . filemtime(FCPATH . 'assets/css/teacher.css'), 'attr') ?>">
+    <link rel="stylesheet" href="<?= esc(base_url('css/teacher.css') . '?v=' . filemtime(FCPATH . 'css/teacher.css'), 'attr') ?>">
     <?= $this->renderSection('head') ?>
 </head>
 <body class="<?= esc(($quizWorkspace ?? false) ? 'quiz-workspace' . (($builderHeader ?? false) ? ' builder-page' : '') : 'dashboard-page', 'attr') ?>">
@@ -41,7 +41,7 @@
     </main>
 </div>
 <div class="app-toast" id="app-toast" role="status" aria-live="polite"></div>
-<script src="<?= esc(base_url('assets/js/teacher.js') . '?v=' . filemtime(FCPATH . 'assets/js/teacher.js'), 'attr') ?>"></script>
+<script src="<?= esc(base_url('js/teacher.js') . '?v=' . filemtime(FCPATH . 'js/teacher.js'), 'attr') ?>"></script>
 <?= $this->renderSection('scripts') ?>
 </body>
 </html>

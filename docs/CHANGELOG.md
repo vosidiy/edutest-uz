@@ -72,6 +72,7 @@
 
 ### Changed
 
+- Flattened browser assets into top-level `public/css`, `public/js`, `public/fonts`, and `public/images` directories, relocated the pinned Vue build into `public/js`, and removed the landing page's duplicated quiz-mode section.
 - Rebuilt the public landing page in Uzbek from the prepared prototype, with session-aware dashboard actions, an audience strip, self-hosted Inter fonts, local presentation imagery, and a focused indigo landing stylesheet.
 - Student countdowns now represent only authored total timers or scheduled closing; the eight-hour inactivity deadline remains enforced internally without a visible countdown or warning.
 - Routine coalesced activity synchronization is silent. Pending/upload/Retry controls now reflect confirmed-answer or final-record delivery and real request failures, while drafts are explicitly described as saved in the browser.

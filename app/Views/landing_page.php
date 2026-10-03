@@ -3,10 +3,10 @@
 $isAuthenticated = (bool) ($authenticated ?? false);
 $accountUrl       = $isAuthenticated ? site_url('dashboard') : site_url('register');
 $accountLabel     = $isAuthenticated ? 'Ish maydoniga otish' : 'Test yaratish';
-$landingCss       = FCPATH . 'assets/css/landing.css';
-$landingJs        = FCPATH . 'assets/js/landing.js';
-$introImage       = base_url('assets/images/landing/intro.png');
-$placeholderImage = base_url('assets/images/landing/placeholder.jpg');
+$landingCss       = FCPATH . 'css/landing.css';
+$landingJs        = FCPATH . 'js/landing.js';
+$introImage       = base_url('images/landing/intro.png');
+$placeholderImage = base_url('images/landing/placeholder.jpg');
 ?>
 <!doctype html>
 <html lang="uz" data-theme="light">
@@ -25,9 +25,9 @@ $placeholderImage = base_url('assets/images/landing/placeholder.jpg');
     <meta name="twitter:title" content="123 test  Oqituvchilar uchun test yaratish platformasi">
     <meta name="twitter:description" content="123test bilan test yarating va ulashing. Oquvchilar bilimini baholang, anonim mashq tayyorlang va baholash natijalarini kuzating.">
     <link rel="icon" href="/favicon.ico" sizes="any">
-    <link rel="preload" href="<?= esc(base_url('assets/fonts/inter/Inter-Regular.woff2'), 'attr') ?>" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="<?= esc(base_url('assets/fonts/inter/Inter-SemiBold.woff2'), 'attr') ?>" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="<?= esc(base_url('assets/css/landing.css') . '?v=' . filemtime($landingCss), 'attr') ?>">
+    <link rel="preload" href="<?= esc(base_url('fonts/inter/Inter-Regular.woff2'), 'attr') ?>" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="<?= esc(base_url('fonts/inter/Inter-SemiBold.woff2'), 'attr') ?>" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="<?= esc(base_url('css/landing.css') . '?v=' . filemtime($landingCss), 'attr') ?>">
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
@@ -108,21 +108,21 @@ $placeholderImage = base_url('assets/images/landing/placeholder.jpg');
         <div class="container">
             <header class="section-heading centered">
                 <h2 id="features-title">Kimlar uchun?</h2>
-                <p>123test ilovasidan har qanday ustozlar foydalanishi mumkin. O'rta maktab, kollej, universitet va boshqa o'quv markazlari uchun mos keladi</p>
+                <p>123test ilovasidan har qanday ustozlar foydalanishi mumkin. Maktab, kollej, universitet, til (IELTS, TOEFL) markazlari...</p>
             </header>
             <div class="feature-grid">
                 <article class="feature-card feature-red">
-                    <div class="feature-image"><img src="<?= esc($placeholderImage, 'attr') ?>" width="480" height="320" alt="Savol yaratish ekranining vaqtinchalik rasmi"></div>
+                    <div class="feature-image"><img src="<?= base_url('images/landing/feature-1.png'); ?>" width="480" height="200" alt="talim uchun test rasmi"></div>
                     <h3>O'quv dargohlari</h3>
                     <p>Davlat va xususuy maktablar, o'quv markazlari va boshqa talim dargohlari</p>
                 </article>
                 <article class="feature-card feature-purple">
-                    <div class="feature-image"><img src="<?= esc($placeholderImage, 'attr') ?>" width="480" height="320" alt="Test rejimlari ekranining vaqtinchalik rasmi"></div>
+                    <div class="feature-image"><img src="<?= base_url('images/landing/feature-2.png'); ?>" width="480" height="200" alt="Ustozlar uchun test yaratish"></div>
                     <h3>Yakka ustozlar</h3>
                     <p>Repetitor ustozlar, online va offline ustozlar, xorijiy til ustozlari</p>
                 </article>
                 <article class="feature-card feature-blue">
-                    <div class="feature-image"><img src="<?= esc($placeholderImage, 'attr') ?>" width="480" height="320" alt="Testni ulashish ekranining vaqtinchalik rasmi"></div>
+                    <div class="feature-image"><img src="<?= base_url('images/landing/feature-3.png'); ?>" width="480" height="320" alt="Xodimlar uchun test"></div>
                     <h3>Xodimlarni baholash</h3>
                     <p>Korxonalar o'z xodimlarning bilim va saviyasini baholash uchun</p>
                 </article>
@@ -133,7 +133,9 @@ $placeholderImage = base_url('assets/images/landing/placeholder.jpg');
     <div id="how-it-works">
         <section class="workflow section" aria-labelledby="build-title">
             <div class="container workflow-layout">
-                <div class="workflow-media"><img src="<?= esc($placeholderImage, 'attr') ?>" width="480" height="320" alt="Test muharriri ekranining vaqtinchalik rasmi"></div>
+                <div class="workflow-media">
+                    <img src="<?= base_url('images/landing/section-pic-builder.png'); ?>" width="600" height="480" alt="UI sample for quiz builder illustration">
+                </div>
                 <article class="workflow-copy">
                     <h2 id="build-title">Savollarni tayyorlang</h2>
                     <ul class="workflow-list">
@@ -148,7 +150,9 @@ $placeholderImage = base_url('assets/images/landing/placeholder.jpg');
 
         <section class="workflow section section-soft" aria-labelledby="results-title">
             <div class="container workflow-layout workflow-reverse">
-                <div class="workflow-media"><img src="<?= esc($placeholderImage, 'attr') ?>" width="480" height="320" alt="Baholash natijalari ekranining vaqtinchalik rasmi"></div>
+                <div class="workflow-media">
+                    <img src="<?= base_url('images/landing/section-pic-result.png'); ?>" width="600" height="480" alt="UI sample for quiz results">    
+                </div>
                 <article class="workflow-copy">
                     <h2 id="results-title">Natijalarni kuzating</h2>
                     <ul class="workflow-list">
@@ -164,11 +168,10 @@ $placeholderImage = base_url('assets/images/landing/placeholder.jpg');
 
     <section class="section-compact" aria-label="Oqituvchi ish jarayoni">
         <div class="container">
-            <div class="workflow-story" style="background-image:url(/assets/images/landing/placeholder.jpg)">
-                <article>
-                    <p>Dars uchun oddiy ish tartibi: avval mavzuga mos savollar va javob variantlarini tayyorlang.</p>
-                    <p>Keyin baholash yoki mashq rejimini tanlang va test havolasini guruhingizga yuboring.</p>
-                    <p>Baholash tugagach, natijalarni korib chiqing. Keyingi darsda koproq tushuntirish kerak bolgan mavzularga qayting.</p>
+            <div class="workflow-story" style="background-image:url( <?= base_url('images/landing/bg-teacher.png') ; ?> )">
+                <article class="caption">
+                    <p>Imtihon o'tkazish bu dars berishning eng ajralmas qismidir.</p>
+                    <p>Endi hammasi juda oson, talabalarni bilimini doimiy tekshiramiz va qayerda qiynalayotgani ma'lum... "Ko'chirmachilik" ham imkonsiz ekan. Juda foydali dastur.</p>
                 </article>
             </div>
         </div>
@@ -221,63 +224,48 @@ $placeholderImage = base_url('assets/images/landing/placeholder.jpg');
         </div>
     </section>
 
-    <section class="section section-soft" aria-labelledby="quiz-modes-title">
-        <div class="container modes-panel">
-            <h2 id="quiz-modes-title">Ikki rejim  ikki maqsad</h2>
-            <div class="mode-grid">
-                <article class="mode-card">
-                    <img src="<?= esc($placeholderImage, 'attr') ?>" width="96" height="96" alt="Baholash rejimi belgisining vaqtinchalik rasmi">
-                    <h3>Baholash rejimi</h3>
-                    <p>Ism bilan qatnashish, saqlanadigan javoblar va oqituvchi koradigan natijalar.</p>
-                    <div class="button-group">
-                        <a class="button button-secondary" href="<?= esc($accountUrl, 'attr') ?>"><?= esc($accountLabel) ?></a>
-                        <a class="button button-secondary" href="#faq">Batafsil</a>
-                    </div>
-                </article>
-                <article class="mode-card">
-                    <img src="<?= esc($placeholderImage, 'attr') ?>" width="96" height="96" alt="Mashq rejimi belgisining vaqtinchalik rasmi">
-                    <h3>Mashq rejimi</h3>
-                    <p>Anonim qatnashish va brauzerda hisoblanadigan natija. Oqituvchiga faqat boshlashlar soni korinadi.</p>
-                    <a class="button button-secondary" href="#faq">Mashq haqida</a>
-                </article>
-            </div>
-        </div>
-    </section>
-
     <section class="section" id="get-started" aria-labelledby="get-started-title">
         <div class="container cta-panel">
             <h2 id="get-started-title">Birinchi testingizni yarating va ulashing</h2>
-            <div class="button-group centered-actions">
+            <div class="button-group cta-buttons-wrap centered-actions">
                 <?php if ($isAuthenticated) : ?>
-                    <a class="button button-primary button-large" href="<?= esc(site_url('dashboard'), 'attr') ?>">Ish maydoniga otish</a>
+                    <a class="button button-primary button-large" href="<?= esc(site_url('dashboard'), 'attr') ?>">
+                       Tizimga kirish
+                    </a>
                 <?php else : ?>
-                    <a class="button button-primary button-large" href="<?= esc(site_url('register'), 'attr') ?>">Test yaratish</a>
-                    <a class="button button-secondary button-large" href="<?= esc(site_url('login'), 'attr') ?>">Hisobga kirish</a>
+                    <div>
+                        <p class="text-sm">Siz yangimi?</p>
+                        <a class="button button-primary button-large" href="<?= esc(site_url('register'), 'attr') ?>">
+                            Ro'yxatdan o'tish
+                        </a>
+                    </div>
+                    <div>
+                        <p  class="text-sm">Avval ro'yxatdan o'tilganmi?</p>
+                        <a class="button button-secondary button-large" href="<?= esc(site_url('login'), 'attr') ?>">
+                            Tizimga kirish
+                        </a>
+                    </div>
                 <?php endif ?>
             </div>
-            <article class="cta-card">
-                <div>
-                    <h3>Darsingiz uchun yangi test tayyorlang</h3>
-                    <a class="button button-secondary button-large" href="<?= esc($accountUrl, 'attr') ?>"><?= esc($accountLabel) ?></a>
-                    <p>Savollarni tayyorlang, rejimni tanlang va testni ulashing.<br>Hisob yaratish orqali oqituvchi ish maydoniga oting.</p>
-                </div>
-            </article>
-            <img class="workspace-placeholder" src="<?= esc($placeholderImage, 'attr') ?>" width="480" height="320" alt="123test ish maydonining vaqtinchalik umumiy rasmi">
+           
         </div>
     </section>
 
     <section class="section faq" id="faq" aria-labelledby="faq-title">
         <div class="container faq-inner">
             <header class="section-heading centered">
-                <h2 id="faq-title">Kop soraladigan savollar</h2>
-                <p>123test orqali test yaratish, ulashish va natijalarni kuzatish haqida savollar.</p>
+                <h2 id="faq-title">Ko'p so'raladigan savollar</h2>
+                <p>Qoshimcha savollar bolsa bog'laning <br> Email: finalui@yandex.com</p>
             </header>
             <div class="faq-list">
                 <article><h3>123test nima?</h3><p>123test  oqituvchilar uchun test yaratish va ulashish platformasi. Savollarni tayyorlang, baholash yoki mashq rejimini tanlang va testni oquvchilarga yuboring. Baholash rejimida javoblar hamda natijalarni korib chiqishingiz mumkin.</p></article>
                 <article><h3>123test kimlar uchun?</h3><p>Mustaqil oqituvchilar, oqituvchi hisobi orqali ishlaydigan oquv markazlari va nomzodlar bilimini tekshiradigan rekruterlar uchun. Oquvchilar testda qatnashish uchun hisob yaratishi shart emas.</p></article>
-                <article><h3>Testni qanday yarataman va ulashaman?</h3><p>1. Oqituvchi hisobini yarating.<br>2. Savollarni yozing va test sozlamalarini belgilang.<br>3. Testni e\u2019lon qilib, havola yoki kodini ulashing.<br>4. Baholash rejimida javoblar va natijalarni korib chiqing.</p></article>
-                <article><h3>Internet uzilib qolsa nima boladi?</h3><p>Testni boshlash uchun internet kerak. Boshlangan baholashda aloqa uzilsa, javob berishni davom ettirish mumkin; kutilayotgan javoblar aloqa qaytganda qayta yuboriladi. Rasmiy natija server tasdiqlagach aniqlanadi. Mashqdagi jarayon faqat joriy brauzer oynasida saqlanadi.</p></article>
-                <article><h3>Baholash va mashq ma\u2019lumotlari qanday saqlanadi?</h3><p>Baholashda oquvchining ismi, javoblari va natijasi saqlanadi; email va telefon oqituvchi sozlamalariga bogliq. Mashqda shaxsiy javoblar va natijalar serverda saqlanmaydi. Oqituvchi faqat umumiy boshlashlar sonini koradi  bu noyob oquvchilar yoki tugatilgan testlar soni emas.</p></article>
+                <article><h3>Testni qanday yarataman va ulashaman?</h3><p>1. Oqituvchi hisobini yarating.<br>2. Savollarni yozing va test sozlamalarini belgilang.<br>3. Testni elon qilib, havola yoki kodini ulashing.<br>4. Baholash rejimida javoblar va natijalarni korib chiqing.</p></article>
+                <article><h3>Internet uzilib qolsa nima boladi?</h3><p>Testni boshlash uchun internet kerak. Boshlangan baholashda aloqa uzilsa, javob berishni davom ettirish mumkin; kutilayotgan javoblar wi-fi aloqasi qaytganda qayta serverga yuboriladi. Rasmiy natija server tasdiqlagach aniqlanadi. Mashqdagi jarayon faqat joriy brauzer oynasida saqlanadi.</p>
+                </article>
+                <article>
+                    <h3>Baholash va mashq malumotlari qanday saqlanadi?</h3>
+                    <p>Baholashda oquvchining ismi, javoblari va natijasi saqlanadi; email va telefon oqituvchi sozlamalariga bogliq. javoblar va natijalar serverda saqlanishi mumkin, ammo bu ustozning ixtiyoriga bog'liq (ya'ni test sozlamalaridan boshqariladi).</p></article>
             </div>
         </div>
     </section>
@@ -285,11 +273,10 @@ $placeholderImage = base_url('assets/images/landing/placeholder.jpg');
 
 <footer class="site-footer">
     <div class="container footer-inner">
-        <p><strong>123test \u00a9 <?= date('Y') ?></strong><br>Oqituvchilar uchun test yaratish, ulashish va bilimni baholash platformasi</p>
+        <p><strong>123test.uz &copy; <?= date('Y') ?></strong><br>Oqituvchilar uchun test yaratish, ulashish va bilimni baholash platformasi</p>
         <nav aria-label="Pastki menyu">
-            <a href="#header">Bosh sahifa</a>
+            <a href="/">Bosh sahifa</a>
             <a href="#faq">Savol-javob</a>
-            <button type="button" data-dialog-open="audience-dialog">Kimlar uchun?</button>
         </nav>
     </div>
 </footer>
@@ -305,6 +292,6 @@ $placeholderImage = base_url('assets/images/landing/placeholder.jpg');
     <button class="button button-secondary dialog-action" type="button" data-dialog-close>Tushunarli</button>
 </dialog>
 
-<script src="<?= esc(base_url('assets/js/landing.js') . '?v=' . filemtime($landingJs), 'attr') ?>" defer></script>
+<script src="<?= esc(base_url('js/landing.js') . '?v=' . filemtime($landingJs), 'attr') ?>" defer></script>
 </body>
 </html>

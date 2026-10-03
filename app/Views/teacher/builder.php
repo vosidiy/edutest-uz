@@ -119,6 +119,6 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
-<script src="/assets/vendor/vue/vue.global.prod.js"></script>
-<script src="<?= esc(base_url('assets/js/builder.js') . '?v=' . filemtime(FCPATH . 'assets/js/builder.js'), 'attr') ?>"></script>
+<script src="<?= esc(base_url('js/vue.global.prod.js') . '?v=' . filemtime(FCPATH . 'js/vue.global.prod.js'), 'attr') ?>"></script>
+<script src="<?= esc(base_url('js/builder.js') . '?v=' . filemtime(FCPATH . 'js/builder.js'), 'attr') ?>"></script>
 <?= $this->endSection() ?>

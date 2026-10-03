@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const source = fs.readFileSync(new URL('../../public/assets/js/builder.js', import.meta.url), 'utf8');
+const source = fs.readFileSync(new URL('../../public/js/builder.js', import.meta.url), 'utf8');
 const window = {};
 vm.runInNewContext(source, {window, document: {querySelector: () => null}});
 

@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {grade, summarize} from '../../public/assets/js/player-scoring.js';
-import {createState, editAnswer, submitAnswer, nextQuestion, finishTimed, quitQuiz, deadlines, visibleDeadlines, mergeServer, hasPending, hasUploadPending, PlayerClock, isFullscreenExit, acknowledge, recordActivity, receiptOnly} from '../../public/assets/js/player-state.js';
-import {PlayerSync} from '../../public/assets/js/player-sync.js';
+import {grade, summarize} from '../../public/js/player-scoring.js';
+import {createState, editAnswer, submitAnswer, nextQuestion, finishTimed, quitQuiz, deadlines, visibleDeadlines, mergeServer, hasPending, hasUploadPending, PlayerClock, isFullscreenExit, acknowledge, recordActivity, receiptOnly} from '../../public/js/player-state.js';
+import {PlayerSync} from '../../public/js/player-sync.js';
 
 const cases = JSON.parse(fs.readFileSync(new URL('../fixtures/player-scoring.json', import.meta.url), 'utf8'));
 const startedAt = '2026-09-26T10:00:00.000000Z', expiresAt = '2026-09-26T10:02:00.000000Z';

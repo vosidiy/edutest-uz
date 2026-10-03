@@ -43,10 +43,17 @@ function data(page, url) {
 const server = http.createServer(async (request, response) => {
   try {
     const url = new URL(request.url, origin);
-    if (url.pathname.startsWith('/assets/')) {
-      if (url.pathname.includes('..')) {response.writeHead(404).end();return;}
-      response.writeHead(200, {'Content-Type':url.pathname.endsWith('.css')?'text/css':'text/javascript'});
-      response.end(await fs.readFile(path.join(repo,'public',url.pathname))); return;
+    if (/^\/(?:css|js|images|fonts)\//.test(url.pathname)) {
+      const relative = url.pathname.slice(1);
+      if (relative.includes('..')) {response.writeHead(404).end();return;}
+      const type = relative.endsWith('.css') ? 'text/css'
+        : relative.endsWith('.js') ? 'text/javascript'
+        : relative.endsWith('.woff2') ? 'font/woff2'
+        : relative.endsWith('.png') ? 'image/png'
+        : relative.endsWith('.jpg') || relative.endsWith('.jpeg') ? 'image/jpeg'
+        : 'application/octet-stream';
+      response.writeHead(200, {'Content-Type':type});
+      response.end(await fs.readFile(path.join(repo,'public',relative))); return;
     }
     if (url.pathname === '/favicon.ico') {response.writeHead(204).end();return;}
     if (url.pathname.startsWith('/api/')) {

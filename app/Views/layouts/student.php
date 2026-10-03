@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#4f46e5">
     <title><?= esc($title ?? 'EduTest') ?></title>
     <link rel="icon" href="<?= base_url('favicon.ico') ?>">
-    <link rel="stylesheet" href="<?= esc(base_url('assets/css/player.css') . '?v=' . filemtime(FCPATH . 'assets/css/player.css'), 'attr') ?>">
+    <link rel="stylesheet" href="<?= esc(base_url('css/player.css') . '?v=' . filemtime(FCPATH . 'css/player.css'), 'attr') ?>">
 </head>
 <body class="student-page">
 <a class="skip-link" href="#student-main"><?= esc(lang('Player.ui.skipContent')) ?></a>
@@ -33,6 +33,6 @@
     'shareToken' => $shareToken, 'page' => $page, 'apiBase' => site_url('api/v1/player'),
     'quizUrl' => site_url('q/' . $shareToken), 'ui' => lang('Player.ui'), 'mode' => $quiz['mode'] ?? null,
 ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?></script>
-<script type="module" src="<?= esc(base_url('assets/js/player.js') . '?v=' . filemtime(FCPATH . 'assets/js/player.js'), 'attr') ?>"></script>
+<script type="module" src="<?= esc(base_url('js/player.js') . '?v=' . filemtime(FCPATH . 'js/player.js'), 'attr') ?>"></script>
 </body>
 </html>

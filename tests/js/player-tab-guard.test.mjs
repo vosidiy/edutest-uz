@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {PlayerTabGuard} from '../../public/assets/js/player-tab-guard.js';
-import {createState, editAnswer, submitAnswer, nextQuestion} from '../../public/assets/js/player-state.js';
-import {PlayerSync} from '../../public/assets/js/player-sync.js';
+import {PlayerTabGuard} from '../../public/js/player-tab-guard.js';
+import {createState, editAnswer, submitAnswer, nextQuestion} from '../../public/js/player-state.js';
+import {PlayerSync} from '../../public/js/player-sync.js';
 
 const turn = () => new Promise(resolve => setImmediate(resolve));
 function manager() {

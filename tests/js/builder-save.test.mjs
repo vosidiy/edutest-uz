@@ -3,7 +3,7 @@ import {test} from 'node:test';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const source = fs.readFileSync(new URL('../../public/assets/js/builder.js', import.meta.url), 'utf8');
+const source = fs.readFileSync(new URL('../../public/js/builder.js', import.meta.url), 'utf8');
 const clone = value => JSON.parse(JSON.stringify(value));
 function fixture() {
   let component, request;

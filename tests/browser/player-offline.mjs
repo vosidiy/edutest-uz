@@ -5,7 +5,7 @@ import path from 'node:path';
 import {spawn, execFileSync} from 'node:child_process';
 import assert from 'node:assert/strict';
 import {fileURLToPath} from 'node:url';
-import {summarize} from '../../public/assets/js/player-scoring.js';
+import {summarize} from '../../public/js/player-scoring.js';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const artifacts = await fs.mkdtemp('/private/tmp/edutest-player-browser-');
@@ -29,10 +29,16 @@ let origin;
 const server = http.createServer(async (request, response) => {
   try {
     const url = new URL(request.url, origin);
-    if (url.pathname.startsWith('/assets/')) {
+    if (/^\/(?:css|js|images|fonts)\//.test(url.pathname)) {
       const relative = url.pathname.slice(1);
       if (relative.includes('..')) { response.writeHead(404).end(); return; }
-      response.writeHead(200, {'Content-Type': relative.endsWith('.css') ? 'text/css' : 'text/javascript'});
+      const type = relative.endsWith('.css') ? 'text/css'
+        : relative.endsWith('.js') ? 'text/javascript'
+        : relative.endsWith('.woff2') ? 'font/woff2'
+        : relative.endsWith('.png') ? 'image/png'
+        : relative.endsWith('.jpg') || relative.endsWith('.jpeg') ? 'image/jpeg'
+        : 'application/octet-stream';
+      response.writeHead(200, {'Content-Type': type});
       response.end(await fs.readFile(path.join(repo, 'public', relative))); return;
     }
     if (url.pathname === '/favicon.ico') { response.writeHead(204).end(); return; }
