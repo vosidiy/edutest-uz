@@ -55,6 +55,42 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
         parent::tearDown();
     }
 
+    public function testLoginUsesTheSharedTeacherDesignSystem(): void
+    {
+        $result = $this->withoutGlobalFilters(
+            fn () => $this->withSession(['error' => 'Please try again.'])->get('/login'),
+        );
+
+        $result->assertOK();
+        $body = (string) $result->getBody();
+
+        $this->assertSharedAuthLayout($body);
+        $this->assertStringContainsString('<h1 class="mb-5">Sign in</h1>', $body);
+        $this->assertStringContainsString('class="alert alert-danger mb-5" role="alert"', $body);
+        $this->assertStringContainsString('class="form-label" for="email"', $body);
+        $this->assertStringContainsString('class="form-control" id="password"', $body);
+        $this->assertStringContainsString('class="btn btn-primary btn-lg w-full" type="submit"', $body);
+    }
+
+    public function testRegistrationUsesTheSharedTeacherDesignSystem(): void
+    {
+        $result = $this->withoutGlobalFilters(
+            fn () => $this->withSession(['errors' => ['email' => 'Enter a valid email address.']])->get('/register'),
+        );
+
+        $result->assertOK();
+        $body = (string) $result->getBody();
+
+        $this->assertSharedAuthLayout($body);
+        $this->assertStringContainsString('Create a teacher account', $body);
+        $this->assertStringContainsString('class="form-label" for="display_name"', $body);
+        $this->assertStringContainsString('class="form-control" id="phone"', $body);
+        $this->assertStringContainsString('class="form-control" id="password_confirm"', $body);
+        $this->assertStringContainsString('class="btn btn-primary btn-lg w-full" type="submit"', $body);
+        $this->assertStringContainsString('class="alert alert-danger mb-5" role="alert"', $body);
+        $this->assertStringContainsString('<li>Enter a valid email address.</li>', $body);
+    }
+
     public function testRegistrationStoresOneAccountAndStartsSession(): void
     {
         $result = $this->withoutGlobalFilters(fn () => $this->post('/register', [
@@ -282,6 +318,18 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
             $filters->globals['before'] = $before;
             $filters->globals['after']  = $after;
         }
+    }
+
+    private function assertSharedAuthLayout(string $body): void
+    {
+        $this->assertStringContainsString(base_url('css/teacher.css') . '?v=', $body);
+        $this->assertStringContainsString('class="teacher-topbar"', $body);
+        $this->assertStringContainsString('class="teacher-brand"', $body);
+        $this->assertStringContainsString('>123test</span>', $body);
+        $this->assertStringContainsString('href="' . site_url('/') . '#faq"', $body);
+        $this->assertStringContainsString('>Help</a>', $body);
+        $this->assertStringContainsString('class="card shadow-md w-full max-w-md"', $body);
+        $this->assertStringNotContainsString('<style', $body);
     }
 
     /** @return array<string, string> */

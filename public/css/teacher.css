@@ -354,6 +354,12 @@ summary {
 .text-inherit {
   color: inherit;
 }
+.text-center {
+  text-align: center;
+}
+.text-secondary {
+  color: var(--text-color-secondary);
+}
 .text-initial {
   color: initial;
 }
@@ -2242,6 +2248,18 @@ input[type=radio] {
 .mx-auto {
   margin-left: auto !important;
   margin-right: auto !important;
+}
+
+.w-full {
+  width: 100% !important;
+}
+
+.max-w-md {
+  max-width: 28rem !important;
+}
+
+.shadow-md {
+  box-shadow: var(--shadow-md) !important;
 }
 
 .mx-0 {

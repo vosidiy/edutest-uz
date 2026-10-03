@@ -64,7 +64,7 @@ $placeholderImage = base_url('images/landing/placeholder.jpg');
 
         <nav class="primary-nav" id="landing-menu" aria-label="Asosiy menyu">
             <a href="#header">Bosh sahifa</a>
-            <a href="#features">Imkoniyatlar</a>
+            <a href="#section-features">Imkoniyatlar</a>
             <a href="#faq">Savol-javob</a>
             <button class="nav-button" type="button" data-dialog-open="audience-dialog">Kimlar uchun?</button>
             <a class="mobile-account-link" href="<?= esc($accountUrl, 'attr') ?>"><?= esc($accountLabel) ?></a>
@@ -104,7 +104,7 @@ $placeholderImage = base_url('images/landing/placeholder.jpg');
         </div>
     </section>
 
-    <section class="section" id="features" aria-labelledby="features-title">
+    <section class="section" id="features" aria-labelledby="section-for">
         <div class="container">
             <header class="section-heading centered">
                 <h2 id="features-title">Kimlar uchun?</h2>
@@ -177,7 +177,7 @@ $placeholderImage = base_url('images/landing/placeholder.jpg');
         </div>
     </section>
 
-    <section class="section" aria-label="Qoshimcha imkoniyatlar">
+    <section id="section-features" class="section" aria-label="Qoshimcha imkoniyatlar">
         <div class="container">
         <header class="section-heading centered">
                 <h2 id="features-title">Ko'plab imkoniyatlar</h2>

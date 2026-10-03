@@ -1,43 +1,62 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= esc($title ?? 'EduTest') ?></title>
-    <style>
-        :root { color-scheme: light; font-family: system-ui, sans-serif; }
-        body { background: #f5f7fb; color: #182033; margin: 0; }
-        main { max-width: 28rem; margin: 8vh auto; padding: 2rem; background: #fff; border-radius: .75rem; box-shadow: 0 .5rem 2rem #18203314; }
-        h1 { margin-top: 0; }
-        label { display: block; margin: 1rem 0 .35rem; font-weight: 600; }
-        input { box-sizing: border-box; width: 100%; padding: .75rem; border: 1px solid #b9c1d0; border-radius: .4rem; font: inherit; }
-        button { width: 100%; margin-top: 1.25rem; padding: .8rem; border: 0; border-radius: .4rem; background: #3157d5; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
-        .message { padding: .8rem; border-radius: .4rem; background: #fde8e8; color: #8d1d1d; }
-        .message ul { margin: 0; padding-left: 1.25rem; }
-        .hint, footer { color: #5e6779; }
-        footer { margin-top: 1.25rem; text-align: center; }
-    </style>
+    <link rel="icon" href="<?= esc(base_url('favicon.ico'), 'attr') ?>" sizes="any">
+    <link rel="stylesheet" href="<?= esc(base_url('css/teacher.css') . '?v=' . filemtime(FCPATH . 'css/teacher.css'), 'attr') ?>">
 </head>
 <body>
-<main>
-    <?php $formErrors = $errors ?? session('errors') ?? []; ?>
-    <?php $formError = $error ?? session('error'); ?>
+<a class="skip-link" href="#auth-content">Skip to main content</a>
 
-    <?php if ($formError !== null) : ?>
-        <p class="message" role="alert"><?= esc($formError) ?></p>
-    <?php endif; ?>
-
-    <?php if ($formErrors !== []) : ?>
-        <div class="message" role="alert">
-            <ul>
-                <?php foreach ($formErrors as $formErrorItem) : ?>
-                    <li><?= esc($formErrorItem) ?></li>
-                <?php endforeach; ?>
-            </ul>
+<div class="teacher-shell d-flex flex-col">
+    <header class="teacher-topbar">
+        <div class="teacher-topbar-inner">
+            <a class="teacher-brand" href="<?= esc(site_url('/'), 'attr') ?>" aria-label="123test home page">
+                <svg class="brand-mark" aria-hidden="true" focusable="false" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="auth-brand-gradient" x1="18" x2="34" y1="0" y2="36" gradientUnits="userSpaceOnUse">
+                            <stop stop-color="#a5b4fc"/>
+                            <stop offset="1" stop-color="#6163fe"/>
+                        </linearGradient>
+                    </defs>
+                    <rect width="36" height="36" rx="12" fill="url(#auth-brand-gradient)"/>
+                    <rect x="7" y="7" width="10" height="10" rx="4" fill="#4338ca"/>
+                    <rect x="19" y="7" width="10" height="10" rx="4" fill="#4338ca"/>
+                    <rect x="7" y="19" width="10" height="10" rx="4" fill="#4338ca"/>
+                    <rect x="19" y="19" width="10" height="10" rx="4" fill="#4338ca"/>
+                </svg>
+                <span>123test</span>
+            </a>
+            <a class="btn btn-default" href="<?= esc(site_url('/') . '#faq', 'attr') ?>">Help</a>
         </div>
-    <?php endif; ?>
+    </header>
 
-    <?= $this->renderSection('content') ?>
-</main>
+    <main class="teacher-main content-area d-flex flex-grow flex-center" id="auth-content">
+        <section class="card shadow-md w-full max-w-md">
+            <div class="card-body">
+                <?php $formErrors = $errors ?? session('errors') ?? []; ?>
+                <?php $formError = $error ?? session('error'); ?>
+
+                <?php if ($formError !== null) : ?>
+                    <p class="alert alert-danger mb-5" role="alert"><?= esc($formError) ?></p>
+                <?php endif; ?>
+
+                <?php if ($formErrors !== []) : ?>
+                    <div class="alert alert-danger mb-5" role="alert">
+                        <ul>
+                            <?php foreach ($formErrors as $formErrorItem) : ?>
+                                <li><?= esc($formErrorItem) ?></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    </div>
+                <?php endif; ?>
+
+                <?= $this->renderSection('content') ?>
+            </div>
+        </section>
+    </main>
+</div>
 </body>
 </html>

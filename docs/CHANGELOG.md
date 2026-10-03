@@ -72,6 +72,7 @@
 
 ### Changed
 
+- Refactored login and registration onto the shared teacher design system, with reusable form/card/button/alert utilities and a minimal 123test header linking Help to the landing FAQ.
 - Flattened browser assets into top-level `public/css`, `public/js`, `public/fonts`, and `public/images` directories, relocated the pinned Vue build into `public/js`, and removed the landing page's duplicated quiz-mode section.
 - Rebuilt the public landing page in Uzbek from the prepared prototype, with session-aware dashboard actions, an audience strip, self-hosted Inter fonts, local presentation imagery, and a focused indigo landing stylesheet.
 - Student countdowns now represent only authored total timers or scheduled closing; the eight-hour inactivity deadline remains enforced internally without a visible countdown or warning.
