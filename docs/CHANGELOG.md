@@ -78,7 +78,8 @@
 
 ### Changed
 
-- Simplified the MVP teacher dashboard to a responsive quiz-card grid with clickable Builder media, status/mode/sort controls, finalized-attempt and Practice-start counts, reusable action dropdowns, and no workspace metrics, lifecycle tabs, title search, report filter, or extended activity projections.
+- Replaced the quiz library's inline page-window calculation with CI4's manual Pager while keeping the filter-preserving Previous/Next markup beside the quiz cards for straightforward UI customization.
+- Simplified the MVP teacher dashboard to a responsive quiz-card grid with clickable signed working covers and a quiz-icon fallback, status/mode/sort controls, finalized-attempt and Practice-start counts, reusable action dropdowns, and no workspace metrics, lifecycle tabs, title search, report filter, or extended activity projections.
 - Refactored login and registration onto the shared teacher design system, with reusable form/card/button/alert utilities and a minimal 123test header linking Help to the landing FAQ.
 - Flattened browser assets into top-level `public/css`, `public/js`, `public/fonts`, and `public/images` directories, relocated the pinned Vue build into `public/js`, and removed the landing page's duplicated quiz-mode section.
 - Rebuilt the public landing page in Uzbek from the prepared prototype, with session-aware dashboard actions, an audience strip, self-hosted Inter fonts, local presentation imagery, and a focused indigo landing stylesheet.

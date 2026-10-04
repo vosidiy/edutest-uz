@@ -23,7 +23,7 @@ return [
         'emailTaken' => 'That email address is already in use.',
     ],
     'finalized' => 'Finalized attempts',
-    'practiceStarts' => 'Practice starts',
+    'practiceStarts' => 'Practices',
     'library' => 'Your quizzes',
     'libraryHint' => 'Build quizzes and review saved assessment responses.',
     'status' => ['draft' => 'Draft', 'published' => 'Published', 'closed' => 'Closed', 'archived' => 'Archived', 'trash' => 'Trash', 'deleted' => 'In trash'],

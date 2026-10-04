@@ -128,7 +128,7 @@ return [
         'keepLocal' => 'Keep local draft',
         'cover' => 'Quiz cover',
         'uploadCover' => 'Upload cover',
-        'removeCover' => 'Remove cover',
+        'removeCover' => 'Delete image',
         'coverHelp' => 'Optional JPEG, PNG or WebP image, up to 5 MiB and 16 megapixels.',
         'coverUploading' => 'Uploading cover…',
         'removeCoverConfirm' => 'Remove the quiz cover?',

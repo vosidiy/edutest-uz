@@ -24,7 +24,7 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         parent::setUp();
         service('session')->destroy();
         $_SESSION = [];
-        $this->queries = new TeacherQueryService($this->db);
+        $this->queries = new TeacherQueryService($this->db, $this->media);
         Services::injectMock('teacherQueries', $this->queries);
         Services::injectMock('quizAuthoring', $this->authoring);
         Services::injectMock('teacherResults', new TeacherResultsService($this->db, $this->media, new QuizPaperService($this->db, $this->media)));
@@ -57,6 +57,7 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $this->assertSame(2, $row['questionCount']);
         $this->assertSame(1, $row['assessmentSubmissions']);
         $this->assertSame(12, $row['practiceStarts']);
+        $this->assertNull($row['cover']);
         $this->assertNotNull($row['resultsUrl']);
         $this->assertArrayNotHasKey('inProgressAttempts', $row);
         $this->assertArrayNotHasKey('averagePercent', $row);
@@ -69,6 +70,9 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $trashed = $this->queries->library($quiz['owner'], ['status' => 'trash']);
         $this->assertNull($trashed['rows'][0]['editUrl']);
         $this->assertTrue($trashed['rows'][0]['deleted']);
+        $emptyDashboard = $this->withSession([AuthService::SESSION_KEY => $quiz['owner']])->get('/dashboard');
+        $emptyDashboard->assertOK();
+        $emptyDashboard->assertDontSee('aria-label="Quiz pagination"');
     }
 
     public function testFinalizedAttemptSortingUsesFinalizedCounts(): void
@@ -87,6 +91,30 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $this->assertSame($high['publicId'], $rows[0]['publicId']);
         $this->assertSame(2, $rows[0]['assessmentSubmissions']);
         $this->assertArrayNotHasKey('averagePercent', $rows[0]);
+    }
+
+    public function testQuizCardUsesSignedWorkingCoverInsteadOfDefaultIcon(): void
+    {
+        $quiz = $this->quiz();
+        $record = $this->db->table('quizzes')->select('id')->where('public_id', $quiz['publicId'])->get()->getRowArray();
+        $quizId = (int) $record['id'];
+        $filename = str_repeat('a', 40) . '.png';
+        $relative = 'quiz-media/' . $quiz['owner'] . '/' . $quizId . '/' . $filename;
+        $directory = $this->mediaRoot . '/' . $quiz['owner'] . '/' . $quizId;
+        if (! is_dir($directory)) mkdir($directory, 0750, true);
+        file_put_contents($directory . '/' . $filename, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='));
+        $this->db->table('quizzes')->where('id', $quizId)->update(['cover_src' => $relative]);
+
+        $row = $this->queries->library($quiz['owner'])['rows'][0];
+        $this->assertSame('image', $row['cover']['type']);
+        $this->assertStringStartsWith(site_url('media/'), $row['cover']['url']);
+        $this->assertFileExists($this->media->resolveSigned(basename($row['cover']['url']))['path']);
+        $this->assertArrayNotHasKey('cover_src', $row);
+
+        $response = $this->withSession([AuthService::SESSION_KEY => $quiz['owner']])->get('/dashboard');
+        $response->assertOK();
+        $response->assertSee('class="quiz-card-cover"');
+        $response->assertDontSee('images/icon-quiz.png');
     }
 
     public function testLegacyFiltersAreTranslatedAndUnrecognizedInputsAreIgnored(): void
@@ -144,6 +172,7 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $response->assertSee('class="card quiz-card"');
         $response->assertSee('class="quiz-card-media"');
         $response->assertSee('class="quiz-card-media" href="' . site_url('quizzes/' . $quiz['publicId'] . '/edit') . '"');
+        $response->assertSee('src="' . base_url('images/icon-quiz.png') . '"');
         $response->assertSee('class="quiz-card-actions"');
         $response->assertSee('class="dropdown"');
         $response->assertDontSee('dashboard-metrics');
@@ -151,6 +180,7 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $response->assertDontSee('name="q"');
         $response->assertDontSee('name="reports"');
         $response->assertDontSee('class="menu"');
+        $response->assertDontSee('aria-label="Quiz pagination"');
         $response->assertDontSee('teacher-sidebar');
         $response->assertDontSee('Other private quiz');
         $this->assertStringContainsString('&lt;script&gt;unsafe title&lt;/script&gt;', $response->response()->getBody());
@@ -160,6 +190,41 @@ final class WorkspaceFeatureTest extends PlayerTestCase
             $this->withSession($session)->get($url . '?' . http_build_query($input))
                 ->assertRedirectTo($this->queries->legacyDashboardUrl($input, $source));
         }
+    }
+
+    public function testDashboardPagerUsesPreviousAndNextWithOnlySupportedFilters(): void
+    {
+        $quiz = $this->quiz();
+        for ($i = 0; $i < 41; $i++) {
+            $this->authoring->create($quiz['owner'], sprintf('Pager quiz %02d', $i), 'assessment');
+        }
+
+        $session = [AuthService::SESSION_KEY => $quiz['owner']];
+        $query = static fn (int $page): string => http_build_query([
+            'status' => 'draft',
+            'mode' => 'assessment',
+            'sort' => 'title_asc',
+            'ignored' => 'drop-me',
+            'page' => $page,
+        ]);
+
+        $first = html_entity_decode($this->withSession($session)->get('/dashboard?' . $query(1))->response()->getBody(), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $this->assertStringNotContainsString('rel="prev"', $first);
+        $this->assertStringContainsString('rel="next"', $first);
+        $this->assertStringContainsString('status=draft&mode=assessment&sort=title_asc&page=2', $first);
+        $this->assertStringNotContainsString('ignored=drop-me', $first);
+
+        $middle = html_entity_decode($this->withSession($session)->get('/dashboard?' . $query(2))->response()->getBody(), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $this->assertStringContainsString('rel="prev"', $middle);
+        $this->assertStringContainsString('rel="next"', $middle);
+        $this->assertStringContainsString('status=draft&mode=assessment&sort=title_asc&page=1', $middle);
+        $this->assertStringContainsString('status=draft&mode=assessment&sort=title_asc&page=3', $middle);
+        $this->assertStringNotContainsString('ignored=drop-me', $middle);
+
+        $last = html_entity_decode($this->withSession($session)->get('/dashboard?' . $query(3))->response()->getBody(), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $this->assertStringContainsString('rel="prev"', $last);
+        $this->assertStringNotContainsString('rel="next"', $last);
+        $this->assertStringNotContainsString('ignored=drop-me', $last);
     }
 
     public function testQuizHeadersAreSharedAndHistoricalReportsKeepUnavailableBuilder(): void

@@ -148,8 +148,8 @@
                                 ＋ Add answer variant
                             </button>
                         </div>
-                        <hr>
-                        <label class="form-field explanation">
+                        <hr class="mt-6">
+                        <label class="form-field mt-5">
                             <h5 class="mb-2">Explanation or feedback <span class="text-secondary">(optional)</span></h5>
                             <textarea placeholder="Type why certain answer is correct" class="form-control" v-model="selectedQuestion.explanation" rows="2" maxlength="900"></textarea>
                         </label>
@@ -162,25 +162,102 @@
             <aside id="builder-settings" class="settings-rail" aria-label="Quiz settings">
                 <div class="rail-heading"><strong class="rail-title">Quiz settings</strong><span class="badge status" :class="quiz.status">{{ quiz.status }}</span></div>
                 <div class="settings-content" ref="settingsPanel" tabindex="0" role="region" aria-label="<?= esc(lang('EduTest.builder.workspace.settings'), 'attr') ?>">
-                    <details open><summary>Details</summary><div class="setting-group"><label class="form-field"><span class="form-label">Description</span><textarea class="form-control" v-model="quiz.description" rows="3"></textarea></label><label class="form-field"><span class="form-label">Instructions</span><textarea class="form-control" v-model="quiz.instructions" rows="3"></textarea></label><label class="form-field"><span class="form-label">Mode</span><select class="form-control" :value="quiz.mode" @change="changeMode($event)"><option value="assessment">Assessment</option><option value="practice">Practice</option></select></label><label class="form-check check-row"><input type="checkbox" v-model="quiz.listed"><span><strong>List on public profile</strong><small>Takes effect when public profiles launch.</small></span></label></div></details>
-                    <details><summary>Schedule & timing</summary><div class="setting-group"><label class="form-field"><span class="form-label">Opens ({{ quiz.timezone }})</span><input class="form-control" type="datetime-local" v-model="quiz.opensAtLocal"></label><label class="form-field"><span class="form-label">Closes ({{ quiz.timezone }})</span><input class="form-control" type="datetime-local" v-model="quiz.closesAtLocal"></label><label class="form-field"><span class="form-label">Total timer (minutes)</span><input class="form-control" type="number" min="0.5" max="1440" step="0.5" v-model="quiz.timeLimitMinutes" placeholder="No timer"></label></div></details>
-                    <details v-if="quiz.mode === 'assessment'"><summary>Admission</summary><div class="setting-group"><label class="form-field"><span class="form-label">New passcode</span><input class="form-control" type="password" v-model="passcodeValue" @input="quiz.passcode.action='set'" autocomplete="new-password" placeholder="Leave unchanged"></label><button v-if="quiz.passcode.configured" class="btn btn-link btn-sm align-start" type="button" @click="clearPasscode">Clear current passcode</button><label class="form-field"><span class="form-label">Email</span><select class="form-control" v-model="quiz.emailMode"><option value="hidden">Hidden</option><option value="optional">Optional</option><option value="required">Required</option></select></label><label class="form-field"><span class="form-label">Phone</span><select class="form-control" v-model="quiz.phoneMode"><option value="hidden">Hidden</option><option value="optional">Optional</option><option value="required">Required</option></select></label></div></details>
-                    <details><summary>Behavior</summary><div class="setting-group"><label class="form-check check-row"><input type="checkbox" v-model="quiz.shuffleQuestions"><span><strong>Shuffle questions</strong><small>Randomize order for each start.</small></span></label><label class="form-check check-row"><input type="checkbox" v-model="quiz.shuffleOptions"><span><strong>Shuffle choices</strong><small>Randomize choice order.</small></span></label><label v-if="quiz.mode === 'assessment'" class="form-check check-row"><input type="checkbox" v-model="quiz.cheatCheck"><span><strong>Integrity monitoring</strong><small><?= esc(lang('EduTest.builder.integrityHelp')) ?></small></span></label></div></details>
-                    <details><summary>Feedback & results</summary><div class="setting-group"><label class="form-field"><span class="form-label">Feedback timing</span><select class="form-control" v-model="quiz.feedback"><option value="at_end">At the end</option><option value="after_each">After each question</option></select></label><label class="form-check check-row"><input type="checkbox" v-model="quiz.showScore"><span><strong>Show score</strong></span></label><label class="form-check check-row"><input type="checkbox" v-model="quiz.showAnswers"><span><strong>Show correct answers</strong></span></label><label class="form-check check-row"><input type="checkbox" v-model="quiz.showExplain" :disabled="!quiz.showAnswers"><span><strong>Show explanations</strong></span></label></div></details>
-                    <details open v-if="quiz.status !== 'draft'"><summary>Sharing</summary><div class="setting-group"><label class="form-field"><span class="form-label">Stable share link</span><input class="form-control" :value="quiz.shareUrl" readonly></label><button class="btn btn-default" type="button" @click="copyShare">Copy link</button></div></details>
+                    <details open>
+                        <summary>Details</summary>
+                        <div class="setting-group">
+                            <label class="form-field"><span class="form-label">Description</span><textarea placeholder="About quiz or instructions" class="form-control" v-model="quiz.description" rows="3"></textarea>
+                            </label>
+                            
+                            <label class="form-field"><span class="form-label">Instructions</span>
+                                <textarea class="form-control" v-model="quiz.instructions" rows="3"></textarea>
+                            </label>
+                            
+                            <label class="form-field"><span class="form-label">Mode</span>
+                                <select class="form-control" :value="quiz.mode" @change="changeMode($event)"><option value="assessment">Assessment</option><option value="practice">Practice</option>
+                                </select>
+                            </label>
+                            
+                            <label class="form-check check-row mt-3"><input type="checkbox" v-model="quiz.listed"><span><strong>Show on my page</strong></span></label></div>
+                    </details>
+
+                    <details>
+                        <summary>Schedule & timing</summary>
+                        <div class="setting-group">
+                            <label class="form-field"><span class="form-label">Opens ({{ quiz.timezone }})</span><input class="form-control" type="datetime-local" v-model="quiz.opensAtLocal"></label><label class="form-field"><span class="form-label">Closes ({{ quiz.timezone }})</span><input class="form-control" type="datetime-local" v-model="quiz.closesAtLocal"></label><label class="form-field"><span class="form-label">Total timer (minutes)</span><input class="form-control" type="number" min="0.5" max="1440" step="0.5" v-model="quiz.timeLimitMinutes" placeholder="No timer"></label>
+                        </div>
+                    </details>
+                    <details v-if="quiz.mode === 'assessment'">
+                        <summary>Admission</summary>
+                        <div class="setting-group">
+                            <label class="form-field"><span class="form-label">New passcode</span><input class="form-control" type="password" v-model="passcodeValue" @input="quiz.passcode.action='set'" autocomplete="new-password" placeholder="Leave unchanged"></label><button v-if="quiz.passcode.configured" class="btn btn-link btn-sm align-start" type="button" @click="clearPasscode">Clear current passcode</button><label class="form-field"><span class="form-label">Email</span><select class="form-control" v-model="quiz.emailMode"><option value="hidden">Hidden</option><option value="optional">Optional</option><option value="required">Required</option></select></label><label class="form-field"><span class="form-label">Phone</span><select class="form-control" v-model="quiz.phoneMode"><option value="hidden">Hidden</option><option value="optional">Optional</option><option value="required">Required</option></select>
+                            </label>
+                        </div>
+                    </details>
+                    <details>
+                        <summary>Behavior &amp; monitoring</summary>
+                        <div class="setting-group">
+                            
+                            <label class="form-check check-row"><input type="checkbox" v-model="quiz.shuffleQuestions"><span><strong>Shuffle questions</strong>
+                            <small>Randomize order for each start.</small></span></label>
+                            
+                            <label class="form-check check-row"><input type="checkbox" v-model="quiz.shuffleOptions"><span><strong>Shuffle choices</strong><small>Randomize choice order.</small></span></label>
+                            
+                            <label v-if="quiz.mode === 'assessment'" class="form-check check-row"><input type="checkbox" v-model="quiz.cheatCheck"><span><strong>Integrity monitoring</strong><small><?= esc(lang('EduTest.builder.integrityHelp')) ?></small></span>
+                            </label>
+
+                        </div>
+                    </details>
+
+                    <details><summary>Feedback & results</summary>
+                        <div class="setting-group">
+                            <label class="form-field">
+                                <span class="form-label">Feedback timing</span>
+                                <select class="form-control" v-model="quiz.feedback"><option value="at_end">At the end</option><option value="after_each">After each question</option>
+                                </select>
+                            </label>
+                            
+                            <label class="form-check check-row"><input type="checkbox" v-model="quiz.showScore"><span><strong>Show score</strong></span>
+                            </label>
+                            
+                            <label class="form-check check-row">
+                                <input type="checkbox" v-model="quiz.showAnswers"><span><strong>Show correct answers</strong></span>
+                            </label>
+                            
+                            <label class="form-check check-row">
+                                <input type="checkbox" v-model="quiz.showExplain" :disabled="!quiz.showAnswers"><span><strong>Show explanations</strong></span>
+                            </label>
+                        </div>
+                    </details>
+                    
+                    <details open v-if="quiz.status !== 'draft'">
+                        <summary>Sharing</summary>
+                        <div class="setting-group">
+                            <label class="form-field"><span class="form-label">Stable share link</span><input class="form-control" :value="quiz.shareUrl" readonly></label><button class="btn btn-default" type="button" @click="copyShare">Copy link</button>
+                        </div>
+                    </details>
                 </div>
             </aside>
         </div>
 
         <dialog class="dialog app-dialog quiz-details-dialog" ref="detailsDialog" aria-labelledby="quiz-details-title" @close="detailsClosed">
             <form @submit.prevent="applyDetails">
-                <div class="dialog-heading"><h2 id="quiz-details-title"><?= esc(lang('EduTest.builder.workspace.detailsTitle')) ?></h2><button class="btn btn-default btn-icon" type="button" @click="closeDetails" aria-label="<?= esc(lang('EduTest.builder.workspace.close'), 'attr') ?>">×</button></div>
-                <p class="dialog-copy"><?= esc(lang('EduTest.builder.workspace.stagedHint')) ?></p>
-                <label class="form-field"><span class="form-label"><?= esc(lang('EduTest.builder.workspace.title')) ?></span><input class="form-control" ref="detailsTitle" v-model="detailsTitle" maxlength="200" required></label>
+                <header class="dialog-heading">
+                    <h4 id="quiz-details-title"><?= esc(lang('EduTest.builder.workspace.detailsTitle')) ?></h4>
+                    <button class="btn btn-default btn-icon" type="button" @click="closeDetails">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x preview-icon"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                    </button>
+                </header>
+
+                <label class="form-field mb-4"><span class="form-label"><?= esc(lang('EduTest.builder.workspace.title')) ?></span><input class="form-control" ref="detailsTitle" v-model="detailsTitle" maxlength="200" required></label>
                 <label class="form-field"><span class="form-label"><?= esc(lang('EduTest.builder.workspace.cover')) ?></span><input class="form-control" type="file" accept="image/jpeg,image/png,image/webp" @change="pickDetailsCover" aria-describedby="details-cover-help"></label>
                 <p class="dialog-copy" id="details-cover-help"><?= esc(lang('EduTest.builder.workspace.coverHelp')) ?></p>
-                <img v-if="detailsCoverUrl" class="details-cover-preview" :src="detailsCoverUrl" alt="<?= esc(lang('EduTest.builder.workspace.coverPreview'), 'attr') ?>">
-                <button v-if="detailsCoverUrl" class="btn btn-default btn-sm" type="button" @click="removeDetailsCover"><?= esc(lang('EduTest.builder.workspace.removeCover')) ?></button>
+                
+                <div style="position:relative">
+                    <img style="max-height:300px; object-fit:cover" v-if="detailsCoverUrl" class="details-cover-preview" :src="detailsCoverUrl" alt="<?= esc(lang('EduTest.builder.workspace.coverPreview'), 'attr') ?>">
+                
+                    <button v-if="detailsCoverUrl" class="btn btn-default" style="position:absolute; bottom:4px; right:4px" type="button" @click="removeDetailsCover"><?= esc(lang('EduTest.builder.workspace.removeCover')) ?></button>
+                </div>
+
                 <p v-if="detailsChecking" role="status"><?= esc(lang('EduTest.builder.workspace.checkingCover')) ?></p>
                 <p v-if="detailsError" class="form-error" role="alert">{{ detailsError }}</p>
                 <div class="dialog-actions"><button class="btn btn-default" type="button" @click="closeDetails"><?= esc(lang('EduTest.builder.workspace.cancel')) ?></button><button class="btn btn-primary" type="submit" :disabled="detailsChecking"><?= esc(lang('EduTest.builder.workspace.apply')) ?></button></div>

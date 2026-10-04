@@ -12,7 +12,7 @@
             <label class="form-field"><span class="form-label"><?= esc(lang('EduTest.createQuiz.cover')) ?></span><input class="form-control" type="file" name="cover" accept="image/jpeg,image/png,image/webp" aria-describedby="create-cover-help"></label>
             <p id="create-cover-help" class="dialog-copy"><?= esc(lang('EduTest.createQuiz.coverHelp')) ?></p>
             <img class="create-cover-preview" data-cover-preview alt="<?= esc(lang('EduTest.createQuiz.coverPreview'), 'attr') ?>" hidden>
-            <button class="btn btn-default btn-sm" type="button" data-remove-cover hidden><?= esc(lang('EduTest.createQuiz.removeCover')) ?></button>
+            <button class="btn btn-default" type="button" data-remove-cover hidden><?= esc(lang('EduTest.createQuiz.removeCover')) ?></button>
         </div>
         <p class="form-error" data-create-error role="alert"></p>
         <p class="dialog-copy" data-created-notice hidden><?= esc(lang('EduTest.createQuiz.draftSaved')) ?></p>

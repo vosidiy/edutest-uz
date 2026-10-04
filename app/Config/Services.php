@@ -71,7 +71,7 @@ class Services extends BaseService
             return static::getSharedInstance('teacherQueries');
         }
 
-        return new TeacherQueryService();
+        return new TeacherQueryService(null, static::media());
     }
 
     public static function teacherResults(bool $getShared = true): TeacherResultsService

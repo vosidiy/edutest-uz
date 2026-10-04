@@ -13,10 +13,12 @@ final class TeacherQueryService
 {
     private const PAGE_SIZE = 20;
     private readonly BaseConnection $db;
+    private readonly ?MediaService $media;
 
-    public function __construct(?BaseConnection $db = null)
+    public function __construct(?BaseConnection $db = null, ?MediaService $media = null)
     {
         $this->db = $db ?? Database::connect();
+        $this->media = $media;
     }
 
     public function normalizeFilters(array $input): array
@@ -72,7 +74,7 @@ final class TeacherQueryService
         $pageCount = max(1, (int) ceil($total / self::PAGE_SIZE));
         $filters['page'] = min($filters['page'], $pageCount);
         foreach (['q', 'stats', 'qc'] as $alias) $this->db->addTableAlias($alias);
-        $builder->select('q.public_id, q.title, q.mode, q.status, q.deleted_at, q.current_paper_id, q.practice_starts, q.updated_at')
+        $builder->select('q.id, q.public_id, q.title, q.mode, q.status, q.deleted_at, q.current_paper_id, q.cover_src, q.practice_starts, q.updated_at')
             ->select('qc.question_count, stats.attempt_count, stats.finalized_count');
         [$field, $direction] = match ($filters['sort']) {
             'created_desc' => ['q.created_at', 'DESC'], 'title_asc' => ['q.title', 'ASC'],
@@ -97,6 +99,7 @@ final class TeacherQueryService
             'title' => trim((string) $quiz['title']) === '' ? lang('Results.untitledQuiz') : (string) $quiz['title'],
             'mode' => (string) $quiz['mode'], 'status' => (string) $quiz['status'], 'deleted' => $quiz['deleted_at'] !== null,
             'hasPublished' => $quiz['current_paper_id'] !== null, 'questionCount' => (int) ($quiz['question_count'] ?? 0),
+            'cover' => $this->media?->descriptor(($quiz['cover_src'] ?? null) === null ? null : 'image', $quiz['cover_src'] ?? null, 'cover', (int) $quiz['id']),
             'assessmentSubmissions' => (int) ($quiz['finalized_count'] ?? 0),
             'practiceStarts' => (int) $quiz['practice_starts'], 'updatedAt' => $this->localDate($quiz['updated_at'], $timezone),
             'editUrl' => $canEdit ? site_url('quizzes/' . $quiz['public_id'] . '/edit') : null,

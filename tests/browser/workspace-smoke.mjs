@@ -26,7 +26,7 @@ let saved = {
 function data(page, url) {
   const quiz = {publicId:id,title:saved.title,currentMode:saved.mode,status:url.searchParams.has('archived')?'archived':'published',builderUrl:url.searchParams.has('archived')?null:'/quizzes/'+id+'/edit',restoreUrl:'/dashboard?status=archived',url:'/results/quizzes/'+id};
   const filters = {status:'',mode:'',sort:'updated_desc',page:1};
-  const row = {publicId:id,title:saved.title,mode:'assessment',status:'published',deleted:false,questionCount:20,
+  const row = {publicId:id,title:saved.title,mode:'assessment',status:'published',deleted:false,questionCount:20,cover:null,
     hasPublished:true,assessmentSubmissions:128,practiceStarts:14,updatedAt:'27 Sep 2026, 20:40',editUrl:quiz.builderUrl,resultsUrl:quiz.url};
   const attempt = {name:'Alex Morgan',email:'alex@example.test',phone:null,ip:'192.0.2.1',agent:'Fixture browser',status:'completed',lateSync:false,paperRevision:1,score:'16',maxScore:'20',percent:'80.00',responsesReceived:20,correctReceived:16,duration:'5m 10s',finishReason:'completed',startedAt:{display:'27 Sep 2026, 21:24'},submittedAt:{display:'27 Sep 2026, 21:30'},integrityCount:0,url:'/results/attempts/'+id};
   const report = {quiz, metrics:{finalizedAttempts:128,inProgressAttempts:3,averagePercent:'78.50'}, attempts:[attempt],
@@ -36,7 +36,7 @@ function data(page, url) {
   if(page==='attempt') delete report.exportUrl;
   return {title:'Teacher workspace — EduTest',user:{display_name:'Sarah Williams',timezone:'Asia/Tashkent'},
     quizWorkspace:page!=='dashboard',builderHeader:page==='builder',quiz:saved,report,
-    dateLabel:'Sunday, 27 September',
+    dateLabel:'Sunday, 27 September',paginationNavigation:{pageCount:1,previousUrl:null,nextUrl:null},
     library:{rows:url.searchParams.has('empty')?[]:[row,{...row,publicId:'b'.repeat(32),title:'Anonymous revision practice',mode:'practice',resultsUrl:null,assessmentSubmissions:0}],filters,pagination:{page:1,pageCount:1,total:2}}};
 }
 const server = http.createServer(async (request, response) => {
