@@ -19,14 +19,18 @@
 
         <div class="builder-layout" :data-active-panel="activePanel">
             <aside id="builder-questions" class="question-rail" aria-label="Quiz questions">
-                <div class="rail-heading"><strong>Questions</strong><span>{{ quiz.questions.length }}</span></div>
+                <div class="rail-heading">
+                    <strong class="rail-title">Questions ({{ quiz.questions.length }})</strong>
+                </div>
+                
                 <div class="question-list" ref="questionsPanel" tabindex="0" role="region" aria-label="<?= esc(lang('EduTest.builder.workspace.questions'), 'attr') ?>">
                     <button v-for="(question, index) in quiz.questions" :key="question.id || `new-${index}`" class="question-item" :class="{active:index === selectedIndex}" type="button" @click="selectQuestion(index)">
                         <span class="question-number">{{ index + 1 }}</span><span><strong>{{ question.content || 'Untitled question' }}</strong><small>{{ typeLabel(question.type) }}</small></span>
                     </button>
                 </div>
+
                 <div class="add-question">
-                    <button class="btn btn-default btn-sm" type="button" @click="addQuestion">＋ Add question</button>
+                    <button class="btn btn-default" type="button" @click="addQuestion">＋ Add question</button>
                 </div>
             </aside>
 
@@ -49,36 +53,106 @@
                 </section>
 
                 <section v-else-if="selectedQuestion" class="card editor-paper">
-                    <div class="editor-paper-head"><span>Question {{ selectedIndex + 1 }} of {{ quiz.questions.length }}</span><div><button class="btn btn-default btn-sm btn-icon" type="button" @click="moveQuestion(-1)" :disabled="selectedIndex===0" aria-label="Move question up">↑</button><button class="btn btn-default btn-sm btn-icon" type="button" @click="moveQuestion(1)" :disabled="selectedIndex===quiz.questions.length-1" aria-label="Move question down">↓</button><button class="btn btn-red-subtle btn-sm" type="button" @click="removeQuestion">Delete</button></div></div>
+                    <div class="editor-paper-head">
+                        
+                        <span class="text-secondary text-uppercase text-sm">Question {{ selectedIndex + 1 }} of {{ quiz.questions.length }}</span>
+                        
+                        <div>
+                            <button class="btn btn-default btn-sm btn-icon" type="button" @click="moveQuestion(-1)" :disabled="selectedIndex===0" aria-label="Move question up">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-big-up preview-icon"><path d="M9 19a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-6a1 1 0 0 1 1-1h3.293a.707.707 0 0 0 .5-1.207l-7.086-7.086a1 1 0 0 0-1.414 0l-7.086 7.086a.707.707 0 0 0 .5 1.207H8a1 1 0 0 1 1 1z"/></svg>
+                            </button>
+                            
+                            <button class="btn btn-default btn-sm btn-icon" type="button" @click="moveQuestion(1)" :disabled="selectedIndex===quiz.questions.length-1" aria-label="Move question down">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-big-down preview-icon"><path d="M9 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v6a1 1 0 0 0 1 1h3.293a.707.707 0 0 1 .5 1.207l-7.086 7.086a1 1 0 0 1-1.414 0l-7.086-7.086a.707.707 0 0 1 .5-1.207H8a1 1 0 0 0 1-1z"/></svg>
+                            </button>
+                            
+                            <button class="btn btn-red-subtle btn-sm" type="button" @click="removeQuestion">Delete</button>
+                        </div>
+                    
+                    </div>
                     <div class="question-editor">
-                        <div class="editor-grid">
-                            <label class="form-field"><span class="form-label">Question</span><textarea class="form-control" v-model="selectedQuestion.content" rows="4" maxlength="65535"></textarea><small class="form-error" v-if="fieldError(`questions.${selectedIndex}.content`)">{{ fieldError(`questions.${selectedIndex}.content`) }}</small></label>
-                            <label class="form-field"><span class="form-label">Answer type</span><select class="form-control" :value="selectedQuestion.type" @change="changeQuestionType($event.target.value)"><option value="single_choice">Single choice</option><option value="multi_select">Multi-select</option><option value="short_text">Short text</option></select></label>
+
+                        <div class="mb-4" style="max-width:300px">
+                            <label class="form-field">
+                                <select class="form-select" :value="selectedQuestion.type" @change="changeQuestionType($event.target.value)"><option value="single_choice">Single choice</option><option value="multi_select">Multi-select</option><option value="short_text">Short text</option>
+                            </select>
+                        </label>
+                        </div>
+                        
+                        <div class="editor">
+                            
+                            <label class="form-field">
+                                <h5 class="mb-2">Question</h5>
+                                
+                                <textarea placeholder="Type question text..." class="form-control" v-model="selectedQuestion.content" rows="2" maxlength="65535"></textarea>
+                                
+                                <small class="form-error" v-if="fieldError(`questions.${selectedIndex}.content`)">{{ fieldError(`questions.${selectedIndex}.content`) }}</small>
+                            </label>
+ 
                         </div>
 
-                        <div class="media-editor"><div><strong>Question media</strong><small>One image, audio file, or supported video.</small></div><media-preview :media="selectedQuestion.media"></media-preview><div class="media-actions"><button class="btn btn-default btn-sm" type="button" @click="chooseFile(selectedIndex,null)">Upload file</button><button class="btn btn-default btn-sm" type="button" @click="addVideo(selectedIndex,null)">Video URL</button><button v-if="selectedQuestion.media" class="btn btn-red-subtle btn-sm" type="button" @click="removeMedia(selectedIndex,null)">Remove</button></div></div>
+                        <div class="media-editor">       
+                            <media-preview :media="selectedQuestion.media"></media-preview>
+                            <div class="d-flex">
+                                <div class="media-actions">
+                                    <button class="btn btn-default" type="button" @click="chooseFile(selectedIndex,null)"> <svg class="mr-1" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image preview-icon"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> <span>Add image</span></button><button class="btn btn-default" type="button" @click="addVideo(selectedIndex,null)">Video URL</button><button v-if="selectedQuestion.media" class="btn btn-red-subtle" type="button" @click="removeMedia(selectedIndex,null)">Remove</button>
+                                </div>
+                                <div class="ml-3">
+                                    <p>Question media</p>
+                                    <small class="text-secondary">One image, audio file, or supported video.</small>
+                                </div>
+                            </div>
+                        </div>
 
                         <div v-if="selectedQuestion.type === 'short_text'" class="answer-editor">
-                            <div class="section-label"><strong>Accepted answers</strong><small>Matching ignores capitalization and repeated spaces.</small></div>
-                            <div v-for="(answer,index) in selectedQuestion.textAnswers" :key="index" class="text-answer-row"><input class="form-control" v-model="selectedQuestion.textAnswers[index]" maxlength="500"><button class="btn btn-red-subtle btn-sm btn-icon" type="button" @click="selectedQuestion.textAnswers.splice(index,1)" aria-label="Remove accepted answer">×</button></div>
-                            <button class="btn btn-default btn-sm" type="button" @click="selectedQuestion.textAnswers.push('')">＋ Add accepted answer</button>
+                            <div class="section-label">
+                                <h5>Accepted answers</h5>
+                            </div>
+                            <div v-for="(answer,index) in selectedQuestion.textAnswers" :key="index" class="text-answer-row">
+                                <input class="form-control" v-model="selectedQuestion.textAnswers[index]" maxlength="500">
+                                <button class="btn btn-plain btn-icon" type="button" @click="selectedQuestion.textAnswers.splice(index,1)" aria-label="Remove accepted answer">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x preview-icon"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                                </button>
+                            </div>
+                            <button style="max-width:464px" class="btn w-full btn-neutral" type="button" @click="selectedQuestion.textAnswers.push('')">＋ Add correct answer</button>
                         </div>
-                        <div v-else class="answer-editor">
-                            <div class="section-label"><strong>Answer choices</strong><small>{{ selectedQuestion.type === 'multi_select' ? 'Select every correct choice.' : 'Select exactly one correct choice.' }}</small></div>
+                        <div v-else class="answer-editor mb-5">
+
+                            <div class="section-label">
+                                <h5>Answer choices</h5>
+                                <small>{{ selectedQuestion.type === 'multi_select' ? 'Select every correct choice.' : 'Select exactly one correct choice.' }}</small>
+                            </div>
+
                             <div v-for="(option,index) in selectedQuestion.options" :key="option.id || `option-${index}`" class="answer-row">
                                 <div class="answer-main-row">
                                     <span class="answer-letter">{{ optionLetter(index) }})</span>
                                     <input class="form-control" v-model="option.content" maxlength="65535" :aria-label="`Answer ${optionLetter(index)}`">
-                                    <button class="btn btn-default btn-sm" type="button" @click="chooseFile(selectedIndex,index)">{{ option.media ? 'Replace image' : 'Add image' }}</button>
-                                    <button v-if="option.media" class="btn btn-link btn-sm danger" type="button" @click="removeMedia(selectedIndex,index)">Remove image</button>
-                                    <button class="btn btn-red-subtle btn-sm" type="button" @click="removeOption(index)" :aria-label="`Remove answer ${optionLetter(index)}`">Remove</button>
+                                    
+                                    <button class="btn btn-default" type="button" @click="chooseFile(selectedIndex,index)">
+                                        <svg class="mr-1" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image preview-icon"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                                        <span>
+                                             {{ option.media ? 'Change' : 'Image' }}
+                                        </span>
+                                    </button>
+                                    
+                                    <button v-if="option.media" class="btn btn-link" type="button" @click="removeMedia(selectedIndex,index)">Remove image</button>
+                                    
+                                    <button class="btn btn-red-subtle btn-icon" type="button" @click="removeOption(index)" :aria-label="`Remove answer ${optionLetter(index)}`">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x preview-icon"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                                    </button>
                                 </div>
                                 <media-preview :media="option.media"></media-preview>
                                 <label class="form-check answer-correct-row"><input :type="selectedQuestion.type === 'single_choice' ? 'radio' : 'checkbox'" :name="`correct-answer-${selectedIndex}`" :checked="option.isCorrect" @change="setCorrect(index,$event.target.checked)"><span>Mark as correct</span></label>
                             </div>
-                            <button class="btn btn-default btn-sm" type="button" @click="addOption">＋ Add answer</button>
+                            <button class="btn btn-neutral w-full" type="button" @click="addOption">
+                                ＋ Add answer variant
+                            </button>
                         </div>
-                        <label class="form-field explanation"><span class="form-label">Explanation shown with feedback</span><textarea class="form-control" v-model="selectedQuestion.explanation" rows="3" maxlength="65535"></textarea></label>
+                        <hr>
+                        <label class="form-field explanation">
+                            <h5 class="mb-2">Explanation or feedback <span class="text-secondary">(optional)</span></h5>
+                            <textarea placeholder="Type why certain answer is correct" class="form-control" v-model="selectedQuestion.explanation" rows="2" maxlength="900"></textarea>
+                        </label>
                     </div>
                 </section>
                 <section v-else class="card editor-paper empty-state"><span>＋</span><h2>Start with a question</h2><p>Add a question from the left rail.</p></section>
@@ -86,7 +160,7 @@
             </section>
 
             <aside id="builder-settings" class="settings-rail" aria-label="Quiz settings">
-                <div class="rail-heading"><strong>Quiz settings</strong><span class="badge status" :class="quiz.status">{{ quiz.status }}</span></div>
+                <div class="rail-heading"><strong class="rail-title">Quiz settings</strong><span class="badge status" :class="quiz.status">{{ quiz.status }}</span></div>
                 <div class="settings-content" ref="settingsPanel" tabindex="0" role="region" aria-label="<?= esc(lang('EduTest.builder.workspace.settings'), 'attr') ?>">
                     <details open><summary>Details</summary><div class="setting-group"><label class="form-field"><span class="form-label">Description</span><textarea class="form-control" v-model="quiz.description" rows="3"></textarea></label><label class="form-field"><span class="form-label">Instructions</span><textarea class="form-control" v-model="quiz.instructions" rows="3"></textarea></label><label class="form-field"><span class="form-label">Mode</span><select class="form-control" :value="quiz.mode" @change="changeMode($event)"><option value="assessment">Assessment</option><option value="practice">Practice</option></select></label><label class="form-check check-row"><input type="checkbox" v-model="quiz.listed"><span><strong>List on public profile</strong><small>Takes effect when public profiles launch.</small></span></label></div></details>
                     <details><summary>Schedule & timing</summary><div class="setting-group"><label class="form-field"><span class="form-label">Opens ({{ quiz.timezone }})</span><input class="form-control" type="datetime-local" v-model="quiz.opensAtLocal"></label><label class="form-field"><span class="form-label">Closes ({{ quiz.timezone }})</span><input class="form-control" type="datetime-local" v-model="quiz.closesAtLocal"></label><label class="form-field"><span class="form-label">Total timer (minutes)</span><input class="form-control" type="number" min="0.5" max="1440" step="0.5" v-model="quiz.timeLimitMinutes" placeholder="No timer"></label></div></details>

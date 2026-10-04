@@ -1,6 +1,20 @@
 <?php if ($builderHeader ?? false) : ?>
         <header class="builder-bar">
-            <div class="builder-title"><a class="btn btn-default btn-icon" href="<?= site_url('dashboard') ?>" aria-label="<?= esc(lang('Workspace.backDashboard'), 'attr') ?>">←</a><span><button class="builder-edit-title" type="button" ref="editTitle" @click="openDetails" aria-label="<?= esc(lang('EduTest.builder.workspace.editDetails'), 'attr') ?>"><strong>{{ quiz.title || 'Untitled quiz' }}</strong><span aria-hidden="true">✎</span></button><small role="status" aria-live="polite" :class="saveState">{{ saveLabel }}</small></span></div>
+            <div class="builder-title">
+                <a class="btn btn-neutral btn-icon" href="<?= site_url('dashboard') ?>" aria-label="<?= esc(lang('Workspace.backDashboard'), 'attr') ?>">
+                    <svg style="width: 24px; height: 24px;" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left preview-icon"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+                </a>
+                <div>
+                    <a href="#" class="builder-edit-title" ref="editTitle" @click="openDetails" aria-label="<?= esc(lang('EduTest.builder.workspace.editDetails'), 'attr') ?>">
+                        <strong>{{ quiz.title || 'Untitled quiz' }}</strong>
+                        <span aria-hidden="true">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pen-line preview-icon"><path d="M13 21h8"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg>
+                        </span>
+                    </a>
+                    <small role="status" aria-live="polite" :class="saveState">{{ saveLabel }}
+                    </small>
+                </div>
+            </div>
             <nav v-if="quiz.resultsAvailable && quiz.resultsUrl" class="builder-view-nav" aria-label="<?= esc(lang('Workspace.quizWorkspace'), 'attr') ?>">
                 <a class="active" href="<?= esc(site_url('quizzes/' . $quiz['publicId'] . '/edit'), 'attr') ?>" aria-current="page"><?= esc(lang('EduTest.builder.navigation.builder')) ?></a>
                 <a :href="quiz.resultsUrl"><?= esc(lang('EduTest.builder.navigation.responses')) ?></a>
