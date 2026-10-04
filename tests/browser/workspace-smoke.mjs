@@ -24,10 +24,10 @@ let saved = {
   ]}]
 };
 function data(page, url) {
-  const quiz = {publicId:id,title:saved.title,currentMode:saved.mode,status:url.searchParams.has('archived')?'archived':'published',builderUrl:url.searchParams.has('archived')?null:'/quizzes/'+id+'/edit',restoreUrl:'/dashboard?view=archived',url:'/results/quizzes/'+id};
-  const filters = {q:'',view:'active',status:'',mode:'',reports:'',sort:'updated_desc',page:1};
-  const row = {publicId:id,title:saved.title,mode:'assessment',status:'published',deleted:false,hasStarted:true,questionCount:20,
-    assessmentSubmissions:128,inProgressAttempts:3,averagePercent:'78.50',practiceStarts:14,latestSubmission:'27 Sep 2026, 21:30',updatedAt:'27 Sep 2026, 20:40',editUrl:quiz.builderUrl,resultsUrl:quiz.url};
+  const quiz = {publicId:id,title:saved.title,currentMode:saved.mode,status:url.searchParams.has('archived')?'archived':'published',builderUrl:url.searchParams.has('archived')?null:'/quizzes/'+id+'/edit',restoreUrl:'/dashboard?status=archived',url:'/results/quizzes/'+id};
+  const filters = {status:'',mode:'',sort:'updated_desc',page:1};
+  const row = {publicId:id,title:saved.title,mode:'assessment',status:'published',deleted:false,questionCount:20,
+    hasPublished:true,assessmentSubmissions:128,practiceStarts:14,updatedAt:'27 Sep 2026, 20:40',editUrl:quiz.builderUrl,resultsUrl:quiz.url};
   const attempt = {name:'Alex Morgan',email:'alex@example.test',phone:null,ip:'192.0.2.1',agent:'Fixture browser',status:'completed',lateSync:false,paperRevision:1,score:'16',maxScore:'20',percent:'80.00',responsesReceived:20,correctReceived:16,duration:'5m 10s',finishReason:'completed',startedAt:{display:'27 Sep 2026, 21:24'},submittedAt:{display:'27 Sep 2026, 21:30'},integrityCount:0,url:'/results/attempts/'+id};
   const report = {quiz, metrics:{finalizedAttempts:128,inProgressAttempts:3,averagePercent:'78.50'}, attempts:[attempt],
     filters:{query:'',status:'all',dateFrom:null,dateTo:null,minScore:null,maxScore:null,integrity:'all',sort:'newest'},
@@ -37,8 +37,7 @@ function data(page, url) {
   return {title:'Teacher workspace — EduTest',user:{display_name:'Sarah Williams',timezone:'Asia/Tashkent'},
     quizWorkspace:page!=='dashboard',builderHeader:page==='builder',quiz:saved,report,
     dateLabel:'Sunday, 27 September',
-    dashboard:{metrics:{totalQuizzes:12,publishedQuizzes:8,assessmentSubmissions:128,inProgressAttempts:3},
-      library:{rows:url.searchParams.has('empty')?[]:[row,{...row,publicId:'b'.repeat(32),title:'Anonymous revision practice',mode:'practice',resultsUrl:null,assessmentSubmissions:0,inProgressAttempts:0,averagePercent:null,latestSubmission:null}],filters,view:'active',pagination:{page:1,pageCount:1,total:2}}}};
+    library:{rows:url.searchParams.has('empty')?[]:[row,{...row,publicId:'b'.repeat(32),title:'Anonymous revision practice',mode:'practice',resultsUrl:null,assessmentSubmissions:0}],filters,pagination:{page:1,pageCount:1,total:2}}};
 }
 const server = http.createServer(async (request, response) => {
   try {
@@ -145,6 +144,9 @@ try {
     await command('Input.dispatchKeyEvent',{type:'rawKeyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     await command('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     assert.equal(await evaluate('document.querySelector("[data-menu-toggle]").getAttribute("aria-expanded")'),'false');
+    await evaluate('document.querySelector("[data-menu-toggle]").click()');
+    await evaluate('document.querySelector(".library-heading").click()');
+    assert.equal(await evaluate('document.querySelector("[data-menu-toggle]").getAttribute("aria-expanded")'),'false');
     await evaluate('document.querySelector("[data-open-create]").focus();document.querySelector("[data-open-create]").click()');
     await until(()=>evaluate('document.querySelector("#create-quiz-dialog").open'), 'create dialog');
     await screenshot('create-'+width);
@@ -187,7 +189,7 @@ try {
   await until(()=>evaluate('!!document.querySelector("#builder-unavailable")'), 'restore notice');
   assert.equal(await evaluate('!!document.querySelector(".builder-view-nav span[aria-disabled]")'),true);
   await navigate('/dashboard?empty');
-  await until(()=>evaluate('document.querySelector(".quiz-list").textContent.includes("No matching quizzes")'), 'empty list');
+  await until(()=>evaluate('document.querySelector(".quiz-card-grid").textContent.includes("No matching quizzes")'), 'empty list');
   await navigate('/quizzes/'+id+'/edit');
   await until(()=>evaluate('!!document.querySelector(".builder-bar")'), 'builder ready');
   // Published edits do not autosave. Dirty navigation keeps its native warning.

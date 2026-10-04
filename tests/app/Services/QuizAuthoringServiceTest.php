@@ -106,8 +106,7 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         $this->assertNotSame(basename($published['shareUrl']), basename($duplicateDocument['shareUrl']));
 
         $queries = new TeacherQueryService($this->authoringDb);
-        $this->assertSame(2, $queries->library($owner, [], 'active')['pagination']['total']);
-        $this->assertSame(2, $queries->dashboard($owner)['metrics']['totalQuizzes']);
+        $this->assertSame(2, $queries->library($owner)['pagination']['total']);
 
         $this->assertSame('closed', $this->authoring->transition($owner, $created['publicId'], 'close')['quiz']['status']);
         $this->assertSame('published', $this->authoring->transition($owner, $created['publicId'], 'reopen')['quiz']['status']);

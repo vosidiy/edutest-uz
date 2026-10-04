@@ -13,8 +13,8 @@ const studentRoutes = [
   ['GET', 'assessments/example/results'], ['POST', 'assessments/example/activity'], ['POST', 'assessments/example/events'], ['POST', 'assessments/example/media'], ['POST', 'practice/media'],
 ].map(([method, route]) => [method, '/api/v1/player/' + route, 'student']);
 const teacherRoutes = [
-  ...['/dashboard', '/quizzes', '/quizzes/archived', '/quizzes/trash', '/quizzes/example/edit', '/results', '/results/quizzes/example', '/results/quizzes/example/export.csv', '/results/attempts/example', '/api/v1/csrf', '/api/v1/quizzes/example'].map(route => ['GET', route]),
-  ['POST', '/api/v1/quizzes'], ['PUT', '/api/v1/quizzes/example'], ['POST', '/logout'],
+  ...['/dashboard', '/account', '/quizzes', '/quizzes/archived', '/quizzes/trash', '/quizzes/example/edit', '/results', '/results/quizzes/example', '/results/quizzes/example/export.csv', '/results/attempts/example', '/api/v1/csrf', '/api/v1/quizzes/example'].map(route => ['GET', route]),
+  ['POST', '/account/profile'], ['POST', '/account/password'], ['POST', '/api/v1/quizzes'], ['PUT', '/api/v1/quizzes/example'], ['POST', '/logout'],
   ...['publish', 'close', 'reopen', 'archive', 'unarchive', 'trash', 'restore', 'duplicate'].map(action => ['POST', '/api/v1/quizzes/example/' + action]),
   ...['cover', 'questions/1/media', 'options/1/media'].flatMap(target => ['POST', 'DELETE'].map(method => [method, '/api/v1/quizzes/example/' + target])),
 ].map(([method, route]) => [method, route, 'teacher']);

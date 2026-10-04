@@ -65,7 +65,7 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
         $body = (string) $result->getBody();
 
         $this->assertSharedAuthLayout($body);
-        $this->assertStringContainsString('<h1 class="mb-5">Sign in</h1>', $body);
+        $this->assertStringContainsString('<h2 class="mb-5">Sign in</h2>', $body);
         $this->assertStringContainsString('class="alert alert-danger mb-5" role="alert"', $body);
         $this->assertStringContainsString('class="form-label" for="email"', $body);
         $this->assertStringContainsString('class="form-control" id="password"', $body);
@@ -82,9 +82,11 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
         $body = (string) $result->getBody();
 
         $this->assertSharedAuthLayout($body);
-        $this->assertStringContainsString('Create a teacher account', $body);
+        $this->assertStringContainsString('Create new account', $body);
+        $this->assertStringContainsString('id="registerForm"', $body);
         $this->assertStringContainsString('class="form-label" for="display_name"', $body);
         $this->assertStringContainsString('class="form-control" id="phone"', $body);
+        $this->assertStringContainsString('maxlength="13"', $body);
         $this->assertStringContainsString('class="form-control" id="password_confirm"', $body);
         $this->assertStringContainsString('class="btn btn-primary btn-lg w-full" type="submit"', $body);
         $this->assertStringContainsString('class="alert alert-danger mb-5" role="alert"', $body);
@@ -323,12 +325,13 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
     private function assertSharedAuthLayout(string $body): void
     {
         $this->assertStringContainsString(base_url('css/teacher.css') . '?v=', $body);
+        $this->assertStringContainsString(base_url('js/auth.js') . '?v=', $body);
         $this->assertStringContainsString('class="teacher-topbar"', $body);
-        $this->assertStringContainsString('class="teacher-brand"', $body);
-        $this->assertStringContainsString('>123test</span>', $body);
+        $this->assertStringContainsString('class="brand"', $body);
+        $this->assertStringContainsString('>123<em', $body);
         $this->assertStringContainsString('href="' . site_url('/') . '#faq"', $body);
         $this->assertStringContainsString('>Help</a>', $body);
-        $this->assertStringContainsString('class="card shadow-md w-full max-w-md"', $body);
+        $this->assertStringContainsString('class="card shadow-md w-full"', $body);
         $this->assertStringNotContainsString('<style', $body);
     }
 

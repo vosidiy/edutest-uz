@@ -2,7 +2,7 @@
 
 <?= $this->section('content') ?>
 <?php $values = $old ?? session('old') ?? []; ?>
-<h1 class="mb-5">Sign in</h1>
+<h2 class="mb-5">Sign in</h2>
 
 <form action="<?= site_url('login') ?>" method="post">
     <?= csrf_field() ?>
@@ -20,5 +20,10 @@
     <button class="btn btn-primary btn-lg w-full" type="submit">Sign in</button>
 </form>
 
-<footer class="mt-5 text-center text-secondary">Need an account? <a href="<?= site_url('register') ?>">Register</a></footer>
+<hr>
+
+<footer class="mt-5 text-center text-secondary">
+    <p class="mb-2">Are you new? </p>
+    <a class="btn w-full btn-default" href="<?= site_url('register') ?>">Register</a>
+</footer>
 <?= $this->endSection() ?>

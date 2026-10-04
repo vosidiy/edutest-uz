@@ -39,7 +39,7 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         parent::tearDown();
     }
 
-    public function testDashboardSummariesIncludeHistoryWithoutLoadingAnswerDocuments(): void
+    public function testQuizCardsExposeOnlyMvpActivityWithoutLoadingAnswerDocuments(): void
     {
         $quiz = $this->quiz();
         $first = $this->startQuiz($quiz);
@@ -52,28 +52,26 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $other = $this->quiz();
         $this->startQuiz($other);
 
-        $dashboard = $this->queries->dashboard($quiz['owner'], [], 'Asia/Tashkent');
-        $this->assertSame(['totalQuizzes' => 1, 'publishedQuizzes' => 1, 'assessmentSubmissions' => 1, 'inProgressAttempts' => 1], $dashboard['metrics']);
-        $row = $dashboard['library']['rows'][0];
+        $library = $this->queries->library($quiz['owner'], [], 'Asia/Tashkent');
+        $row = $library['rows'][0];
         $this->assertSame(2, $row['questionCount']);
         $this->assertSame(1, $row['assessmentSubmissions']);
-        $this->assertSame(1, $row['inProgressAttempts']);
-        $this->assertSame('0.00', $row['averagePercent']);
         $this->assertSame(12, $row['practiceStarts']);
-        $this->assertSame('02 Jan 2026, 02:30', $row['latestSubmission']);
         $this->assertNotNull($row['resultsUrl']);
+        $this->assertArrayNotHasKey('inProgressAttempts', $row);
+        $this->assertArrayNotHasKey('averagePercent', $row);
+        $this->assertArrayNotHasKey('latestSubmission', $row);
         $this->assertArrayNotHasKey('responses', $row);
         $this->assertArrayNotHasKey('id', $row);
 
         $this->db->table('quizzes')->where('public_id', $quiz['publicId'])->update(['status' => 'archived', 'deleted_at' => '2026-01-02 00:00:00']);
-        $historical = $this->queries->dashboard($quiz['owner'], ['view' => 'all']);
-        $this->assertSame(1, $historical['metrics']['assessmentSubmissions']);
-        $this->assertArrayNotHasKey('practiceStarts', $historical['metrics']);
-        $this->assertNull($historical['library']['rows'][0]['editUrl']);
-        $this->assertTrue($historical['library']['rows'][0]['deleted']);
+        $this->assertSame([], $this->queries->library($quiz['owner'])['rows']);
+        $trashed = $this->queries->library($quiz['owner'], ['status' => 'trash']);
+        $this->assertNull($trashed['rows'][0]['editUrl']);
+        $this->assertTrue($trashed['rows'][0]['deleted']);
     }
 
-    public function testSortingAndAverageUseAttemptCountsNotAverageOfQuizAverages(): void
+    public function testFinalizedAttemptSortingUsesFinalizedCounts(): void
     {
         $low = $this->quiz();
         $high = $this->quiz();
@@ -85,26 +83,19 @@ final class WorkspaceFeatureTest extends PlayerTestCase
                 'score' => (int) round((float) $percent * 2 / 100), 'percent' => $percent,
             ]);
         }
-        $this->assertArrayNotHasKey('averagePercent', $this->queries->dashboard($low['owner'])['metrics']);
-        foreach (['submissions_desc', 'score_desc'] as $sort) {
-            $rows = $this->queries->library($low['owner'], ['sort' => $sort])['rows'];
-            $this->assertSame($high['publicId'], $rows[0]['publicId']);
-            $this->assertSame(2, $rows[0]['assessmentSubmissions']);
-            $this->assertSame('80.00', $rows[0]['averagePercent']);
-        }
+        $rows = $this->queries->library($low['owner'], ['sort' => 'submissions_desc'])['rows'];
+        $this->assertSame($high['publicId'], $rows[0]['publicId']);
+        $this->assertSame(2, $rows[0]['assessmentSubmissions']);
+        $this->assertArrayNotHasKey('averagePercent', $rows[0]);
     }
 
     public function testLegacyFiltersAreTranslatedAndUnrecognizedInputsAreIgnored(): void
     {
         $url = $this->queries->legacyDashboardUrl(['lifecycle' => 'deleted', 'q' => 'Algebra', 'sort' => 'score_desc', 'page' => 3, 'redirect' => 'https://foreign.invalid'], 'results');
         parse_str(parse_url($url, PHP_URL_QUERY), $filters);
-        $this->assertSame(['q' => 'Algebra', 'view' => 'trash', 'reports' => '1', 'sort' => 'score_desc', 'page' => '3'], $filters);
+        $this->assertSame(['status' => 'trash', 'sort' => 'updated_desc', 'page' => '3'], $filters);
         $quiz = $this->quiz();
-        $dashboard = $this->queries->dashboard($quiz['owner'] + 100);
-        $this->assertSame(0, $dashboard['metrics']['totalQuizzes']);
-        $this->assertSame(0, $dashboard['metrics']['assessmentSubmissions']);
-        $this->assertArrayNotHasKey('averagePercent', $dashboard['metrics']);
-        $this->assertSame([], $dashboard['library']['rows']);
+        $this->assertSame([], $this->queries->library($quiz['owner'] + 100)['rows']);
     }
 
     public function testFiltersSortsPaginationAndEmptyStates(): void
@@ -116,26 +107,22 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $this->authoring->transition($owner, $archived['publicId'], 'archive');
         $trashed = $this->authoring->create($owner, 'Trashed assessment', 'assessment');
         $this->authoring->transition($owner, $trashed['publicId'], 'trash');
-        $this->assertSame(2, $this->queries->library($owner, [])['pagination']['total']);
-        $this->assertSame(4, $this->queries->library($owner, [], 'all')['pagination']['total']);
-        $this->assertSame(1, $this->queries->library($owner, [], 'archived')['pagination']['total']);
-        $this->assertSame(1, $this->queries->library($owner, [], 'trash')['pagination']['total']);
-        $this->assertSame(3, $this->queries->library($owner, ['reports' => '1'], 'all')['pagination']['total']);
-        $practice = $this->queries->library($owner, ['q' => 'Anonymous', 'mode' => 'practice', 'status' => 'draft']);
+        $this->assertSame(3, $this->queries->library($owner)['pagination']['total']);
+        $this->assertSame(1, $this->queries->library($owner, ['status' => 'archived'])['pagination']['total']);
+        $this->assertSame(1, $this->queries->library($owner, ['status' => 'trash'])['pagination']['total']);
+        $practice = $this->queries->library($owner, ['mode' => 'practice', 'status' => 'draft']);
         $this->assertCount(1, $practice['rows']);
         $this->assertNull($practice['rows'][0]['resultsUrl']);
-        $this->assertNull($practice['rows'][0]['averagePercent']);
-        $this->assertSame([], $this->queries->library($owner, ['q' => 'missing'])['rows']);
-        foreach (['updated_desc', 'created_desc', 'title_asc', 'submissions_desc', 'score_desc'] as $sort) {
-            $this->assertCount(4, $this->queries->library($owner, ['sort' => $sort], 'all')['rows']);
+        $this->assertArrayNotHasKey('averagePercent', $practice['rows'][0]);
+        foreach (['updated_desc', 'created_desc', 'title_asc', 'submissions_desc'] as $sort) {
+            $this->assertCount(3, $this->queries->library($owner, ['sort' => $sort])['rows']);
         }
         for ($i = 0; $i < 21; $i++) $this->authoring->create($owner, sprintf('Page %02d', $i), 'assessment');
-        $page = $this->queries->library($owner, ['q' => 'Page', 'sort' => 'title_asc', 'page' => 999]);
+        $page = $this->queries->library($owner, ['sort' => 'title_asc', 'page' => 999]);
         $this->assertSame(2, $page['pagination']['page']);
-        $this->assertCount(1, $page['rows']);
-        $this->assertSame('Page 20', $page['rows'][0]['title']);
+        $this->assertCount(4, $page['rows']);
         $this->assertSame('updated_desc', $this->queries->normalizeFilters(['sort' => 'DROP TABLE quizzes'])['sort']);
-        $this->assertSame('', $this->queries->normalizeFilters(['q' => ['bad']])['q']);
+        $this->assertSame(['status', 'mode', 'sort', 'page'], array_keys($this->queries->normalizeFilters(['q' => 'ignored', 'reports' => '1', 'view' => 'trash'])));
     }
 
     public function testDashboardAndCompatibilityRedirectsAreOwnerScoped(): void
@@ -149,7 +136,21 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $response->assertOK();
         $response->assertSee('teacher-topbar');
         $response->assertSee('data-account-menu');
+        $response->assertSee('class="dropdown"');
+        $response->assertSee('class="dropdown-item"');
+        $response->assertSee('href="' . site_url('account') . '"');
+        $response->assertDontSee('account-popover');
         $response->assertSee('create-quiz-dialog');
+        $response->assertSee('class="card quiz-card"');
+        $response->assertSee('class="quiz-card-media"');
+        $response->assertSee('class="quiz-card-media" href="' . site_url('quizzes/' . $quiz['publicId'] . '/edit') . '"');
+        $response->assertSee('class="quiz-card-actions"');
+        $response->assertSee('class="dropdown"');
+        $response->assertDontSee('dashboard-metrics');
+        $response->assertDontSee('library-tabs');
+        $response->assertDontSee('name="q"');
+        $response->assertDontSee('name="reports"');
+        $response->assertDontSee('class="menu"');
         $response->assertDontSee('teacher-sidebar');
         $response->assertDontSee('Other private quiz');
         $this->assertStringContainsString('&lt;script&gt;unsafe title&lt;/script&gt;', $response->response()->getBody());

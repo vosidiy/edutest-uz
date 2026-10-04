@@ -7,6 +7,7 @@ namespace Tests\App\Controllers\Auth;
 use App\Controllers\Auth\LoginController;
 use App\Controllers\Auth\RegisterController;
 use App\Controllers\BaseController;
+use App\Controllers\Teacher\AccountController;
 use App\Filters\AuthFilter;
 use App\Services\AuthService;
 use CodeIgniter\Test\CIUnitTestCase;
@@ -20,7 +21,19 @@ final class AuthenticationConfigTest extends CIUnitTestCase
     {
         $this->assertTrue(is_subclass_of(LoginController::class, BaseController::class));
         $this->assertTrue(is_subclass_of(RegisterController::class, BaseController::class));
+        $this->assertTrue(is_subclass_of(AccountController::class, BaseController::class));
         $this->assertInstanceOf(AuthService::class, Services::auth(false));
+    }
+
+    public function testAccountRulesMatchTheProtectedForms(): void
+    {
+        $validation = new Validation();
+        $this->assertSame(['display_name', 'email', 'phone'], array_keys($validation->accountProfile));
+        $this->assertContains('valid_email', $validation->accountProfile['email']['rules']);
+        $this->assertContains('regex_match[/^\+?[0-9]{7,15}$/]', $validation->accountProfile['phone']['rules']);
+        $this->assertSame(['current_password', 'new_password', 'new_password_confirm'], array_keys($validation->passwordChange));
+        $this->assertContains('min_length[6]', $validation->passwordChange['new_password']['rules']);
+        $this->assertContains('matches[new_password]', $validation->passwordChange['new_password_confirm']['rules']);
     }
 
     public function testRegistrationRulesMatchThePublicForm(): void

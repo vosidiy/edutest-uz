@@ -36,6 +36,7 @@ Resolve cross-document contradictions in the same change instead of silently cho
 - Models provide narrow persistence; define safe `$allowedFields`.
 - Filters handle authentication, CSRF, bearer credentials, and throttling.
 - Views escape untrusted output and contain no business logic.
+- Use the reusable `.dropdown` and `.dropdown-item` classes from `public/css/teacher.css` for new teacher dropdowns and popovers; do not create parallel menu styles.
 - Obtain teacher ownership from `service('auth')->id()`, never submitted user IDs.
 - Use explicit, verb-specific routes with automatic routing disabled.
 

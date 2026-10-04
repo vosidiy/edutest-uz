@@ -107,4 +107,62 @@ class Validation extends BaseConfig
             ],
         ],
     ];
+
+    /** @var array<string, array<string, list<string>|string>> */
+    public array $accountProfile = [
+        'display_name' => [
+            'label' => 'EduTest.displayName',
+            'rules' => [
+                'required',
+                'max_length[120]',
+            ],
+        ],
+        'email' => [
+            'label' => 'EduTest.email',
+            'rules' => [
+                'required',
+                'max_length[254]',
+                'valid_email',
+            ],
+        ],
+        'phone' => [
+            'label' => 'EduTest.phone',
+            'rules' => [
+                'permit_empty',
+                'regex_match[/^\+?[0-9]{7,15}$/]',
+            ],
+        ],
+    ];
+
+    /** @var array<string, array<string, list<string>|string>> */
+    public array $passwordChange = [
+        'current_password' => [
+            'label' => 'EduTest.currentPassword',
+            'rules' => [
+                'required',
+                'max_byte[72]',
+            ],
+            'errors' => [
+                'max_byte' => 'EduTest.passwordTooLong',
+            ],
+        ],
+        'new_password' => [
+            'label' => 'EduTest.newPassword',
+            'rules' => [
+                'required',
+                'min_length[6]',
+                'max_byte[72]',
+            ],
+            'errors' => [
+                'max_byte' => 'EduTest.passwordTooLong',
+            ],
+        ],
+        'new_password_confirm' => [
+            'label' => 'EduTest.newPasswordConfirm',
+            'rules' => [
+                'required',
+                'matches[new_password]',
+            ],
+        ],
+    ];
 }

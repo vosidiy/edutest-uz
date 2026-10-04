@@ -25,6 +25,9 @@ $routes->group('api/v1/player', ['namespace' => 'App\Controllers\Student', 'filt
 
 $routes->group('', ['namespace' => 'App\Controllers\Teacher', 'filter' => 'auth'], static function (RouteCollection $routes): void {
     $routes->get('dashboard', 'DashboardController::index', ['as' => 'dashboard']);
+    $routes->get('account', 'AccountController::index', ['as' => 'account']);
+    $routes->post('account/profile', 'AccountController::updateProfile', ['as' => 'account-profile']);
+    $routes->post('account/password', 'AccountController::updatePassword', ['as' => 'account-password']);
     $routes->get('quizzes', 'QuizController::index', ['as' => 'quizzes']);
     $routes->get('quizzes/archived', 'QuizController::archived', ['as' => 'quizzes-archived']);
     $routes->get('quizzes/trash', 'QuizController::trash', ['as' => 'quizzes-trash']);

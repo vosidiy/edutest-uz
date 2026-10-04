@@ -4,6 +4,12 @@
 
 ### Added
 
+- Added protected teacher account management with immediate name/email/phone updates, unique-email validation, current-password verification, password replacement, session regeneration, and separate profile/security forms.
+
+- Standardized the teacher avatar account popover on the reusable `.dropdown` and `.dropdown-item` design-system classes, with the convention documented for future teacher menus.
+
+- Added advisory browser-side registration validation for obvious gibberish names/emails, exact Uzbek phone formatting, password length, and password confirmation; server-side authentication validation remains authoritative.
+
 - Explicit Assessment and Practice Quit controls. Assessment Quit durably finalizes the confirmed prefix with `ended_reason=quit`, waits for pending uploads before offering fresh admission, and remains safely retryable after offline use; Practice Quit stays local.
 - Authenticated student name/email projection in Assessment start/recovery state and player/result headers, with backward-compatible recovery for older local runs.
 - Teacher response progress showing received confirmations/skips and running correctness, with all statuses/newest starts as the default and clear offline/connectivity caveats.
@@ -72,6 +78,7 @@
 
 ### Changed
 
+- Simplified the MVP teacher dashboard to a responsive quiz-card grid with clickable Builder media, status/mode/sort controls, finalized-attempt and Practice-start counts, reusable action dropdowns, and no workspace metrics, lifecycle tabs, title search, report filter, or extended activity projections.
 - Refactored login and registration onto the shared teacher design system, with reusable form/card/button/alert utilities and a minimal 123test header linking Help to the landing FAQ.
 - Flattened browser assets into top-level `public/css`, `public/js`, `public/fonts`, and `public/images` directories, relocated the pinned Vue build into `public/js`, and removed the landing page's duplicated quiz-mode section.
 - Rebuilt the public landing page in Uzbek from the prepared prototype, with session-aware dashboard actions, an audience strip, self-hosted Inter fonts, local presentation imagery, and a focused indigo landing stylesheet.

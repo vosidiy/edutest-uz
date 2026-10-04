@@ -197,7 +197,7 @@
 
   document.addEventListener('click', event => {
     const toggle = event.target.closest('[data-menu-toggle]');
-    document.querySelectorAll('.action-menu .menu').forEach(menu => {
+    document.querySelectorAll('.action-menu .dropdown').forEach(menu => {
       if (!toggle || menu !== toggle.nextElementSibling) menu.hidden = true;
     });
     if (toggle) toggle.nextElementSibling.hidden = !toggle.nextElementSibling.hidden;

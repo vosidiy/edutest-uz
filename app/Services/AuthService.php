@@ -11,6 +11,9 @@ use CodeIgniter\Session\SessionInterface;
 final class AuthService
 {
     public const SESSION_KEY = 'auth_user_id';
+    public const PASSWORD_CHANGED = 'changed';
+    public const PASSWORD_INCORRECT = 'incorrect';
+    public const PASSWORD_FAILED = 'failed';
 
     private const DUMMY_PASSWORD_HASH = '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.';
 
@@ -112,6 +115,41 @@ final class AuthService
     {
         $this->session->remove(self::SESSION_KEY);
         $this->session->regenerate(true);
+    }
+
+    public function updateProfile(string $displayName, string $email, ?string $phone): bool
+    {
+        $user = $this->user();
+        if ($user === null) {
+            return false;
+        }
+
+        $changes = [];
+        foreach (['display_name' => $displayName, 'email' => $email, 'phone' => $phone] as $field => $value) {
+            if ($user[$field] !== $value) {
+                $changes[$field] = $value;
+            }
+        }
+
+        return $changes === [] || $this->users->update((int) $user['id'], $changes);
+    }
+
+    public function changePassword(string $currentPassword, string $newPassword): string
+    {
+        $user = $this->user();
+        if ($user === null || ! password_verify($currentPassword, (string) $user['password_hash'])) {
+            return self::PASSWORD_INCORRECT;
+        }
+
+        if (! $this->users->update((int) $user['id'], [
+            'password_hash' => password_hash($newPassword, PASSWORD_DEFAULT),
+        ])) {
+            return self::PASSWORD_FAILED;
+        }
+
+        $this->startSession((int) $user['id']);
+
+        return self::PASSWORD_CHANGED;
     }
 
     private function startSession(int $userId): void

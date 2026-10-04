@@ -20,7 +20,7 @@ final class DashboardController extends BaseController
             'quizWorkspace' => false,
             'builderHeader' => false,
             'user'       => $user,
-            'dashboard'  => service('teacherQueries')->dashboard((int) service('auth')->id(), $this->request->getGet(), (string) $user['timezone']),
+            'library'    => service('teacherQueries')->library((int) service('auth')->id(), $this->request->getGet(), (string) $user['timezone']),
             'dateLabel'   => (new DateTimeImmutable('now', new DateTimeZone((string) $user['timezone'])))->format('l, j F'),
         ]);
     }
