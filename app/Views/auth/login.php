@@ -2,7 +2,7 @@
 
 <?= $this->section('content') ?>
 <?php $values = $old ?? session('old') ?? []; ?>
-<h2 class="mb-5">Sign in</h2>
+<h4 class="mb-5">Sign in</h4>
 
 <form action="<?= site_url('login') ?>" method="post">
     <?= csrf_field() ?>

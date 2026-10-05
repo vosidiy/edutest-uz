@@ -78,6 +78,9 @@
 
 ### Changed
 
+- Moved Preview/Edit into matching editor and preview question-card headers, removed the manual builder Save control, and enabled the existing one-second autosave pipeline for every editable quiz lifecycle state while keeping publication explicit.
+- Removed quiz instructions from authoring, new immutable paper definitions, student introductions, teacher attempt review, and the canonical `quizzes` schema; legacy paper JSON remains immutable and its old property is ignored.
+
 - Replaced the quiz library's inline page-window calculation with CI4's manual Pager while keeping the filter-preserving Previous/Next markup beside the quiz cards for straightforward UI customization.
 - Simplified the MVP teacher dashboard to a responsive quiz-card grid with clickable signed working covers and a quiz-icon fallback, status/mode/sort controls, finalized-attempt and Practice-start counts, reusable action dropdowns, and no workspace metrics, lifecycle tabs, title search, report filter, or extended activity projections.
 - Refactored login and registration onto the shared teacher design system, with reusable form/card/button/alert utilities and a minimal 123test header linking Help to the landing FAQ.

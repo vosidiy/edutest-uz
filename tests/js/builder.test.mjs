@@ -9,8 +9,9 @@ vm.runInNewContext(source, {window, document: {querySelector: () => null}});
 const rules = window.EduTestBuilderRules;
 assert.ok(rules, 'Builder rules should be available before the Vue application mounts.');
 assert.equal(rules.shouldAutosave({status: 'draft'}), true);
-assert.equal(rules.shouldAutosave({status: 'published'}), false);
-assert.equal(rules.shouldAutosave({status: 'closed'}), false);
+assert.equal(rules.shouldAutosave({status: 'published'}), true);
+assert.equal(rules.shouldAutosave({status: 'closed'}), true);
+assert.equal(rules.shouldAutosave({status: 'archived'}), false);
 
 assert.deepEqual(
   {...rules.modeTransition('practice', 'assessment', () => true)},

@@ -7,6 +7,7 @@ namespace Tests\App\Services;
 use App\Exceptions\AuthoringException;
 use App\Services\MediaService;
 use App\Services\QuizAuthoringService;
+use App\Services\QuizPaperService;
 use App\Services\TeacherQueryService;
 use CodeIgniter\Database\BaseConnection;
 use CodeIgniter\Database\Forge;
@@ -50,6 +51,7 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
         $this->assertSame('draft', $document['status']);
         $this->assertSame(1, $document['version']);
         $this->assertSame([], $document['questions']);
+        $this->assertArrayNotHasKey('instructions', $document);
         $this->assertFalse($document['resultsAvailable']);
         $this->assertNull($document['resultsUrl']);
         $this->assertMatchesRegularExpression('/^[0-9]{9}$/D', basename($document['shareUrl']));
@@ -65,9 +67,11 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
                 ['id' => null, 'content' => 'Cell wall', 'isCorrect' => false],
             ],
         ]];
+        $document['instructions'] = 'Ignored legacy client value';
         $saved = $this->authoring->save($owner, $created['publicId'], $document);
 
         $this->assertSame(2, $saved['version']);
+        $this->assertArrayNotHasKey('instructions', $saved);
         $this->assertNotSame('', $saved['questions'][0]['id']);
         $this->assertCount(2, $saved['questions'][0]['options']);
         $this->assertNotSame('', $saved['questions'][0]['options'][0]['code']);
@@ -95,7 +99,19 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
 
         $published = $this->authoring->transition($owner, $created['publicId'], 'publish')['quiz'];
         $this->assertSame('published', $published['status']);
-        $this->assertNotNull($this->authoring->publicSummary(basename($published['shareUrl'])));
+        $summary = $this->authoring->publicSummary(basename($published['shareUrl']));
+        $this->assertNotNull($summary);
+        $this->assertArrayNotHasKey('instructions', $summary);
+        $quizRow = $this->authoringDb->table('quizzes')->where('public_id', $created['publicId'])->get()->getRowArray();
+        $this->assertNotNull($quizRow);
+        $paper = $this->authoringDb->table('quiz_papers')->where('quiz_id', $quizRow['id'])->get()->getRowArray();
+        $this->assertNotNull($paper);
+        $definition = json_decode((string) $paper['definition'], true, 512, JSON_THROW_ON_ERROR);
+        $this->assertArrayNotHasKey('instructions', $definition['quiz']);
+        $definition['quiz']['instructions'] = 'Legacy immutable directions';
+        $paper['definition'] = json_encode($definition, JSON_THROW_ON_ERROR);
+        $legacyStudent = (new QuizPaperService($this->authoringDb, $this->media))->studentDocument($paper, str_repeat('a', 32));
+        $this->assertArrayNotHasKey('instructions', $legacyStudent);
 
         $duplicate = $this->authoring->duplicate($owner, $created['publicId']);
         $duplicateDocument = $this->authoring->document($owner, $duplicate['publicId']);
@@ -426,7 +442,7 @@ final class QuizAuthoringServiceTest extends CIUnitTestCase
             'share_token' => ['type' => 'VARCHAR', 'constraint' => 64], 'mode' => ['type' => 'VARCHAR', 'constraint' => 16],
             'status' => ['type' => 'VARCHAR', 'constraint' => 12], 'listed' => ['type' => 'INTEGER'],
             'title' => ['type' => 'VARCHAR', 'constraint' => 200], 'description' => ['type' => 'TEXT'],
-            'instructions' => ['type' => 'TEXT'], 'revision' => ['type' => 'INTEGER'], 'version' => ['type' => 'INTEGER'],
+            'revision' => ['type' => 'INTEGER'], 'version' => ['type' => 'INTEGER'],
             'cover_src' => ['type' => 'TEXT', 'null' => true],
             'current_paper_id' => ['type' => 'INTEGER', 'null' => true], 'time_limit_sec' => ['type' => 'INTEGER', 'null' => true],
             'opens_at' => ['type' => 'DATETIME', 'null' => true], 'closes_at' => ['type' => 'DATETIME', 'null' => true],

@@ -2,7 +2,7 @@
 
 <?= $this->section('content') ?>
 <?= $this->include('teacher/partials/quiz_header') ?>
-<header class="page-header results-page-header">
+<header class="results-page-header">
     <div>
         <p class="eyebrow"><a href="<?= site_url('dashboard') ?>"><?= esc(lang('Workspace.dashboardTitle')) ?></a> <span aria-hidden="true">/</span> <a href="<?= esc($report['quiz']['url'], 'attr') ?>"><?= esc($report['quiz']['title']) ?></a></p>
         <div class="results-title-line"><h1><?= esc(lang('Results.attemptTitle')) ?>: <?= esc($report['attempt']['name']) ?></h1><span class="badge attempt-status <?= esc($report['attempt']['status'], 'attr') ?>"><?= esc($report['attempt']['finishReason'] === 'quit' ? lang('Results.quitStatus') : ucwords(str_replace('_', ' ', $report['attempt']['status']))) ?></span></div>
@@ -39,7 +39,6 @@
     <section class="card panel paper-snapshot" aria-labelledby="paper-snapshot-heading">
         <div class="panel-heading"><div><p class="eyebrow"><?= esc(lang('Results.paperRevision')) ?> <?= esc((string) $report['paper']['revision']) ?></p><h2 id="paper-snapshot-heading"><?= esc($report['paper']['title']) ?></h2><p><?= esc(lang('Results.paperSnapshotNotice')) ?></p></div></div>
         <?php if ($report['paper']['description'] !== '') : ?><p><?= nl2br(esc($report['paper']['description'])) ?></p><?php endif ?>
-        <?php if ($report['paper']['instructions'] !== '') : ?><div class="answer-explanation"><strong>Instructions</strong><p><?= nl2br(esc($report['paper']['instructions'])) ?></p></div><?php endif ?>
     </section>
 
 

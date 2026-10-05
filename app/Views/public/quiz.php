@@ -14,7 +14,6 @@
         <?php foreach (['opensAt' => 'opens', 'closesAt' => 'closes'] as $field => $label) : ?>
             <?php if ($quiz[$field] !== null) : ?><p class="player-schedule"><?= esc(lang('Player.ui.' . $label)) ?> <time datetime="<?= esc($quiz[$field], 'attr') ?>"><?= esc($quiz[$field]) ?></time></p><?php endif ?>
         <?php endforeach ?>
-        <?php if ($quiz['instructions'] !== '') : ?><section class="player-instructions"><h2><?= esc(lang('Player.ui.instructions')) ?></h2><p><?= nl2br(esc($quiz['instructions'])) ?></p></section><?php endif ?>
         <p class="player-help"><?= esc(lang('Player.ui.questionHint')) ?></p>
         <p class="player-help"><?= esc(lang('Player.ui.' . ($quiz['mode'] === 'practice' ? 'practiceNotice' : 'assessmentNotice'))) ?></p>
         <?php if ($quiz['cheatCheck']) : ?>

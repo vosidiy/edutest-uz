@@ -6,7 +6,7 @@ The public introduction is `/q/{shareToken}`; `/play` and `/results` below that 
 
 Students never start from mutable builder tables. Initial **Publish** and later **Publish changes** create immutable paper schema version 3 and set `quizzes.current_paper_id`. Public introductions, admission tickets, Assessment starts, and Practice starts read that paper only. Saving the working copy does not change the student version.
 
-The paper JSON includes published metadata, settings, schedule, total timer, shuffle/feedback/visibility/integrity policy, questions, answers, explanations, and private media references. The published passcode hash is stored separately in `quiz_papers.passcode_hash` and is never returned. Existing attempts and Practice credentials remain bound to their paper after live edits or lifecycle changes.
+The paper JSON includes published metadata, settings, schedule, total timer, shuffle/feedback/visibility/integrity policy, questions, answers, explanations, and private media references. New papers omit the removed instructions property; older version-3 papers may retain it as ignored immutable data. The published passcode hash is stored separately in `quiz_papers.passcode_hash` and is never returned. Existing attempts and Practice credentials remain bound to their paper after live edits or lifecycle changes.
 
 ## Student API
 

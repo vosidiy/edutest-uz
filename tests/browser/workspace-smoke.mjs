@@ -13,8 +13,8 @@ const id = 'a'.repeat(32);
 let origin, writes = 0, conflict = false, coverWrites = 0, failCover = false, saveDelay = 0;
 let saved = {
   publicId: id, title: 'Exploring our world', mode: 'assessment', status: 'published', version: 1, revision: 1,
-  hasStarted: true, resultsAvailable: true, resultsUrl: '/results/quizzes/' + id,
-  shareUrl: '/q/123456789', description: 'A thoughtful geography assessment.', instructions: '',
+  hasStarted: true, hasPublished: true, hasUnpublishedChanges: false, resultsAvailable: true, resultsUrl: '/results/quizzes/' + id,
+  shareUrl: '/q/123456789', description: 'A thoughtful geography assessment.',
   listed: false, cover: null, timeLimitMinutes: '10', timezone: 'Asia/Tashkent', opensAtLocal: '', closesAtLocal: '',
   passcode: {configured: false, action: 'unchanged'}, emailMode: 'optional', phoneMode: 'hidden',
   shuffleQuestions: false, shuffleOptions: false, feedback: 'at_end', showScore: true, showAnswers: false, showExplain: false, cheatCheck: false,
@@ -32,7 +32,7 @@ function data(page, url) {
   const report = {quiz, metrics:{finalizedAttempts:128,inProgressAttempts:3,averagePercent:'78.50'}, attempts:[attempt],
     filters:{query:'',status:'all',dateFrom:null,dateTo:null,minScore:null,maxScore:null,integrity:'all',sort:'newest'},
     pagination:{page:1,pageCount:1,total:1},exportUrl:'/results/quizzes/'+id+'/export.csv',attempt,
-    paper:{revision:1,title:saved.title,mode:'assessment',description:'Original quiz definition.',instructions:''},policies:[],questions:[],events:[],timezone:'Asia/Tashkent'};
+    paper:{revision:1,title:saved.title,mode:'assessment',description:'Original quiz definition.'},policies:[],questions:[],events:[],timezone:'Asia/Tashkent'};
   if(page==='attempt') delete report.exportUrl;
   return {title:'Teacher workspace — EduTest',user:{display_name:'Sarah Williams',timezone:'Asia/Tashkent'},
     quizWorkspace:page!=='dashboard',builderHeader:page==='builder',quiz:saved,report,
@@ -69,7 +69,7 @@ const server = http.createServer(async (request, response) => {
         if(conflict) {conflict=false;response.writeHead(409,{'Content-Type':'application/json'}).end(JSON.stringify({error:{code:'version_conflict',message:'Fixture conflict',version:2},meta:{}}));return;}
         const input=JSON.parse(Buffer.concat(buffers).toString());
         if(saveDelay) await new Promise(resolve=>setTimeout(resolve,saveDelay));
-        saved={...input,version:saved.version+1,passcode:{configured:input.passcode.action==='set',action:'unchanged'}};
+        saved={...input,version:saved.version+1,hasPublished:true,hasUnpublishedChanges:true,passcode:{configured:input.passcode.action==='set',action:'unchanged'}};
         saved.questions.forEach((question,index)=>{question.id ||= String(500+index);question.options.forEach((option,optionIndex)=>{option.id ||= String(5000+index*50+optionIndex);});});
         saved.resultsAvailable=saved.mode==='assessment'; saved.resultsUrl=saved.resultsAvailable?'/results/quizzes/'+id:null;
       }
@@ -168,7 +168,7 @@ try {
     await until(()=>evaluate('!!document.querySelector(".builder-bar")'), 'builder');
     await noOverflow();
     assert.equal(await evaluate('!!document.querySelector(".teacher-topbar")'),false);
-    assert.equal(await evaluate('document.querySelector(".builder-actions button:nth-child(2)").getBoundingClientRect().height >= 38'),true);
+    assert.equal(await evaluate('document.querySelector(".builder-actions button").getBoundingClientRect().height >= 38'),true);
     assert.equal(await evaluate('document.querySelector(".builder-title a").getBoundingClientRect().width > 0'),true);
     await screenshot('builder-'+width);
     await navigate('/results/quizzes/'+id);
@@ -192,24 +192,21 @@ try {
   await until(()=>evaluate('document.querySelector(".quiz-card-grid").textContent.includes("No matching quizzes")'), 'empty list');
   await navigate('/quizzes/'+id+'/edit');
   await until(()=>evaluate('!!document.querySelector(".builder-bar")'), 'builder ready');
-  // Published edits do not autosave. Dirty navigation keeps its native warning.
+  // Published edits autosave, while navigation still warns during the debounce window.
   await evaluate('document.querySelector(".question-editor textarea").focus()');
   await command('Input.insertText',{text:'Updated question'});
-  await pause(1200);
-  assert.equal(writes,0);
   assert.equal(await evaluate('document.querySelector(".builder-title small").textContent'),'Unsaved changes');
   const dialogs=[];
   socket.addEventListener('message',event=>{const msg=JSON.parse(event.data);if(msg.method==='Page.javascriptDialogOpening'){dialogs.push(msg.params.type);command('Page.handleJavaScriptDialog',{accept:false}).catch(()=>{});}});
   await evaluate('document.querySelector(".builder-view-nav a:last-child").click()');
   await until(()=>dialogs.includes('beforeunload'),'dirty navigation warning');
   assert.equal(await evaluate('location.pathname'),'/quizzes/'+id+'/edit');
-  await evaluate('document.querySelector(".builder-actions button:nth-child(2)").click()');
-  await until(()=>evaluate('document.querySelector(".builder-title small").textContent.startsWith("Saved")'),'manual save');
+  await until(()=>writes===1,'published autosave');
+  await until(()=>evaluate('document.querySelector(".builder-title small").textContent.startsWith("Saved")'),'published autosave acknowledged');
   assert.equal(writes,1);
   conflict=true;
   await evaluate('document.querySelector(".question-editor textarea").focus()');
   await command('Input.insertText',{text:'Conflicting update'});
-  await evaluate('document.querySelector(".builder-actions button:nth-child(2)").click()');
   await until(()=>evaluate('!!document.querySelector("dialog[open]")'),'conflict dialog');
   await screenshot('conflict-mobile');
   await evaluate('document.querySelector("dialog[open] button").click()');
@@ -277,37 +274,36 @@ try {
   await evaluate('(async()=>{const input=document.querySelector(".quiz-details-dialog input:not([type=file])");input.value="Applied title";input.dispatchEvent(new Event("input",{bubbles:true}));document.querySelector(".quiz-details-dialog button[type=submit]").click()})()');
   await until(()=>evaluate('!document.querySelector(".quiz-details-dialog").open'),'apply dialog');
   assert.equal(writes,beforeDetails);assert.equal(coverWrites,0);
-  assert.equal(await evaluate('document.querySelector("[data-save-quiz]").classList.contains("btn-primary")'),true);
   await evaluate('document.querySelector(".builder-edit-title").click()');
   assert.equal(await evaluate('document.querySelector(".details-cover-preview").src'),blobUrl);
   await evaluate('document.querySelector(".quiz-details-dialog .dialog-actions button").click()');
   failCover=true;
-  await evaluate('document.querySelector("[data-save-quiz]").click()');
   await until(()=>evaluate('document.querySelector(".builder-notices").textContent.includes("cover change could not")'),'partial failure');
   assert.equal(writes,beforeDetails+1);assert.equal(coverWrites,1);
-  await evaluate('document.querySelector("[data-save-quiz]").click()');
-  await until(()=>evaluate('document.querySelector("[data-save-quiz]").textContent === "Saved"'),'cover retry');
+  await evaluate('[...document.querySelectorAll(".builder-notices button")].find(button=>button.textContent.trim()==="Retry").click()');
+  await until(()=>evaluate('document.querySelector(".builder-title small").textContent.startsWith("Saved")'),'cover retry');
   assert.equal(writes,beforeDetails+1);assert.equal(coverWrites,2);
   assert.equal(saved.title,'Applied title');
   // Delayed response may acknowledge old text but must not discard newer typing.
+  const beforeDelayed=writes;
   saveDelay=600;
   await evaluate('(async()=>{const input=document.querySelector(".question-editor textarea");input.value="Sent first";input.dispatchEvent(new Event("input",{bubbles:true}))})()');
-  await evaluate('document.querySelector("[data-save-quiz]").click()');
-  await until(()=>evaluate('document.querySelector("[data-save-quiz]").textContent === "Saving…"'),'saving button');
+  await until(()=>evaluate('document.querySelector(".builder-title small").textContent === "Saving…"'),'autosave in progress');
   await evaluate('(async()=>{const input=document.querySelector(".question-editor textarea");input.value="Typed during save";input.dispatchEvent(new Event("input",{bubbles:true}))})()');
-  await until(()=>evaluate('document.querySelector("[data-save-quiz]").textContent === "Save changes"'),'newer draft kept');
+  await until(()=>evaluate('document.querySelector(".builder-title small").textContent === "Unsaved changes"'),'newer draft kept');
   assert.equal(await evaluate('document.querySelector(".question-editor textarea").value'),'Typed during save');
-  saveDelay=0;await evaluate('document.querySelector("[data-save-quiz]").click()');
-  await until(()=>evaluate('document.querySelector("[data-save-quiz]").textContent === "Saved"'),'save newer draft');
+  saveDelay=0;
+  await until(()=>writes===beforeDelayed+2,'newer edit autosaved');
+  await until(()=>evaluate('document.querySelector(".builder-title small").textContent.startsWith("Saved")'),'newer autosave acknowledged');
   saved.status='draft';await navigate('/quizzes/'+id+'/edit');
   await until(()=>evaluate('document.querySelector(".builder-title small").textContent === "Draft loaded"'),'draft loaded');
   const beforeAutosave=writes;
   await evaluate('(async()=>{document.querySelector(".builder-edit-title").click();const input=document.querySelector(".quiz-details-dialog input:not([type=file])");input.value="Autosaved title";input.dispatchEvent(new Event("input",{bubbles:true}));document.querySelector(".quiz-details-dialog button[type=submit]").click()})()');
   await until(()=>writes===beforeAutosave+1,'draft autosave');
-  await until(()=>evaluate('document.querySelector("[data-save-quiz]").textContent === "Saved"'),'autosave acknowledged');
+  await until(()=>evaluate('document.querySelector(".builder-title small").textContent.startsWith("Saved")'),'autosave acknowledged');
   assert.equal(saved.title,'Autosaved title');
   assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({passed:true,widths:[1440,1024,850,768,390,320],checks:['actual PHP views','shared headers','empty states','dialog cancel/close/Escape/focus','account Escape','lifecycle menus','attempt review','response tables','conflict dialog','manual save','dirty navigation warning','Practice tabs','overflow','reduced motion','independent desktop scrolling','retained narrow panel scroll','keyboard panel scrolling','short viewports','staged title and cover','partial cover failure and retry','edits during save','draft autosave'],artifacts},null,2));
+  console.log(JSON.stringify({passed:true,widths:[1440,1024,850,768,390,320],checks:['actual PHP views','shared headers','empty states','dialog cancel/close/Escape/focus','account Escape','lifecycle menus','attempt review','response tables','conflict dialog','published autosave','dirty navigation warning','Practice tabs','overflow','reduced motion','independent desktop scrolling','retained narrow panel scroll','keyboard panel scrolling','short viewports','staged title and cover','partial cover failure and retry','edits during save','draft autosave'],artifacts},null,2));
 } catch(error) {
   console.error(JSON.stringify({error:error.message,errors,networkFailures,artifacts},null,2));
   if(socket) await screenshot('failure').catch(()=>{});

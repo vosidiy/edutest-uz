@@ -240,6 +240,15 @@ final class WorkspaceFeatureTest extends PlayerTestCase
             $response->assertSee('Responses');
             $response->assertDontSee('teacher-topbar');
             $response->assertDontSee('teacher-sidebar');
+            if (str_contains($url, '/edit')) {
+                $body = $response->response()->getBody();
+                $response->assertSee('text-secondary text-uppercase text-sm');
+                $this->assertStringContainsString('@click="preview = true"', $body);
+                $this->assertStringContainsString('@click="preview = false"', $body);
+                $response->assertDontSee('data-save-quiz');
+                $response->assertDontSee('preview-heading');
+                $response->assertDontSee('mode-badge');
+            }
         }
         $this->db->table('quizzes')->where('public_id', $quiz['publicId'])->update(['status' => 'archived']);
         foreach ([null, '2026-01-02 00:00:00'] as $deleted) {

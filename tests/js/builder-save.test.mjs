@@ -19,6 +19,7 @@ function fixture() {
   app.$refs = {conflictDialog:{open:false,showModal(){this.open=true;},close(){this.open=false;}},
     detailsDialog:{showModal(){},close(){}},editTitle:{focus(){}},detailsTitle:{focus(){}}};
   Object.entries(component.methods).forEach(([name,fn])=>{app[name]=fn.bind(app);});
+  app.scheduleAutosave=()=>{};
   Object.entries(component.computed).forEach(([name,fn])=>Object.defineProperty(app,name,{get:()=>fn.call(app)}));
   const quiz={publicId:'fixture',title:'Quiz',mode:'assessment',status:'published',version:1,revision:1,passcode:{configured:false,action:'unchanged'},
     questions:[{id:'1',type:'single_choice',content:'Question',explanation:'',textAnswers:[],media:null,
@@ -33,13 +34,13 @@ function response(payload) {
   return {data:{quiz}};
 }
 
-test('unchanged saves are disabled and never mutate; reverting restores Saved', async()=>{
+test('unchanged saves never mutate and reverting restores clean state', async()=>{
   const {app,setRequest}=fixture();let requests=0;setRequest(async()=>{requests++;});
-  assert.equal(app.saveButton.label,'saved');assert.equal(app.saveButton.disabled,true);
+  assert.equal(app.hasChanges,false);
   assert.equal(await app.save(true),true);assert.equal(requests,0);
   app.quiz.title='Changed';app.markDirty();
-  assert.equal(app.saveButton.primary,true);assert.equal(app.saveButton.label,'saveChanges');
-  app.quiz.title='Quiz';app.markDirty();assert.equal(app.saveButton.label,'saved');
+  assert.equal(app.hasChanges,true);assert.equal(app.saveState,'dirty');
+  app.quiz.title='Quiz';app.markDirty();assert.equal(app.hasChanges,false);assert.equal(app.saveState,'saved');
 });
 test('one save pipeline preserves newer text, passcodes, reorders, deletions and new row identities',async()=>{
   const {app,setRequest}=fixture(); const gate=deferred();let sent,requests=0;
@@ -47,7 +48,7 @@ test('one save pipeline preserves newer text, passcodes, reorders, deletions and
   setRequest((_url,options)=>{requests++;sent=JSON.parse(options.body);return gate.promise;});
   const original=app.quiz.questions[0], option=original.options[0];
   const saving=app.save(true);
-  assert.equal(app.save(true),saving);assert.equal(app.saveButton.label,'saving');assert.equal(requests,1);
+  assert.equal(app.save(true),saving);assert.equal(app.saveState,'saving');assert.equal(requests,1);
   app.quiz.title='Newer title';original.content='Newer question';option.content='Newer option';
   original.options.splice(1,1);
   app.quiz.questions.unshift({id:null,type:'short_text',content:'Added while saving',textAnswers:['new'],explanation:'',options:[]});
@@ -56,7 +57,7 @@ test('one save pipeline preserves newer text, passcodes, reorders, deletions and
   assert.equal(app.quiz.title,'Newer title');assert.equal(original.content,'Newer question');
   assert.equal(original.id,'100');assert.equal(option.id,'1000');assert.equal(option.content,'Newer option');
   assert.equal(original.options.length,1);assert.equal(app.quiz.questions[0].id,null);
-  assert.equal(app.passcodeValue,'new passcode');assert.equal(app.saveButton.label,'saveChanges');
+  assert.equal(app.passcodeValue,'new passcode');assert.equal(app.saveState,'dirty');
   setRequest(async(_url,options)=>response(JSON.parse(options.body)));
   assert.equal(await app.save(true),true);assert.equal(app.hasChanges,false);
 });
@@ -90,10 +91,10 @@ test('a newer cover applied during upload is not cleared by the old acknowledgem
 test('validation and conflict preserve local changes; conflict button reopens without writing',async()=>{
   const {app,setRequest}=fixture();app.quiz.title='Local';let calls=0;
   setRequest(async()=>{calls++;throw Object.assign(new Error('Conflict'),{code:'version_conflict',fields:{version:'7'}});});
-  assert.equal(await app.save(true),false);assert.equal(app.saveButton.label,'resolveConflict');
+  assert.equal(await app.save(true),false);assert.equal(app.saveState,'conflict');
   app.$refs.conflictDialog.close();await app.save(true);assert.equal(calls,1);assert.equal(app.$refs.conflictDialog.open,true);
   setRequest(async(url,options)=>{assert.match(url,/overwrite=1/);return response(JSON.parse(options.body));});
-  await app.overwriteConflict();assert.equal(app.saveButton.label,'saved');
+  await app.overwriteConflict();assert.equal(app.saveState,'saved');
   app.quiz.title='';setRequest(async()=>{throw Object.assign(new Error('Title required'),{status:422,fields:{title:'Required'}});});
   assert.equal(await app.save(true),false);assert.equal(app.saveState,'validation');assert.equal(app.quiz.title,'');
 });
@@ -144,5 +145,21 @@ test('publishing blocks overlapping writes and preserves edits made during its r
   gate.resolve({data:{quiz:server}});await publishing;
   assert.equal(app.quiz.status,'published');
   assert.equal(app.quiz.questions[0].content,'Edited during publish');
-  assert.equal(app.saveButton.label,'saveChanges');assert.equal(app.mediaBusy,false);
+  assert.equal(app.saveState,'dirty');assert.equal(app.mediaBusy,false);
+});
+
+test('publishing saves pending edits before activating the paper',async()=>{
+  const {app,setRequest}=fixture();const calls=[];
+  app.quiz.title='Latest saved title';app.markDirty();
+  setRequest(async(url,options)=>{
+    calls.push({url,method:options.method});
+    if(options.method==='PUT')return response(JSON.parse(options.body));
+    assert.equal(app.quiz.title,'Latest saved title');
+    const server=clone(app.quiz);server.hasPublished=true;server.hasUnpublishedChanges=false;server.version++;
+    return {data:{quiz:server}};
+  });
+  await app.lifecycle('publish');
+  assert.deepEqual(calls.map(call=>call.method),['PUT','POST']);
+  assert.match(calls[1].url,/\/publish$/);
+  assert.equal(app.hasChanges,false);
 });

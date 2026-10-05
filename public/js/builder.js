@@ -4,7 +4,7 @@
   const BuilderRules = Object.freeze({
     editable(quiz, passcodeValue = '') {
       if (!quiz) return '';
-      const fields = ['title', 'description', 'instructions', 'mode', 'listed', 'timeLimitMinutes', 'opensAtLocal', 'closesAtLocal',
+      const fields = ['title', 'description', 'mode', 'listed', 'timeLimitMinutes', 'opensAtLocal', 'closesAtLocal',
         'emailMode', 'phoneMode', 'shuffleQuestions', 'shuffleOptions', 'feedback', 'showScore', 'showAnswers', 'showExplain', 'cheatCheck'];
       const value = Object.fromEntries(fields.map(key => [key, quiz[key]]));
       value.passcode = {action: quiz.passcode?.action || 'unchanged', value: quiz.passcode?.action === 'set' ? passcodeValue : ''};
@@ -12,12 +12,7 @@
         textAnswers:q.textAnswers, options:q.options.map(o => ({id:o.id, content:o.content, isCorrect:o.isCorrect}))}));
       return JSON.stringify(value);
     },
-    saveButton(state, busy, dirty) {
-      if (busy) return {label:'saving', disabled:true, primary:false};
-      if (state === 'conflict') return {label:'resolveConflict', disabled:false, primary:true};
-      return {label:dirty ? 'saveChanges' : 'saved', disabled:!dirty, primary:dirty};
-    },
-    shouldAutosave(quiz) { return quiz?.status === 'draft'; },
+    shouldAutosave(quiz) { return ['draft', 'published', 'closed'].includes(quiz?.status); },
     modeTransition(currentMode, nextMode, confirmChange) {
       if (!['assessment', 'practice'].includes(nextMode) || nextMode === currentMode) {
         return {accepted: false, mode: currentMode, clearAssessmentSettings: false};
@@ -106,7 +101,6 @@
     computed: {
       editableFingerprint() { return BuilderRules.editable(this.quiz, this.passcodeValue); },
       hasChanges() { return !!this.quiz && (this.editableFingerprint !== this.savedFingerprint || this.pendingCover !== null); },
-      saveButton() { return BuilderRules.saveButton(this.saveState, this.saving || this.mediaBusy, this.hasChanges); },
       detailsCoverUrl() {
         if (this.detailsCover?.action === 'remove') return null;
         return this.detailsCover?.url || this.quiz?.cover?.url || null;
@@ -413,6 +407,7 @@
         if (!this.selectedQuestion || !window.confirm('Delete this question and its media?')) return;
         this.quiz.questions.splice(this.selectedIndex, 1);
         this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, this.quiz.questions.length - 1));
+        if (this.quiz.questions.length === 0) this.preview = false;
       },
       moveQuestion(direction) {
         const target = this.selectedIndex + direction;

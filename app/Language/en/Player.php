@@ -52,7 +52,6 @@ return [
         'access' => 'Access',
         'passcode' => 'Passcode',
         'privateLink' => 'Share link',
-        'instructions' => 'Before you begin',
         'name' => 'Your name',
         'email' => 'Email',
         'phone' => 'Phone',

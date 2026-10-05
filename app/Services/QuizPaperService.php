@@ -160,7 +160,7 @@ final class QuizPaperService
         }
         return [
             'title' => (string) $quiz['title'], 'description' => (string) $quiz['description'],
-            'instructions' => (string) $quiz['instructions'], 'shareToken' => (string) $quiz['shareToken'],
+            'shareToken' => (string) $quiz['shareToken'],
             'settings' => $settings, 'cover' => $this->paperMedia($paper, $quiz['cover'] ?? null),
             'questions' => $questions,
         ];
@@ -231,7 +231,7 @@ final class QuizPaperService
             'schemaVersion' => self::SCHEMA_VERSION,
             'quiz' => [
                 'title' => (string) $quiz['title'], 'description' => (string) $quiz['description'],
-                'instructions' => (string) $quiz['instructions'], 'shareToken' => (string) $quiz['share_token'],
+                'shareToken' => (string) $quiz['share_token'],
                 'mode' => (string) $quiz['mode'],
                 'cover' => $this->storedMedia(($quiz['cover_src'] ?? null) === null ? null : 'image', $quiz['cover_src'] ?? null),
                 'timeLimitSec' => $quiz['time_limit_sec'] === null ? null : (int) $quiz['time_limit_sec'],

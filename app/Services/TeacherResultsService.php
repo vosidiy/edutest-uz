@@ -251,7 +251,6 @@ final class TeacherResultsService
                 'mode' => (string) ($paperQuiz['mode'] ?? 'assessment'),
                 'title' => trim((string) ($paperQuiz['title'] ?? '')) !== '' ? (string) $paperQuiz['title'] : lang('Results.untitledQuiz'),
                 'description' => (string) ($paperQuiz['description'] ?? ''),
-                'instructions' => (string) ($paperQuiz['instructions'] ?? ''),
             ],
             'policies' => $this->policySummary($settings, $definition['quiz'], $timezone),
             'questions' => $questionReviews,

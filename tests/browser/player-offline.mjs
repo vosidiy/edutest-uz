@@ -15,7 +15,7 @@ const token = 'a'.repeat(64);
 let mode = 'assessment', feedback = 'after_each', visibility = true, integrity = true, timerSeconds = 600, official = null, forceConflict = false, loseStartResponse = false, starts = 0;
 const requests = [];
 const quiz = () => ({title: 'A little curiosity goes a long way', description: 'Explore geography in three quick questions. Take your time, trust what you know, and learn something new.',
-  instructions: 'Choose your answer, then submit it. You cannot return to a submitted question.', teacher: 'Sarah Williams', questionCount: 3, timeLimitMinutes: timerSeconds === null ? null : String(timerSeconds / 60),
+  teacher: 'Sarah Williams', questionCount: 3, timeLimitMinutes: timerSeconds === null ? null : String(timerSeconds / 60),
   opensAt: null, closesAt: null, passcodeRequired: false, availability: 'available', shareToken: token, emailMode: 'optional', phoneMode: 'hidden', cheatCheck: integrity, cover: null, mode});
 const questions = () => [
   {id: '9007199254740993', type: 'single_choice', content: 'What is the capital of France?', media: null, explanation: 'Paris has been the political and cultural centre of France for centuries.', acceptedAnswers: [], correctCodes: ['paris'],

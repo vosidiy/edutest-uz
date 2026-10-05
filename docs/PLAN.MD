@@ -20,7 +20,7 @@ Teachers register with email/password, may provide a phone number, manage a publ
 
 Teachers can create, edit, duplicate, publish, close, archive, and soft-delete quizzes. New quizzes receive a nine-digit share code and may optionally appear on the teacher's public page. A share code is a convenient locator rather than an access-control secret; teachers should configure a passcode when assessment access must be restricted.
 
-Quiz settings include title, description, instructions, an optional cover image, mode, availability dates, an optional total timer entered in half-minute increments, shuffle options, feedback timing, and result visibility. Assessments may also require a passcode and collect email or phone.
+Quiz settings include title, description, an optional cover image, mode, availability dates, an optional total timer entered in half-minute increments, shuffle options, feedback timing, and result visibility. Assessments may also require a passcode and collect email or phone.
 
 The teacher home is one centered dashboard with a logo/account header and a paginated product-card quiz library. The MVP filters by status and mode, sorts by updated date, creation date, title, or finalized attempts, and keeps lifecycle actions on each card. All non-deleted quizzes, including archived quizzes, appear by default; Trash is an explicit status filter. Cards show finalized assessment attempts and aggregate Practice starts without workspace-wide summary metrics, title search, or report-eligibility filtering. Login and registration open this dashboard; old library and Results-overview links redirect there.
 

@@ -2,21 +2,46 @@
 
 <?= $this->section('content') ?>
 <?= $this->include('teacher/partials/quiz_header') ?>
-<header class="page-header results-page-header">
-    <div>
-        <p class="eyebrow"><?= esc(lang('Workspace.responsesHeading')) ?></p>
-        <div class="results-title-line"><h1><?= esc($report['quiz']['title']) ?></h1><span class="badge <?= esc($report['quiz']['currentMode'], 'attr') ?>"><?= esc(lang('Results.currentMode')) ?>: <?= esc(ucfirst($report['quiz']['currentMode'])) ?></span><span class="badge status <?= esc($report['quiz']['status'], 'attr') ?>"><?= esc(ucfirst($report['quiz']['status'])) ?></span></div>
-        <p>Finalized totals and saved work in progress. <?= esc(lang('Results.revisionRetentionNotice')) ?></p>
-    </div>
-</header>
-<p class="alert alert-warning"><?= esc(lang('Results.progressNotice')) ?> <?= esc(lang('Results.abandonedNotice')) ?></p>
 
-<div class="content-area results-workspace">
+<div class="container">
+
+    <header class="card mt-5 mb-5 p-4 page-header">
+
+        <div>
+             <h2 class="mb-2"><?= esc($report['quiz']['title']) ?></h2>
+        </div>
+        
+        <p>
+            <span class="badge mr-2 status <?= esc($report['quiz']['status'], 'attr') ?>"><?= esc(ucfirst($report['quiz']['status'])) ?></span>    
+            <?= esc(lang('Results.currentMode')) ?>: <?= esc(ucfirst($report['quiz']['currentMode'])) ?>
+        </p>
+                   
+        <hr>
+        <p>Finalized totals and saved work in progress. <?= esc(lang('Results.revisionRetentionNotice')) ?></p>
+
+    </header>
+
+    <p class="alert alert-warning"><?= esc(lang('Results.progressNotice')) ?> <?= esc(lang('Results.abandonedNotice')) ?></p>
+
+
     <?php $metrics = $report['metrics']; ?>
     <section class="metrics results-metrics" aria-label="Quiz result summary">
-        <article class="card metric"><span><?= esc(lang('Results.finalizedAttempts')) ?></span><strong><?= esc((string) $metrics['finalizedAttempts']) ?></strong><small>Completed or abandoned</small></article>
-        <article class="card metric"><span><?= esc(lang('Results.inProgressAttempts')) ?></span><strong><?= esc((string) $metrics['inProgressAttempts']) ?></strong><small>Saved, not finalized</small></article>
-        <article class="card metric"><span><?= esc(lang('Results.averageScore')) ?></span><strong><?= $metrics['averagePercent'] === null ? '—' : esc($metrics['averagePercent']) . '%' ?></strong><small><?= $metrics['averagePercent'] === null ? esc(lang('Results.noScore')) : 'Finalized attempts' ?></small></article>
+        <article class="card p-3 metric">
+            <p><?= esc(lang('Results.finalizedAttempts')) ?></p>
+            <p class="text-secondary">Completed or abandoned</p>
+            <strong class="num"><?= esc((string) $metrics['finalizedAttempts']) ?></strong>
+        </article>
+        <article class="card p-3 metric">
+            <p><?= esc(lang('Results.inProgressAttempts')) ?></p>
+            <p class="text-secondary">Saved, not finalized</p>
+            <strong class="num"><?= esc((string) $metrics['inProgressAttempts']) ?></strong>
+        </article>
+        <article class="card p-3 metric">
+            <p><?= esc(lang('Results.averageScore')) ?></p>
+            <p  class="text-secondary"><?= $metrics['averagePercent'] === null ? esc(lang('Results.noScore')) : 'Finalized attempts' ?></p>
+            <strong class="num"><?= $metrics['averagePercent'] === null ? '—' : esc($metrics['averagePercent']) . '%' ?>
+            </strong>
+        </article>
     </section>
 
     <form class="card attempt-filters" method="get">

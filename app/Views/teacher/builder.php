@@ -35,14 +35,31 @@
             </aside>
 
             <section id="builder-editor" class="editor-canvas" ref="editorPanel" tabindex="0" aria-label="<?= esc(lang('EduTest.builder.workspace.editor'), 'attr') ?>">
-                <div class="builder-notices">
-                    <p v-if="(quiz.status === 'draft' || quiz.hasUnpublishedChanges) && !publishReady" id="publish-readiness" class="builder-publish-readiness" role="status">{{ publishReadinessMessage }}</p>
-                    <div v-if="quiz.hasPublished" class="alert alert-primary builder-banner"><?= esc(lang('EduTest.builder.publishedWorkingCopyNotice')) ?></div>
+                <div class="builder-notices mb-3">
+                    
+                    <p v-if="(quiz.status === 'draft' || quiz.hasUnpublishedChanges) && !publishReady" id="publish-readiness" class="alert alert-warning pt-1 pb-1 pl-2" role="status">{{ publishReadinessMessage }}</p>
+                    
+                    <div v-if="quiz.hasPublished" class="alert alert-info builder-banner"><?= esc(lang('EduTest.builder.publishedWorkingCopyNotice')) ?></div>
+
                     <div v-if="quiz.mediaLimits.serverBytes < quiz.mediaLimits.audioBytes" class="alert alert-warning builder-banner">The current PHP upload limit is {{ formatBytes(quiz.mediaLimits.serverBytes) }}. Raise <code>upload_max_filesize</code> and <code>post_max_size</code> above 20 MiB to accept the full supported audio size.</div>
-                    <div v-if="globalError" class="alert alert-danger builder-banner" role="alert">{{ globalError }} <button class="btn btn-link btn-sm" v-if="saveState === 'retry'" @click="save(true)">Retry</button></div>
+
+                    <div v-if="globalError" class="alert alert-danger builder-banner" role="alert">{{ globalError }} <button class="btn btn-link btn-sm" v-if="saveState === 'retry'" @click="save(true)">Retry</button><button class="btn btn-link btn-sm" v-if="saveState === 'conflict'" @click="openConflict">Resolve conflict</button>
+                    </div>
                 </div>
                 <section v-if="preview" class="card preview-paper">
-                    <div class="preview-heading"><span class="badge badge-primary-subtle mode-badge">{{ typeLabel(selectedQuestion?.type || '') }}</span><span>Question {{ selectedIndex + 1 }} of {{ quiz.questions.length }}</span></div>
+                    <div class="editor-paper-head">
+                        <span class="text-secondary text-uppercase text-sm">Question {{ selectedIndex + 1 }} of {{ quiz.questions.length }}</span>
+                        <div>
+                            <button class="btn btn-default btn-sm btn-icon" type="button" @click="moveQuestion(-1)" :disabled="selectedIndex===0" aria-label="Move question up">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-big-up preview-icon"><path d="M9 19a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-6a1 1 0 0 1 1-1h3.293a.707.707 0 0 0 .5-1.207l-7.086-7.086a1 1 0 0 0-1.414 0l-7.086 7.086a.707.707 0 0 0 .5 1.207H8a1 1 0 0 1 1 1z"/></svg>
+                            </button>
+                            <button class="btn btn-default btn-sm btn-icon" type="button" @click="moveQuestion(1)" :disabled="selectedIndex===quiz.questions.length-1" aria-label="Move question down">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-big-down preview-icon"><path d="M9 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v6a1 1 0 0 0 1 1h3.293a.707.707 0 0 1 .5 1.207l-7.086 7.086a1 1 0 0 1-1.414 0l-7.086-7.086a.707.707 0 0 1 .5-1.207H8a1 1 0 0 0 1-1z"/></svg>
+                            </button>
+                            <button class="btn btn-red-subtle btn-sm" type="button" @click="removeQuestion">Delete</button>
+                            <button class="btn btn-neutral btn-sm" type="button" @click="preview = false">Edit</button>
+                        </div>
+                    </div>
                     <template v-if="selectedQuestion">
                         <h1>{{ selectedQuestion.content || 'Untitled question' }}</h1>
                         <media-preview :media="selectedQuestion.media"></media-preview>
@@ -67,6 +84,7 @@
                             </button>
                             
                             <button class="btn btn-red-subtle btn-sm" type="button" @click="removeQuestion">Delete</button>
+                            <button class="btn btn-neutral btn-sm" type="button" @click="preview = true">Preview</button>
                         </div>
                     
                     </div>
@@ -142,6 +160,7 @@
                                     </button>
                                 </div>
                                 <media-preview :media="option.media"></media-preview>
+                                
                                 <label class="form-check answer-correct-row"><input :type="selectedQuestion.type === 'single_choice' ? 'radio' : 'checkbox'" :name="`correct-answer-${selectedIndex}`" :checked="option.isCorrect" @change="setCorrect(index,$event.target.checked)"><span>Mark as correct</span></label>
                             </div>
                             <button class="btn btn-neutral w-full" type="button" @click="addOption">
@@ -165,11 +184,7 @@
                     <details open>
                         <summary>Details</summary>
                         <div class="setting-group">
-                            <label class="form-field"><span class="form-label">Description</span><textarea placeholder="About quiz or instructions" class="form-control" v-model="quiz.description" rows="3"></textarea>
-                            </label>
-                            
-                            <label class="form-field"><span class="form-label">Instructions</span>
-                                <textarea class="form-control" v-model="quiz.instructions" rows="3"></textarea>
+                            <label class="form-field"><span class="form-label">Description</span><textarea placeholder="About quiz" class="form-control" v-model="quiz.description" rows="3"></textarea>
                             </label>
                             
                             <label class="form-field"><span class="form-label">Mode</span>

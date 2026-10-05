@@ -11,7 +11,7 @@ $profileErrors = session('profileErrors') ?? [];
 $passwordErrors = session('passwordErrors') ?? [];
 ?>
 <div class="account-page">
-    <header class="page-header">
+    <header>
         <div>
             <p class="eyebrow"><?= esc(lang('Workspace.accountPage.eyebrow')) ?></p>
             <h1><?= esc(lang('Workspace.myAccount')) ?></h1>

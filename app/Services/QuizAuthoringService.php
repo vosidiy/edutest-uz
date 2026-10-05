@@ -57,7 +57,6 @@ final class QuizAuthoringService
             'listed'            => 0,
             'title'             => $title,
             'description'       => '',
-            'instructions'      => '',
             'revision'          => 1,
             'version'           => 1,
             'current_paper_id'  => null,
@@ -286,7 +285,7 @@ final class QuizAuthoringService
         $this->db->transBegin();
         try {
             $settings = [
-                'description', 'instructions', 'time_limit_sec', 'opens_at', 'closes_at',
+                'description', 'time_limit_sec', 'opens_at', 'closes_at',
                 'passcode_hash', 'email_mode', 'phone_mode', 'shuffle_questions',
                 'shuffle_options', 'feedback', 'show_score', 'show_answers', 'show_explain',
                 'cheat_check',
@@ -400,7 +399,6 @@ final class QuizAuthoringService
         return [
             'title'            => (string) $published['title'],
             'description'      => (string) $published['description'],
-            'instructions'     => (string) $published['instructions'],
             'mode'             => (string) $published['mode'],
             'status'           => (string) $row['status'],
             'teacher'          => (string) $row['display_name'],
@@ -432,7 +430,6 @@ final class QuizAuthoringService
 
         $title = $this->text($payload, 'title', 200, $fields);
         $description = $this->text($payload, 'description', 65535, $fields);
-        $instructions = $this->text($payload, 'instructions', 65535, $fields);
         $timeLimit = $this->minutesToSeconds($payload['timeLimitMinutes'] ?? null, 'timeLimitMinutes', $fields);
         $timezone = $this->userTimezone((int) $quiz['user_id']);
         $opensAt  = $this->localDate($payload['opensAtLocal'] ?? null, $timezone, 'opensAtLocal', $fields);
@@ -490,7 +487,6 @@ final class QuizAuthoringService
                 'listed'            => $this->bool($payload['listed'] ?? false) ? 1 : 0,
                 'title'             => $title,
                 'description'       => $description,
-                'instructions'      => $instructions,
                 'time_limit_sec'    => $timeLimit,
                 'opens_at'          => $opensAt,
                 'closes_at'         => $closesAt,
@@ -867,7 +863,6 @@ final class QuizAuthoringService
             'listed'           => (bool) $quiz['listed'],
             'title'            => (string) $quiz['title'],
             'description'      => (string) $quiz['description'],
-            'instructions'     => (string) $quiz['instructions'],
             'cover'            => $this->media?->descriptor(($quiz['cover_src'] ?? null) === null ? null : 'image', $quiz['cover_src'] ?? null, 'cover', (int) $quiz['id']),
             'timeLimitMinutes' => $this->minutesFromSeconds($quiz['time_limit_sec']),
             'timezone'         => $timezone,
@@ -1113,7 +1108,7 @@ final class QuizAuthoringService
     {
         $definition = [];
         foreach ([
-            'title', 'description', 'instructions', 'mode', 'cover_src', 'time_limit_sec',
+            'title', 'description', 'mode', 'cover_src', 'time_limit_sec',
             'opens_at', 'closes_at', 'email_mode', 'phone_mode', 'shuffle_questions',
             'shuffle_options', 'feedback', 'show_score', 'show_answers', 'show_explain', 'cheat_check',
         ] as $field) {

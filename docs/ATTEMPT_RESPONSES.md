@@ -4,7 +4,7 @@ The filename is retained for existing documentation links, but assessment answer
 
 ## Ownership of data
 
-- `quiz_papers` stores immutable paper schema version 3: published quiz metadata, settings, questions, answer keys, explanations, and private media references. A paper is shared by all starts that receive that published revision.
+- `quiz_papers` stores immutable paper schema version 3: published quiz metadata, settings, questions, answer keys, explanations, and private media references. New papers omit the removed instructions property; older papers may retain it as ignored immutable data. A paper is shared by all starts that receive that published revision.
 - `attempts` stores searchable run-level data: the paper, public identifier, hashed bearer credential, retry key, shuffle seed, disclosed identity, IP/browser details, lifecycle, authoritative deadline, integer score, and percentage.
 - `attempt_answers` stores presented order and the student's confirmed answer. It has no foreign key to mutable live questions; `question_id` is interpreted against the attempt's bound paper.
 - Practice stores no individual attempt or answer rows.

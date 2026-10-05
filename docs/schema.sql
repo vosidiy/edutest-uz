@@ -1,6 +1,6 @@
 -- EduTest canonical application schema
 -- Target: MySQL 8.4, InnoDB, utf8mb4
--- Last updated: 2026-10-02
+-- Last updated: 2026-10-05
 --
 -- Fresh-install use in phpMyAdmin:
 --   1. Select the intended empty database.
@@ -51,7 +51,6 @@ CREATE TABLE quizzes (
   listed TINYINT(1) NOT NULL DEFAULT 0,
   title VARCHAR(200) NOT NULL,
   description TEXT NOT NULL,
-  instructions TEXT NOT NULL,
   cover_src VARCHAR(1000) NULL,
   revision INT UNSIGNED NOT NULL DEFAULT 1,
   version INT UNSIGNED NOT NULL DEFAULT 1,

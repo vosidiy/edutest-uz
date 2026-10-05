@@ -264,9 +264,6 @@ summary { cursor: pointer; user-select: none; }
 .player-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; padding: 24px 0; margin: 24px 0; border-block: 1px solid var(--border-color-default); }
 .player-facts dt { color: var(--neutral-500); font-size: .85rem; margin-bottom: 7px; }
 .player-facts dd { margin: 0; font-weight: 650; }
-.player-instructions { background: var(--neutral-50); padding: 20px; border-radius: var(--border-radius-lg); margin: 24px 0; }
-.player-instructions h2 { font-size: 1.1rem; margin-top: 0; }
-.player-instructions p { margin-bottom: 0; line-height: 1.7; overflow-wrap: anywhere; }
 .player-admission { display: grid; gap: 18px; margin-top: 28px; }
 .student-page .form-control { min-height: 46px; }
 .player-start { width: 100%; min-height: 56px; font-size: 1.1rem; margin-top: 6px; }

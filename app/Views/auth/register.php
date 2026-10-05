@@ -2,7 +2,7 @@
 
 <?= $this->section('content') ?>
 <?php $values = $old ?? session('old') ?? []; ?>
-<h2 class="mb-3">Create new account</h2>
+<h4 class="mb-3">Create new account</h4>
 
 <form id="registerForm" action="<?= site_url('register') ?>" method="post">
     <?= csrf_field() ?>
