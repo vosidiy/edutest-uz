@@ -1,6 +1,7 @@
-# EduTest agent guide
+# 123test (Edutest) agent guide
 
-EduTest is a CodeIgniter 4 quiz platform in early development. Keep changes aligned with the documented product plan, architecture, and database schema.
+123test is new name. Previously Edutest (we changed only brand / logo. but keep old name in code).
+123test is a CodeIgniter 4 quiz platform in early development. Keep changes aligned with the documented product plan, architecture, and database schema.
 
 ## Read before changing the project
 

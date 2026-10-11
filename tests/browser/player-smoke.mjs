@@ -165,7 +165,7 @@ try {
   await evaluate('window.dispatchEvent(new Event("online"))');
   await until(() => evaluate('document.querySelector(".player-results-header").textContent.includes("Result confirmed")'), 'online confirmation');
   assert.equal(await evaluate('document.querySelector(".player-score").textContent'), '100.00%'); await screenshot('results-mobile');
-  assert.equal(await evaluate('document.querySelector(".player-results-header").textContent.includes("3 / 3 questions")'), true);
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".player-result-stat")].map(node => node.textContent.trim())'), ['✅Correct3/3','❌Wrong0/3','➖Unanswered0/3']);
   assert.equal(starts, 1);
   // Anonymous at-end mode with every result-visibility toggle off.
   await evaluate('localStorage.clear()'); official = null; mode = 'practice'; feedback = 'at_end'; visibility = false; integrity = false;
@@ -225,7 +225,7 @@ try {
   await navigate(); await startQuiz();
   assert.equal(await evaluate('document.querySelector("#player-alert").textContent.includes("storage")'), true);
   await clickText('Skip question'); await clickText('Next question');
-  assert.equal(await evaluate('document.querySelector(".player-question-number").textContent'), 'Question 2 of 3');
+  assert.equal(await evaluate('document.querySelector("#player-header-progress").textContent'), 'Question 2 of 3');
   await command('Page.removeScriptToEvaluateOnNewDocument', {identifier: storageScript.identifier});
   // Two real Chrome tabs: one active run per quiz, including offline finalization.
   const primarySession=sessionId;

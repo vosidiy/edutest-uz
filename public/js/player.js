@@ -2,6 +2,7 @@ import {grade, normalize, summarize} from './player-scoring.js?v=4';
 import {createState, PlayerClock, editAnswer, submitAnswer, nextQuestion, finishTimed, quitQuiz, deadlines, visibleDeadlines, hasPending, hasUploadPending, uniqueKey, isFullscreenExit, recordActivity, receiptOnly} from './player-state.js?v=5';
 import {PlayerSync} from './player-sync.js?v=5';
 import {PlayerTabGuard} from './player-tab-guard.js';
+import {completionEmoji, resultCounts} from './player-presentation.js?v=1';
 
 const config = JSON.parse(document.querySelector('#player-config').textContent);
 const ui = config.ui;
@@ -10,6 +11,11 @@ const status = document.querySelector('#player-status');
 const alert = document.querySelector('#player-alert');
 const intro = document.querySelector('#quiz-introduction');
 const announcer = document.querySelector('#player-announcer');
+const headerContext = document.querySelector('#player-header-context');
+const headerMode = document.querySelector('#player-header-mode');
+const headerSeparator = document.querySelector('#player-header-separator');
+const headerProgress = document.querySelector('#player-header-progress');
+const headerQuit = document.querySelector('#player-header-quit');
 const storageKey = `edutest:player:${config.shareToken}`;
 const tabGuard = new PlayerTabGuard(config.shareToken);
 let pageActive = true, pageGeneration = 0, runActive = false, resumeOnReturn = false;
@@ -133,6 +139,23 @@ const worker = new PlayerSync(() => state, request, {
 });
 
 function canRun() { return pageActive && runActive && tabGuard.allowed && !blockedRetry; }
+function updateHeader() {
+  const contextual = Boolean(state && runActive && !blockedRetry);
+  headerContext.hidden = !contextual;
+  if (!contextual) {
+    headerSeparator.hidden = true;
+    headerProgress.hidden = true;
+    headerQuit.hidden = true;
+    return;
+  }
+  headerMode.textContent = t(state.mode);
+  const answering = !state.finishReason;
+  headerSeparator.hidden = !answering;
+  headerProgress.hidden = !answering;
+  headerProgress.textContent = answering ? t('questionOf', {number: state.index + 1, total: state.items.length}) : '';
+  headerQuit.hidden = !answering;
+  headerQuit.disabled = answering && !canRun();
+}
 function needsOwnership() { return startReservation || state?.practiceRetry?.needsRecovery || (state && (!state.finishReason || hasPending(state))); }
 function releaseCompleted() {
   if (state?.finishReason && !needsOwnership() && !worker.busy && !mediaBusy && !starting) tabGuard.release();
@@ -147,6 +170,7 @@ function showBlocked() {
   panel.append(node('p', '', t('tabBlocked')), button(t('retry'), () => blockedRetry?.(), 'btn-primary'));
   root.replaceChildren(panel);
   status.replaceChildren(); statusSignature = '';
+  updateHeader();
   root.focus({preventScroll:true});
   root.scrollIntoView({block:'start', behavior:'instant'});
 }
@@ -165,7 +189,7 @@ function updateStatus() {
   releaseCompleted();
   if (!state || blockedRetry || !runActive) return;
   const uploadPending = hasUploadPending(state);
-  let label = state.mode === 'practice' ? t('practiceNotice') : uploadPending && worker.busy ? t(connectionLost ? 'reconnecting' : 'saving') : uploadPending ? t('pending') : t('saved');
+  let label = state.mode === 'practice' ? t('practiceStatus') : uploadPending && worker.busy ? t(connectionLost ? 'reconnecting' : 'saving') : uploadPending ? t('pending') : t('saved');
   const retryVisible = state.mode === 'assessment' && !worker.busy && (uploadPending || lastError);
   const signature = `${label}:${retryVisible}`;
   if (signature === statusSignature) { showAlert(); return; }
@@ -198,6 +222,7 @@ async function activate(refresh = true, explicitResume = false) {
 function showLegacy() {
   worker.stop();
   if (intro) intro.hidden = true;
+  runActive = false; updateHeader();
   const box = node('section', 'card player-error');
   box.append(node('p', '', t('legacyProgress')));
   // Keep the original storage value available for support/review; never invent occurrence times.
@@ -210,6 +235,7 @@ function showLegacy() {
   root.replaceChildren(box);
 }
 function missing() {
+  runActive = false; updateHeader();
   root.replaceChildren(node('p', 'card player-error', t('missingState')));
   const link = node('a', 'btn btn-primary', t('introduction')); link.href = config.quizUrl; root.append(link);
 }
@@ -337,6 +363,7 @@ function quit() {
   quitQuiz(state, clock.now());
   persist(); changed(true); render(); tick();
 }
+headerQuit.addEventListener('click', quit);
 
 function startAnotherAssessment() {
   if (!state || state.mode !== 'assessment' || !state.result?.confirmed || hasPending(state)) return;
@@ -349,6 +376,7 @@ function render() {
   renderedPhase = viewSignature();
   root.replaceChildren();
   history.replaceState(null, '', `${config.quizUrl}/${state.finishReason ? 'results' : 'play'}`);
+  updateHeader();
   if (state.finishReason) renderResults(); else renderQuestion();
   updateStatus();
   root.querySelector('h1, h2')?.focus({preventScroll: true});
@@ -372,7 +400,6 @@ function renderQuestion() {
   if (state.mode === 'assessment' && state.quiz.settings.cheatCheck) timers.append(fullscreenControl());
   const progress = node('progress', 'player-progress'); progress.max = state.items.length; progress.value = state.items.filter(row => row.status === 'locked').length; progress.setAttribute('aria-label', t('progress')); root.append(progress);
   const paper = node('section', 'card player-question');
-  paper.append(node('span', 'player-question-number', t('questionOf', {number: state.index + 1, total: state.items.length})));
   const heading = node('h2', '', question.content); heading.tabIndex = -1; heading.id = 'current-question'; paper.append(heading); paper.setAttribute('aria-labelledby', heading.id);
   appendMedia(paper, `q:${question.id}`, question.media);
   const form = node('form');
@@ -408,15 +435,14 @@ function renderQuestion() {
   form.append(answers);
   form.addEventListener('submit', event => { event.preventDefault(); if (valid()) submit(); });
   if (item.status !== 'locked') {
-    const actions = node('div', 'player-actions'); actions.append(button(t('skip'), () => submit('skipped'), 'btn-default'), submitButton, button(t('quitAction'), quit, 'btn-link danger')); form.append(actions);
+    const actions = node('div', 'player-actions'); actions.append(button(t('skip'), () => submit('skipped'), 'btn-default'), submitButton); form.append(actions);
   }
   paper.append(form);
   if (item.status === 'locked') {
     if (state.quiz.settings.feedback === 'after_each' && !receiptOnly(state.quiz.settings)) paper.append(feedback(question, item, grade(question, item)));
-    const actions = node('div', 'player-actions'); actions.append(button(t(state.index === state.items.length - 1 ? 'finish' : 'next'), next, 'btn-primary btn-lg'), button(t('quitAction'), quit, 'btn-link danger')); paper.append(actions);
+    const actions = node('div', 'player-actions'); actions.append(button(t(state.index === state.items.length - 1 ? 'finish' : 'next'), next, 'btn-primary btn-lg')); paper.append(actions);
   }
   root.append(paper);
-  const help = node('p', 'player-help', t('questionHint')); root.append(help);
 }
 
 function answerText(question, item) {
@@ -445,15 +471,35 @@ function feedback(question, item, result) {
   return box;
 }
 
+function resultStat(icon, label, value, total, variant) {
+  const item = node('div', `player-result-stat ${variant}`);
+  const symbol = node('span', 'player-result-stat-icon', icon); symbol.setAttribute('aria-hidden', 'true');
+  const copy = node('span', 'player-result-stat-copy');
+  copy.append(node('span', 'player-result-stat-label', label), node('strong', '', `${value}/${total}`));
+  item.append(symbol, copy);
+  return item;
+}
+
 function renderResults() {
   const local = summarize(state.quiz.questions, state.items);
   const result = state.result || local;
   const card = node('section', 'card player-results-header');
-  const icon = node('span', 'player-completion-icon', '✓'); icon.setAttribute('aria-hidden', 'true'); card.append(icon);
-  const heading = node('h1', '', t(state.finishReason === 'quit' ? 'quitComplete' : 'complete')); heading.tabIndex = -1; card.append(heading, node('p', '', state.quiz.title));
+  const scoreVisible = Boolean(state.quiz.settings.showScore && result.percent !== undefined);
+  const icon = node('span', 'player-completion-icon', scoreVisible ? completionEmoji(result.percent) : '🎉'); icon.setAttribute('aria-hidden', 'true'); card.append(icon);
+  const heading = node('h2', '', t(state.finishReason === 'quit' ? 'quitComplete' : 'complete')); heading.tabIndex = -1; card.append(heading, node('p', 'player-result-title', state.quiz.title));
   if (state.mode === 'assessment' && state.student?.name) card.append(node('p', 'player-student-identity', state.student.email ? `${state.student.name} · ${state.student.email}` : state.student.name));
-  if (state.quiz.settings.showScore) card.append(node('div', 'player-score', `${result.percent}%`), node('p', '', `${result.score} / ${result.maxScore} ${t('questionsScore')}`));
-  else card.append(node('p', '', t('hiddenScore')));
+  if (scoreVisible) {
+    const parsedTotal = Number(result.maxScore);
+    const total = Number.isFinite(parsedTotal) ? parsedTotal : state.quiz.questions.length;
+    const counts = resultCounts(result.items, total);
+    const stats = node('div', 'player-result-stats');
+    stats.append(
+      resultStat('', t('resultCorrect'), counts.correct, total, 'correct'),
+      resultStat('', t('resultWrong'), counts.wrong, total, 'wrong'),
+      resultStat('', t('resultUnanswered'), counts.unanswered, total, 'unanswered'),
+    );
+    card.append(node('div', 'player-score', `${result.percent}%`), stats);
+  } else card.append(node('p', 'player-hidden-score', t('hiddenScore')));
   card.append(node('p', 'player-help', t(state.mode === 'practice' ? 'practiceResult' : state.result ? 'confirmed' : 'provisional')));
   if (state.result && state.quiz.settings.showScore && state.result.score !== local.score) card.append(node('p', 'alert alert-warning', t('scoreChanged')));
   if (state.finishReason !== 'completed') card.append(node('p', '', t(state.finishReason)));

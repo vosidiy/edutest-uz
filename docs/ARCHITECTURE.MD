@@ -245,6 +245,8 @@ Server-rendered PHP is the default. Pages share accessible layouts, navigation, 
 
 The teacher workspace keeps its light-theme design system in `public/css/teacher.css`: tokens, reset, accessibility utilities, and reusable components. Authentication pages reuse this versioned stylesheet and its form, button, card, alert, layout, and accessibility primitives beneath a minimal landing-style 123test header. Student introduction, player, and results pages load only `public/css/player.css`, which contains their own light-theme tokens, reset, accessibility utilities, components, and responsive layouts; it does not load or import teacher styles. Public CSS, JavaScript, fonts, and images live directly under the matching top-level directories in `public/`; the pinned Vue production build lives at `public/js/vue.global.prod.js`. Student player CSS and JavaScript URLs include the file modification version so browser caches refresh after deployed player changes. Hosted video iframes opt into origin-only cross-origin referrers so YouTube/Vimeo embeds work while player APIs and signed media fetches remain no-referrer. The Uzbek marketing landing has independent, versioned CSS/JavaScript, self-hosted Inter fonts, and public presentation images; its account actions send authenticated teachers directly to the dashboard. Framework error pages retain independent styling. Student state/scoring/synchronization are plain JavaScript modules; no frontend build or runtime Node service is required.
 
+The student shell uses the landing-style 123test brand on a white header. Introduction and recovery states show only the brand; active runs add the captured mode, current question position, and the single explicit Quit control; results retain the mode without an active-question control. Visible-score results use a percentage-based completion emoji plus separate Correct, Wrong, and Unanswered totals. Hidden-score results use a neutral completion treatment and expose no derived totals.
+
 Browser state is limited by mode:
 
 - Assessments store the attempt ID, bearer credential, published paper payload, local progress, and retry queue in same-origin `localStorage` under the quiz share code. This lets the same browser resume after refresh or restart. Server-side deadlines and confirmed answer rows remain authoritative.
@@ -309,6 +311,22 @@ Student requests never use teacher cookies for authorization. A same-origin/cust
 Quizzes move through draft, published, closed, and archived states and may be soft-deleted. Drafts do not accept students.
 
 Students start from `quizzes.current_paper_id`, not from mutable builder rows. Teachers may edit, delete, reorder, or change the mode afterward; those changes affect students only after Publish changes creates a new paper. Existing assessments, results, and renewable Practice credentials continue from their bound paper.
+
+### Published paper order and per-start shuffling
+
+Publishing does not shuffle or later rewrite the snapshot. `QuizPaperService::capture()` reads questions by their authored `pos`, reads each question's options by their authored `pos`, and stores those canonical arrays in `quiz_papers.definition`. The paper also captures the stable question IDs, option IDs/codes, correct codes, and the two shuffle flags. Re-publishing a changed working copy creates and activates a different paper revision; starting a quiz never updates the stored JSON.
+
+Admission creates a random 16-byte shuffle seed, represented as 32 hexadecimal characters, and signs it into the 15-minute admission ticket. A new successful Assessment stores that same value in `attempts.shuffle_seed`; a Practice start carries it forward in the signed Practice credential. Retrying the same start therefore reuses the same seed, while a fresh admission receives a new seed and can produce a different order.
+
+`QuizPaperService::studentDocument()` builds a separate in-memory student document from the immutable paper. The two shuffle settings are independent:
+
+- If `shuffle_options` is enabled, every question's option array is sorted by the hexadecimal HMAC-SHA-256 value of the option ID, using `seed + ":" + questionId` as the HMAC key. Including the question ID gives each question its own deterministic option order.
+- If `shuffle_questions` is enabled, the completed question array is sorted by the hexadecimal HMAC-SHA-256 value of the question ID, using the run seed as the HMAC key.
+- If either setting is disabled, that array retains its canonical authored order from the paper.
+
+This is a deterministic hash-sort, not an in-place random update to `quiz_papers.definition`. The same paper plus the same seed always produces the same runtime order. Choice letters such as A/B/C are only presentation labels assigned after ordering; answers and grading use stable option codes, so moving an option does not change which answer is correct.
+
+Assessment start persists the exact presentation as well as the seed. It creates one `attempt_answers` row per shuffled question, with `pos` recording the presented question position and `presented_option_codes` recording that question's exact option-code sequence. Resume and historical review read rows by `pos` and rebuild each option array from `presented_option_codes`, so the student and teacher continue to see the original order. Practice deliberately creates no individual answer/order rows; its signed credential and browser state retain enough information to regenerate and continue the same seeded order without storing an individual Practice result.
 
 ## Assessment flow
 

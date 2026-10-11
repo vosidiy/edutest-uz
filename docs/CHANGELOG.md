@@ -78,6 +78,8 @@
 
 ### Changed
 
+- Refreshed the student quiz shell with the landing-style 123test logo, a contextual white header containing mode/progress/Quit controls, concise privacy and timing copy, and score-safe celebration results with percentage-based emoji plus separate Correct, Wrong, and Unanswered totals.
+
 - Moved Preview/Edit into matching editor and preview question-card headers, removed the manual builder Save control, and enabled the existing one-second autosave pipeline for every editable quiz lifecycle state while keeping publication explicit.
 - Removed quiz instructions from authoring, new immutable paper definitions, student introductions, teacher attempt review, and the canonical `quizzes` schema; legacy paper JSON remains immutable and its old property is ignored.
 
@@ -156,6 +158,8 @@
 - Derived every report query from the authenticated owner, returned indistinguishable 404 responses for malformed/non-owned identifiers, and restricted IP/browser data to attempt detail while excluding credentials, private paths, answers, and connection details from CSV.
 
 ### Documentation
+
+- Documented that published paper JSON retains canonical authored order, while each student start receives a deterministic seed-based question/option projection; clarified Assessment order persistence and Practice reconstruction.
 
 - Recorded the implemented teacher routes, versioned document contract, lifecycle/paper-revision behavior, private-media rules, and deployment upload limits in `docs/ARCHITECTURE.MD`.
 - Deferred public teacher profiles beyond the authoring milestone in `docs/PLAN.MD` to match the current product scope.

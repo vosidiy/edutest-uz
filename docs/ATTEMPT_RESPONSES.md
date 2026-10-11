@@ -76,23 +76,3 @@ Fresh databases import only [`schema.sql`](schema.sql). For an existing normaliz
 ## Storage benchmark
 
 The opt-in isolated-MySQL helper `tests/mysql/attempt-answers.php` measures table-plus-index allocation and single-row confirmation latency for 20-, 100-, and 500-question assessments. It validates the canonical schema first and refuses non-temporary MySQL data directories. Results depend on InnoDB page allocation, server version, row contents, buffer state, and sample size; row counts alone are not a storage estimate. Normalization intentionally trades more rows/index entries for small independent writes and simpler historical queries.
-
-## Confirmation response measurements — 2026-10-01
-
-Measured with PHP 8.4.16 and disposable MySQL **8.0.44** (the available local binary; the deployment target remains 8.4). `ConfirmationBenchmarkTest` uses 10 new answer confirmations for each no-media fixture. Byte counts include a JSON envelope and are uncompressed. The comparison reconstructs the previous full-state response shape using a full load; it is not an execution of the previous application release.
-
-| Questions | Small acknowledgement bytes | Full-state bytes | Confirmation median ms | Additional full-load median ms |
-| --- | ---: | ---: | ---: | ---: |
-| 20 | 379 | 9,845 | 2.487 | 1.436 |
-| 100 | 379 | 44,615 | 4.015 | 3.908 |
-| 500 | 380 | 219,873 | 12.685 | 15.466 |
-
-The acknowledgement eliminates repeated full-state downloads. Grading still decodes the bound paper, so server cost is not constant with quiz size. The separately measured full load includes authorization/expiry and projection; it is an indicative avoidable recovery-path cost, not a precise before/after end-to-end latency claim. Media-heavy papers may differ. Full start/resume/recovery responses remain intentionally complete.
-
-Reproduce only against the guarded disposable server:
-
-```sh
-EDUTEST_CONFIRMATION_BENCHMARK=1 EDUTEST_TEST_MYSQL_SOCKET=/private/tmp/edutest-responses-mysql-XXXXXX/mysql.sock vendor/bin/phpunit --no-coverage tests/app/Services/ConfirmationBenchmarkTest.php
-```
-
-The normalized-row benchmark with 200 attempts per size measured 1,933,312 / 5,832,704 / 22,675,456 bytes of combined table/index allocation for 20 / 100 / 500 questions, respectively. Median single-row fixture confirmations were 1.209 / 1.243 / 1.450 ms. These synthetic storage fixtures are separate from the service benchmark above and are not production capacity estimates.

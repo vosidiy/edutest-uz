@@ -138,11 +138,20 @@ try {
   await command('Page.enable'); await command('Runtime.enable'); await command('Network.enable');
 
   // Functional behavior only: no screenshots, viewport, or appearance assertions.
-  await navigate(); await startQuiz();
+  await navigate();
+  assert.equal(await evaluate('document.querySelector(".student-brand").textContent.trim()'), '123test');
+  assert.equal(await evaluate('document.querySelector(".student-brand svg") !== null'), true);
+  assert.equal(await evaluate('document.querySelector("#player-header-context").hidden && document.querySelector("#player-header-quit").hidden'), true);
+  await startQuiz();
+  assert.equal(await evaluate('document.querySelector("#player-header-mode").textContent'), 'Assessment');
+  assert.equal(await evaluate('document.querySelector("#player-header-progress").textContent'), 'Question 1 of 3');
+  assert.equal(await evaluate('!document.querySelector("#player-header-quit").hidden'), true);
+  assert.equal(await evaluate('Array.from(document.querySelectorAll("button")).filter(button => button.textContent.trim() === "Quit quiz").length'), 1);
   await command('Network.emulateNetworkConditions', {offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
   await evaluate('document.querySelector("input[value=paris]").click()'); await clickText('Submit answer');
   assert.equal(await evaluate('document.querySelector(".player-feedback h3").textContent'), 'Correct');
   await clickText('Next question');
+  assert.equal(await evaluate('document.querySelector("#player-header-progress").textContent'), 'Question 2 of 3');
   await evaluate('document.querySelector("input[value=asia]").click()');
   await until(() => evaluate('document.querySelector("#player-alert").textContent.toLowerCase().includes("connection")'), 'offline warning');
   // Reopening requires connectivity; locally confirmed q1 + q2 draft must survive.
@@ -158,6 +167,9 @@ try {
   await clickText('Submit answer'); await clickText('See results');
   assert.equal(await evaluate('document.querySelector(".player-results-header").textContent.includes("Provisional")'),true);
   assert.equal(await evaluate('document.querySelector(".player-score").textContent'),'100.00%');
+  assert.equal(await evaluate('document.querySelector(".player-completion-icon").textContent'),'🏆');
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".player-result-stat")].map(node => node.textContent.trim())'), ['✅Correct3/3','❌Wrong0/3','➖Unanswered0/3']);
+  assert.equal(await evaluate('!document.querySelector("#player-header-context").hidden && document.querySelector("#player-header-progress").hidden && document.querySelector("#player-header-quit").hidden'),true);
   await command('Network.emulateNetworkConditions', {offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
   await evaluate('window.dispatchEvent(new Event("online"))');
   await until(()=>evaluate('document.querySelector(".player-results-header").textContent.includes("Result confirmed")'),'recovered final result');
@@ -172,7 +184,8 @@ try {
     await clickText('Next question'); await clickText('Skip question'); await clickText('Next question');
     await clickText('Skip question'); await clickText('See results');
     await until(()=>evaluate('Boolean(document.querySelector(".player-results-header"))'),'receipt-only result');
-    assert.equal(await evaluate('document.querySelector(".player-score") === null && document.querySelector(".player-review-item") === null'),true);
+    assert.equal(await evaluate('document.querySelector(".player-score") === null && document.querySelector(".player-result-stats") === null && document.querySelector(".player-review-item") === null'),true);
+    assert.equal(await evaluate('document.querySelector(".player-completion-icon").textContent'), '🎉');
     if(modeValue==='practice') assert.equal(requests.slice(offset).some(row=>/answers|finish|events/.test(row.path)),false);
     else await until(()=>official.status==='completed','receipt-only assessment sync');
   }
@@ -185,11 +198,13 @@ try {
   await until(()=>evaluate('document.querySelector(".player-results-header")?.textContent.includes("Quiz ended")'),'quit result');
   await until(()=>official?.status==='completed' && official?.finishReason==='quit','quit synchronization');
   assert.equal(official.items.filter(item=>item.answerStatus!=='not_reached').length,1);
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".player-result-stat")].map(node => node.textContent.trim())'), ['✅Correct1/3','❌Wrong0/3','➖Unanswered2/3']);
+  assert.equal(await evaluate('document.querySelector(".player-completion-icon").textContent'), '😢');
   await until(()=>evaluate('Array.from(document.querySelectorAll("button")).some(button=>button.textContent.trim()==="Start again")'),'quit acknowledgement');
   await clickText('Start again');
   await until(()=>evaluate('Boolean(document.querySelector("#quiz-admission"))'),'fresh admission after quit');
   assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({passed:true, checks:['offline immediate feedback','persistent connection warning','reload with pending confirmation and draft','provisional abandonment reconciliation','offline results','late upload acknowledgements','receipt-only assessment/practice','practice privacy','student identity','hidden inactivity timer','quit and fresh admission'],artifacts},null,2));
+  console.log(JSON.stringify({passed:true, checks:['123test contextual header','offline immediate feedback','persistent connection warning','reload with pending confirmation and draft','provisional abandonment reconciliation','score summary and emoji','offline results','late upload acknowledgements','receipt-only neutral result','practice privacy','student identity','hidden inactivity timer','header Quit and fresh admission'],artifacts},null,2));
 } catch(error) {
   console.error(JSON.stringify({error:error.message,errors,requests:requests.slice(-12),page:socket?await evaluate('document.body.innerText').catch(()=>''):''},null,2));
   throw error;

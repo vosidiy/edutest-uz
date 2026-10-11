@@ -60,6 +60,8 @@ Every question has equal weight. Single choice and normalized short text are ful
 
 Both feedback modes intentionally deliver answer keys to the browser. `showScore`, `showAnswers`, and `showExplain` control presentation, not secrecy. Practice results are local; Assessment results remain provisional until the server acknowledges all confirmations and Finish. When score, answers, and explanations are all hidden, the player shows only completion/synchronization status, without correctness labels, review, or scoring announcements. Screenshots of permitted local results are informal evidence, not automatic official grade changes.
 
+The contextual student header shows mode, question position, and the single Quit action only while answering. Visible-score completion cards use 🏆 at 90–100%, 🤩 at 80–89.99%, 👍 at 70–79.99%, 😊 at 60–69.99%, 🥺 at 50–59.99%, and 😢 below 50%, alongside separate Correct, Wrong, and Unanswered totals from the displayed result items. Provisional totals are replaced when an official Assessment result arrives. When numeric scores are hidden, the card uses a neutral 🎉 and omits percentage-derived presentation.
+
 ## Privacy, media, and configuration
 
 An untracked `.env` `encryption.key` is required for admission, bearer derivation, and signed media. Private paths never enter API data. Paper media stays retained while the current quiz, an Assessment attempt, or an unexpired Practice key references its paper.
