@@ -10,10 +10,9 @@
     <link rel="stylesheet" href="<?= esc(base_url('css/player.css') . '?v=' . filemtime(FCPATH . 'css/player.css'), 'attr') ?>">
 </head>
 <body class="student-page">
-<a class="skip-link" href="#student-main"><?= esc(lang('Player.ui.skipContent')) ?></a>
 <header class="student-header">
     <div class="student-header-inner">
-        <a class="student-brand" href="<?= site_url('/') ?>" aria-label="123test home">
+        <a class="student-brand" target="_blank" href="<?= site_url('/') ?>" aria-label="123test home">
             <svg aria-hidden="true" width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect width="36" height="36" rx="12" fill="url(#student-brand-gradient)"></rect>
                 <rect x="7" y="7" width="10" height="10" rx="4" fill="#4338ca"></rect>
@@ -52,6 +51,7 @@
         <button id="use-server" type="button" class="btn btn-primary"><?= esc(lang('Player.ui.useServer')) ?></button></div>
     </div>
 </dialog>
+<?= $this->include('student/partials/player_templates') ?>
 <script type="application/json" id="player-config"><?= json_encode([
     'shareToken' => $shareToken, 'page' => $page, 'apiBase' => site_url('api/v1/player'),
     'quizUrl' => site_url('q/' . $shareToken), 'ui' => lang('Player.ui'), 'mode' => $quiz['mode'] ?? null,

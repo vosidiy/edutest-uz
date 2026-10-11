@@ -78,6 +78,17 @@
 
 ### Changed
 
+- Replaced the blocked quiz tab's introduction with a dedicated plain-text quiz title, another-tab message, and Retry screen under the logo header. Hid admission/player content and other notices while blocked; serialized Retry reloads current saved progress and resumes active work or restores the introduction without replaying a blocked Start. Added behavior-only checks for exclusive content, literal titles, repeated retries, ownership handoff, and completed-run recovery.
+
+- Fixed student bearer extraction behind Apache/FastCGI internal redirects: preserve Authorization before front-controller rewriting and accept Apache's redirected server variable only when the normal header is absent. Verified the MAMP transport with a disposable synthetic-credential probe; strict bearer and attempt ownership checks remain. Added isolated redirected-header answer/Finish tests proving teacher status changes only after accepted completion.
+- Made synchronization silent during answering and on shared introductions; restored best-effort upload of pending/abandoned work when reopening a link without delaying deliberate fresh starts. Results show one concise save status with Retry instead of duplicate technical warnings. Preserved offline queues, timestamps, score visibility, and stale-response guards.
+
+- Simplified the quiz starter into a cover-left/details-right card with placeholder fallback, quiz facts, Start new quiz label, and collapsed Assessment privacy/monitoring details. Removed introduction helper and old-attempt sync/error notices. Valid new starts immediately discard previous local work without confirmation or upload waiting, preserve unrelated storage, and retain deduplicated retries for the new admission. Valid active runs still auto-resume; player/results synchronization remains unchanged. Added behavior-only coverage for starter markup, invalid forms, discard despite admission failure, rejected access, and retry safety.
+
+- Added a decorative right-arrow icon after the quiz player's Next question / See results button label, preserving the icon when the label updates.
+
+- Moved all dynamically rendered student player markup into a shared native HTML template partial, with a dedicated plain-JavaScript view module for safe text binding and event callbacks. Preserved current UI edits, offline behavior, lazy review/media loading, and recovery controls; expanded functional browser checks for literal HTML-looking content, reloads, media retry, and single-action event handling.
+
 - Refreshed the student quiz shell with the landing-style 123test logo, a contextual white header containing mode/progress/Quit controls, concise privacy and timing copy, and score-safe celebration results with percentage-based emoji plus separate Correct, Wrong, and Unanswered totals.
 
 - Moved Preview/Edit into matching editor and preview question-card headers, removed the manual builder Save control, and enabled the existing one-second autosave pipeline for every editable quiz lifecycle state while keeping publication explicit.

@@ -31,7 +31,9 @@ final class StudentPlayerFeatureTest extends PlayerTestCase
         $this->assertStringContainsString('&lt;script&gt;alert(1)&lt;/script&gt;', $response->response()->getBody());
         $response->assertDontSee('correctCodes');
         $response->assertDontSee('csrf-token');
-        $response->assertSee('Start quiz');
+        $response->assertSee('Start new quiz');
+        $this->assertStringContainsString('images/placeholder.jpg', html_entity_decode($response->response()->getBody(), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        $response->assertSee('Quiz type');
     }
 
     public function testShortAndLegacyShareLinksAreAcceptedButMalformedLinksAreHidden(): void
@@ -65,7 +67,9 @@ final class StudentPlayerFeatureTest extends PlayerTestCase
         $response->assertOK();
         $response->assertSee('Enable fullscreen');
         $response->assertSee('quiz tab is hidden');
-        $response->assertSee('Start quiz');
+        $response->assertSee('Start new quiz');
+        $this->assertStringContainsString('<details class="player-privacy">', $response->response()->getBody());
+        $response->assertSee('Privacy details');
     }
 
     public function testStudentApiRequiresSameOriginCustomHeader(): void
@@ -77,6 +81,30 @@ final class StudentPlayerFeatureTest extends PlayerTestCase
         $response->assertOK();
         $response->assertDontSee('csrfToken');
         self::assertArrayNotHasKey('student', json_decode($response->response()->getBody(), true)['data']);
+    }
+
+    public function testRedirectedBearerUploadsThenFinishChangesTeacherStatus(): void
+    {
+        $quiz = $this->quiz(count: 1);
+        $attempt = $this->startQuiz($quiz);
+        $reports = new \App\Services\TeacherResultsService($this->db, $this->media);
+        $list = fn () => $reports->quiz($quiz['owner'], $quiz['publicId'], [], 'UTC')['attempts'][0]['status'];
+        $this->assertSame('in_progress', $list());
+        $headers = ['X-EduTest-Player' => '1', 'Content-Type' => 'application/json'];
+        $key = 'REDIRECT_HTTP_AUTHORIZATION';
+        service('superglobals')->setServer($key, 'Bearer ' . $attempt['credential']);
+        try {
+            $base = '/api/v1/player/assessments/' . $attempt['attemptId'];
+            $this->withHeaders($headers)->get($base)->assertOK();
+            $this->withHeaders($headers)->withBodyFormat('json')->post($base . '/finish', $this->finishBody($attempt))->assertStatus(409);
+            $this->assertSame('in_progress', $list());
+            $this->withHeaders($headers)->withBodyFormat('json')->put($base . '/answers/' . $attempt['items'][0]['questionId'], $this->confirmation($this->submission($attempt, 0)))->assertOK();
+            $this->assertSame('in_progress', $list());
+            $this->withHeaders($headers)->withBodyFormat('json')->post($base . '/finish', $this->finishBody($attempt))->assertOK();
+            $this->assertSame('completed', $list());
+            service('superglobals')->setServer($key, 'Bearer ' . str_repeat('0', 64));
+            $this->withHeaders($headers)->get($base)->assertStatus(401);
+        } finally { service('superglobals')->unsetServer($key); }
     }
 
     public function testPracticeStartsWithoutTeacherSessionOrCsrfAndRejectsAnswerBodies(): void

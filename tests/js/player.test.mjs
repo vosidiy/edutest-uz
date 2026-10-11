@@ -183,3 +183,48 @@ test('clock survives backgrounding and backwards wall changes', () => {
   const clock=new PlayerClock(state,()=>monotonic,()=>wall);monotonic+=10000;wall-=10000;
   assert.equal(clock.now(),Date.parse(startedAt)+10000);
 });
+
+test('a second flush awaits the active drain including Finish', async () => {
+  const state = fresh(); complete(state);
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const worker = new PlayerSync(() => state, async (path, {body}) => {
+    await gate;
+    return {data: path.endsWith('/finish')
+      ? {...ack(state), status:'completed', finishReason:'completed', result:{confirmed:true}}
+      : ack(state, {...body, questionId:path.split('/').at(-1)})};
+  });
+  try {
+    const first = worker.flush(), second = worker.flush();
+    assert.equal(first, second); release(); await second;
+    assert.equal(hasPending(state), false); assert.equal(state.result.confirmed, true);
+  } finally { worker.stop(); }
+});
+
+test('authorization rejection retains work, pauses retries and resets for a fresh run', async () => {
+  const state = fresh(); complete(state); const snapshot = clone(state);
+  const worker = new PlayerSync(() => state, async () => { throw Object.assign(new Error('Rejected'), {status:401}); });
+  try {
+    await worker.flush();
+    assert.equal(worker.paused, true); assert.equal(worker.error.status, 401);
+    assert.deepEqual(state, snapshot);
+    worker.reset(); assert.equal(worker.paused, false); assert.equal(worker.error, null); assert.equal(worker.needsLoad, false);
+  } finally { worker.stop(); }
+});
+
+for (const rejected of [false, true]) test(`old ${rejected ? 'error' : 'acknowledgement'} cannot affect a replacement run`, async () => {
+  let state = fresh(); submit(state); const old = state;
+  let release, changes = 0, errors = 0;
+  const response = new Promise(resolve => { release = resolve; });
+  const worker = new PlayerSync(() => state, async () => {
+    await response;
+    if (rejected) throw Object.assign(new Error('Old rejection'), {status:401});
+    return {data:ack(old, old.pendingAnswers[0])};
+  }, {persist:() => changes++, error:() => errors++});
+  try {
+    const pending = worker.flush(); worker.reset(); state = fresh(); state.attemptId = 'new';
+    const snapshot = clone(state); release(); await pending;
+    assert.deepEqual(state, snapshot); assert.equal(old.pendingAnswers.length, 1);
+    assert.equal(changes, 0); assert.equal(errors, 0); assert.equal(worker.paused, false);
+  } finally { worker.stop(); }
+});

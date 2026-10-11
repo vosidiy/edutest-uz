@@ -5,35 +5,48 @@ export class PlayerSync {
   constructor(getState, send, callbacks = {}) {
     this.getState = getState; this.send = send; this.callbacks = callbacks;
     this.busy = false; this.paused = false; this.retryDelay = 1000; this.timer = null; this.needsLoad = false;
+    this.task = null; this.generation = 0; this.error = null;
   }
   schedule(delay = 0) { clearTimeout(this.timer); this.timer = setTimeout(() => this.flush(), delay); }
   recover() { this.needsLoad = true; return this.flush(); }
-  async flush() {
+  flush() {
+    if (this.task) return this.task;
+    const task = this.drain();
+    this.task = task;
+    task.finally(() => { if (this.task === task) this.task = null; });
+    return task;
+  }
+  async drain() {
     const state = this.getState();
     if (!state || state.format !== 4 || state.mode !== 'assessment' || this.busy || this.paused || this.callbacks.canSend?.() === false || (!hasPending(state) && !this.needsLoad)) return;
-    clearTimeout(this.timer); this.busy = true; this.callbacks.change?.();
+    const generation = this.generation;
+    const current = () => generation === this.generation && this.getState() === state;
+    clearTimeout(this.timer); this.error = null; this.busy = true; this.callbacks.change?.();
     try {
       while ((hasPending(state) || this.needsLoad) && !this.paused && this.callbacks.canSend?.() !== false && this.getState() === state) {
         if (this.needsLoad) {
           this.needsLoad = false;
           try {
             const response = await this.send('/assessments/' + state.attemptId, {credential:state.credential});
+            if (!current()) return;
             if (!mergeServer(state, response.data)) {
               this.paused = true; this.callbacks.conflict?.(response.data); break;
             }
             this.callbacks.persist?.(); this.callbacks.change?.();
-          } catch (error) { this.needsLoad = true; throw error; }
+          } catch (error) { if (current()) this.needsLoad = true; throw error; }
           continue;
         }
         if (state.pendingAnswers.length) {
           const operation = state.pendingAnswers[0];
           const {questionId, ...body} = operation;
           const response = await this.send('/assessments/' + state.attemptId + '/answers/' + questionId, {method:'PUT', credential:state.credential, body});
+          if (!current()) return;
           acknowledge(state, response.data, operation);
           this.callbacks.persist?.(); this.callbacks.change?.(); continue;
         }
         if (state.finishPending && !state.result?.confirmed) {
           const response = await this.send('/assessments/' + state.attemptId + '/finish', {method:'POST', body:state.finishRecord, credential:state.credential});
+          if (!current()) return;
           acknowledge(state, response.data);
           this.callbacks.persist?.(); this.callbacks.change?.(); continue;
         }
@@ -42,12 +55,14 @@ export class PlayerSync {
           const activity = state.clientActivityAt;
           state.activitySentAt = Date.now(); this.callbacks.persist?.();
           const response = await this.send('/assessments/' + state.attemptId + '/activity', {method:'POST', body:{clientActivityAt:activity}, credential:state.credential});
+          if (!current()) return;
           acknowledge(state, response.data);
           this.callbacks.persist?.(); this.callbacks.change?.(); continue;
         }
         if (state.events.length && !state.activityPending) {
           const events = state.events.slice(0, 100);
           await this.send('/assessments/' + state.attemptId + '/events', {method:'POST', body:{events}, credential:state.credential});
+          if (!current()) return;
           const keys = new Set(events.map(event => event.key));
           state.events = state.events.filter(event => !keys.has(event.key)); this.callbacks.persist?.(); continue;
         }
@@ -56,21 +71,27 @@ export class PlayerSync {
       }
       this.retryDelay = 1000;
     } catch (error) {
+      if (!current()) return;
+      this.error = error;
       this.callbacks.error?.(error);
       if (['answer_locked','finish_conflict','attempt_finalized'].includes(error.code)) {
         this.paused = true;
         // Full state is loaded only for an actual conflict, never after a normal acknowledgement.
         try {
           const saved = await this.send('/assessments/' + state.attemptId, {credential:state.credential});
-          this.callbacks.conflict?.(saved.data);
+          if (current()) this.callbacks.conflict?.(saved.data);
         } catch (_) { /* Keep the local queue and original error. */ }
       } else if ([400,401,403,410,413,415,422].includes(error.status)) this.paused = true;
       else if (this.callbacks.canSend?.() !== false) {
         if (error.code === 'incomplete_sync') this.needsLoad = true;
         this.schedule(this.retryDelay); this.retryDelay = Math.min(30000, this.retryDelay * 2);
       }
-    } finally { this.busy = false; this.callbacks.change?.(); }
+    } finally { if (current()) { this.busy = false; this.callbacks.change?.(); } }
   }
   retry() { this.paused = false; this.schedule(); }
   stop() { clearTimeout(this.timer); this.paused = true; }
+  reset() {
+    this.stop(); this.generation++; this.task = null;
+    this.busy = false; this.paused = false; this.needsLoad = false; this.error = null; this.retryDelay = 1000;
+  }
 }

@@ -41,8 +41,11 @@ abstract class ApiController extends BaseController
 
     protected function bearer(): string
     {
-        $header = $this->request->getHeaderLine('Authorization');
-        if (! preg_match('/^Bearer ([A-Za-z0-9_.-]+)$/D', $header, $match)) throw new PlayerException('invalid_credential', 401);
-        return $match[1];
+        $token = \App\Services\Player\BearerHeader::token(
+            $this->request->getHeaderLine('Authorization'),
+            service('superglobals')->getServerArray(),
+        );
+        if ($token === null) throw new PlayerException('invalid_credential', 401);
+        return $token;
     }
 }
