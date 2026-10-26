@@ -44,21 +44,10 @@
     </label>
 </template>
 
-<template id="player-text-answer-template">
-    <input class="form-control" type="text" maxlength="500" autocomplete="off" data-action="type">
-</template>
-
 <template id="player-timer-template">
     <div class="player-timer" aria-live="off">
         <span data-slot="label"></span>
         <strong data-slot="remaining"></strong>
-    </div>
-</template>
-
-<template id="player-fullscreen-template">
-    <div class="player-fullscreen-control">
-        <button type="button" class="btn btn-default btn-sm" data-fullscreen-button data-action="fullscreen"></button>
-        <span role="status" data-fullscreen-status data-slot="status"></span>
     </div>
 </template>
 

@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Attempt-owned snapshot refactor (2026-10-26)
+
+- Reduced the product to Assessment-only, single-choice quizzes with one correct option, list/grid choice layouts, a required 30–7,200 second timer, optional per-attempt random draw, and independent question/option shuffling.
+- Replaced published quiz papers with immutable schema-version-1 JSON snapshots created inside each attempt under the quiz row lock. Published edits now affect the next start immediately while existing runs remain bound to their stored content and order.
+- Replaced per-question answer rows with an ordered JSON answer document, monotonic progress checkpoints, idempotent retries, and an atomic full-document Finish that always uses server-authoritative validation and grading.
+- Added fixed-deadline format-5 browser state, silent whole-prefix checkpoints, final-outbox override, no-backtracking single-choice play, `MM:SS` countdowns including `120:00`, automatic expiry, intentional exit, offline continuation after load, and browser-restart recovery.
+- Added provisional lazy expiry and valid delayed-Finish reconciliation with `late_sync`, plus snapshot-backed teacher list/detail/CSV reporting and attempt-bound media renewal.
+- Simplified the builder/dashboard and lifecycle to draft, published, unpublish, trash, and restore; removed Practice, question types, passcodes, schedules, integrity controls, closed, and archived controls.
+- Replaced `/play` with `/start`, replaced answer/activity/integrity endpoints with versioned progress, and removed all Practice endpoints.
+- Replaced the canonical schema and added `docs/attempt-snapshot-reset.sql`, a manual destructive phpMyAdmin reset that preserves `users`. Private media cleanup remains a separate explicit filesystem operation.
+- Removed the `quiz_papers`, `attempt_answers`, `practice_keys`, and `cheat_events` tables, models, services, and obsolete tests.
+- Updated the product plan, architecture, player, answer-storage, reporting, route, schema, PHP, JavaScript, and behavior-test documentation for the reduced MVP.
+
 ### Added
 
 - Added protected teacher account management with immediate name/email/phone updates, unique-email validation, current-password verification, password replacement, session regeneration, and separate profile/security forms.

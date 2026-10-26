@@ -7,7 +7,6 @@ namespace App\Services;
 final class QuizShareCode
 {
     private const SHORT_PATTERN  = '/^[0-9]{9}$/D';
-    private const LEGACY_PATTERN = '/^[a-f0-9]{64}$/D';
 
     public static function generate(): string
     {
@@ -16,8 +15,7 @@ final class QuizShareCode
 
     public static function isValid(string $value): bool
     {
-        return self::isShort($value)
-            || preg_match(self::LEGACY_PATTERN, $value) === 1;
+        return self::isShort($value);
     }
 
     public static function isShort(string $value): bool

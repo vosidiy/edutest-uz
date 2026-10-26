@@ -20,168 +20,74 @@ final class StudentPlayerFeatureTest extends PlayerTestCase
         Services::injectMock('media', $this->media);
     }
 
-    public function testPublicIntroductionEscapesContentAndNeverPreloadsKeys(): void
+    public function testIntroductionIsAssessmentOnlyAndDoesNotPreloadAnswerKeys(): void
     {
-        $quiz = $this->quiz();
-        $doc = $quiz['document']; $doc['title'] = '<script>alert(1)</script>';
-        $this->authoring->save($quiz['owner'], $quiz['publicId'], $doc);
-        $this->authoring->transition($quiz['owner'], $quiz['publicId'], 'publish');
+        $quiz = $this->quiz(settings: ['askEmail' => true, 'askPhone' => true]);
         $response = $this->get('/q/' . $quiz['share']);
         $response->assertOK();
-        $this->assertStringContainsString('&lt;script&gt;alert(1)&lt;/script&gt;', $response->response()->getBody());
-        $response->assertDontSee('correctCodes');
-        $response->assertDontSee('csrf-token');
         $response->assertSee('Start new quiz');
-        $this->assertStringContainsString('images/placeholder.jpg', html_entity_decode($response->response()->getBody(), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
-        $response->assertSee('Quiz type');
+        $response->assertSee('Your name');
+        $response->assertSee('Email');
+        $response->assertSee('Phone');
+        $response->assertDontSee('correctCode');
+        $response->assertDontSee('Practice');
     }
 
-    public function testShortAndLegacyShareLinksAreAcceptedButMalformedLinksAreHidden(): void
+    public function testStartAndResultsShellUseTheNewRoutes(): void
     {
         $quiz = $this->quiz();
-        $this->assertMatchesRegularExpression('/^[0-9]{9}$/D', $quiz['share']);
-        $this->get('/q/' . $quiz['share'])->assertOK();
-
-        $legacy = str_repeat('a', 64);
-        $this->db->table('quizzes')->where('public_id', $quiz['publicId'])->update(['share_token' => $legacy]);
-        $this->get('/q/' . $legacy)->assertOK();
-        $this->get('/q/' . $legacy . '/play')->assertOK();
-        $this->withHeaders(['X-EduTest-Player' => '1'])->get('/api/v1/player/tickets/' . $legacy)->assertOK();
-
-        foreach (['/q/not-a-code', '/q/not-a-code/play'] as $path) {
-            try {
-                $this->get($path);
-                $this->fail('Malformed public quiz codes must return not found.');
-            } catch (\CodeIgniter\Exceptions\PageNotFoundException) {
-                $this->addToAssertionCount(1);
-            }
-        }
-        $this->withHeaders(['X-EduTest-Player' => '1'])->get('/api/v1/player/tickets/not-a-code')->assertStatus(404);
-    }
-
-    public function testIntegrityDisclosureOffersNonBlockingFullscreenControl(): void
-    {
-        $quiz = $this->quiz(settings: ['cheatCheck' => true]);
-        $response = $this->get('/q/' . $quiz['share']);
-
-        $response->assertOK();
-        $response->assertSee('Enable fullscreen');
-        $response->assertSee('quiz tab is hidden');
-        $response->assertSee('Start new quiz');
-        $this->assertStringContainsString('<details class="player-privacy">', $response->response()->getBody());
-        $response->assertSee('Privacy details');
-    }
-
-    public function testStudentApiRequiresSameOriginCustomHeader(): void
-    {
-        $quiz = $this->quiz('practice');
-        $this->get('/api/v1/player/tickets/' . $quiz['share'])->assertStatus(403);
-        $this->withHeaders(['X-EduTest-Player' => '1', 'Origin' => 'https://foreign.example'])->get('/api/v1/player/tickets/' . $quiz['share'])->assertStatus(403);
-        $response = $this->withHeaders(['X-EduTest-Player' => '1'])->get('/api/v1/player/tickets/' . $quiz['share']);
-        $response->assertOK();
-        $response->assertDontSee('csrfToken');
-        self::assertArrayNotHasKey('student', json_decode($response->response()->getBody(), true)['data']);
-    }
-
-    public function testRedirectedBearerUploadsThenFinishChangesTeacherStatus(): void
-    {
-        $quiz = $this->quiz(count: 1);
-        $attempt = $this->startQuiz($quiz);
-        $reports = new \App\Services\TeacherResultsService($this->db, $this->media);
-        $list = fn () => $reports->quiz($quiz['owner'], $quiz['publicId'], [], 'UTC')['attempts'][0]['status'];
-        $this->assertSame('in_progress', $list());
-        $headers = ['X-EduTest-Player' => '1', 'Content-Type' => 'application/json'];
-        $key = 'REDIRECT_HTTP_AUTHORIZATION';
-        service('superglobals')->setServer($key, 'Bearer ' . $attempt['credential']);
+        $this->get('/q/' . $quiz['share'] . '/start')->assertOK();
+        $this->get('/q/' . $quiz['share'] . '/results')->assertOK();
         try {
-            $base = '/api/v1/player/assessments/' . $attempt['attemptId'];
-            $this->withHeaders($headers)->get($base)->assertOK();
-            $this->withHeaders($headers)->withBodyFormat('json')->post($base . '/finish', $this->finishBody($attempt))->assertStatus(409);
-            $this->assertSame('in_progress', $list());
-            $this->withHeaders($headers)->withBodyFormat('json')->put($base . '/answers/' . $attempt['items'][0]['questionId'], $this->confirmation($this->submission($attempt, 0)))->assertOK();
-            $this->assertSame('in_progress', $list());
-            $this->withHeaders($headers)->withBodyFormat('json')->post($base . '/finish', $this->finishBody($attempt))->assertOK();
-            $this->assertSame('completed', $list());
-            service('superglobals')->setServer($key, 'Bearer ' . str_repeat('0', 64));
-            $this->withHeaders($headers)->get($base)->assertStatus(401);
-        } finally { service('superglobals')->unsetServer($key); }
-    }
-
-    public function testPracticeStartsWithoutTeacherSessionOrCsrfAndRejectsAnswerBodies(): void
-    {
-        $quiz = $this->quiz('practice');
-        $ticket = $this->player->admission->ticket($quiz['share']);
-        $response = $this->withHeaders(['X-EduTest-Player' => '1', 'Content-Type' => 'application/json'])
-            ->withBodyFormat('json')->post('/api/v1/player/starts', ['ticket' => $ticket['ticket']]);
-        $response->assertOK();
-        $response->assertDontSee('csrfToken');
-        $this->assertSame(0, $this->db->table('attempts')->countAllResults());
-        $credential = json_decode($response->response()->getBody(), true)['data']['credential'];
-        $this->withHeaders(['X-EduTest-Player' => '1', 'Content-Type' => 'application/json', 'Authorization' => 'Bearer ' . $credential])
-            ->withBodyFormat('json')->post('/api/v1/player/practice/media', ['answers' => ['secret']])->assertStatus(422);
-    }
-
-    public function testResultsRejectWrongBearerAndTeacherPagesStillRequireAuthentication(): void
-    {
-        $attempt = $this->startQuiz($this->quiz());
-        $this->withHeaders(['X-EduTest-Player' => '1', 'Authorization' => 'Bearer ' . str_repeat('0', 64)])
-            ->get('/api/v1/player/assessments/' . $attempt['attemptId'] . '/results')->assertStatus(401);
-        $this->get('/quizzes')->assertRedirectTo(site_url('login'));
-    }
-
-    public function testEmptyAndNonObjectJsonHaveValidationErrors(): void
-    {
-        foreach (['', '[]', 'null', '{broken'] as $body) {
-            $response = $this->withHeaders(['X-EduTest-Player' => '1', 'Content-Type' => 'application/json'])
-                ->withBody($body)->post('/api/v1/player/starts');
-            $response->assertStatus(400);
-            $response->assertSee('invalid_json');
+            $this->get('/q/' . $quiz['share'] . '/play');
+            self::fail('The removed /play route must not resolve.');
+        } catch (\CodeIgniter\Exceptions\PageNotFoundException $error) {
+            self::assertSame(404, $error->getCode());
         }
     }
 
-    public function testActivityAndSmallAnswerAcknowledgementsUseBearerJsonBoundary(): void
+    public function testPlayerApiRequiresCustomHeaderAndBearer(): void
     {
-        $attempt = $this->startQuiz($this->quiz());
-        $base = '/api/v1/player/assessments/' . $attempt['attemptId'];
-        $headers = ['X-EduTest-Player' => '1', 'Content-Type' => 'application/json', 'Authorization' => 'Bearer ' . $attempt['credential']];
-        $at = \App\Services\Player\PlayerStore::iso(\App\Services\Player\PlayerStore::now());
-        $this->withHeaders($headers)->withBodyFormat('json')->post($base . '/activity', ['clientActivityAt' => $at])->assertOK();
-        $response = $this->withHeaders($headers)->withBodyFormat('json')->put($base . '/answers/' . $attempt['items'][0]['questionId'], $this->confirmation($this->submission($attempt, 0)));
-        $response->assertOK();
-        $data = json_decode($response->response()->getBody(), true)['data'];
-        self::assertSame($attempt['attemptId'], $data['attemptId']);
-        self::assertArrayNotHasKey('quiz', $data);
-        self::assertArrayNotHasKey('items', $data);
-        $this->withHeaders(['X-EduTest-Player' => '1', 'Content-Type' => 'text/plain'])
-            ->withBodyFormat('')->withBody('{}')->put($base . '/answers/' . $attempt['items'][0]['questionId'])->assertStatus(415);
-        $this->withHeaders(['X-EduTest-Player' => '1', 'Content-Type' => 'application/json'])
-            ->withBodyFormat('json')->post($base . '/activity', ['clientActivityAt' => $at])->assertStatus(401);
+        $quiz = $this->quiz();
+        $this->get('/api/v1/player/tickets/' . $quiz['share'])->assertStatus(403);
+        $ticket = $this->withHeaders(['X-EduTest-Player' => '1'])->get('/api/v1/player/tickets/' . $quiz['share']);
+        $ticket->assertOK();
+        $this->withHeaders(['X-EduTest-Player' => '1', 'Authorization' => 'Bearer ' . str_repeat('0', 64)])
+            ->get('/api/v1/player/assessments/' . str_repeat('a', 32))->assertStatus(401);
     }
 
-    public function testAssessmentStartReturnsIdentityOnlyInTheAuthenticatedFullState(): void
+    public function testProgressAndFinishUseWholeAnswerDocuments(): void
     {
-        $quiz = $this->quiz(settings: ['emailMode' => 'optional']);
-        $ticket = $this->player->admission->ticket($quiz['share']);
-        $response = $this->withHeaders(['X-EduTest-Player' => '1', 'Content-Type' => 'application/json'])
-            ->withBodyFormat('json')->post('/api/v1/player/starts', [
-                'ticket' => $ticket['ticket'],
-                'name' => '<Student>',
-                'email' => 'student@example.test',
-            ]);
-        $response->assertOK();
-        $data = json_decode($response->response()->getBody(), true)['data'];
-        self::assertSame(['name' => '<Student>', 'email' => 'student@example.test'], $data['student']);
-
-        $answer = $this->confirmation($this->submission($data, 0));
-        $ack = $this->withHeaders([
+        $attempt = $this->startQuiz($this->quiz(count: 1));
+        $answer = $this->submission($attempt, 0);
+        $base = '/api/v1/player/assessments/' . $attempt['attemptId'];
+        $headers = [
             'X-EduTest-Player' => '1',
             'Content-Type' => 'application/json',
-            'Authorization' => 'Bearer ' . $data['credential'],
-        ])->withBodyFormat('json')->put(
-            '/api/v1/player/assessments/' . $data['attemptId'] . '/answers/' . $data['items'][0]['questionId'],
-            $answer,
+            'Authorization' => 'Bearer ' . $attempt['credential'],
+        ];
+        $this->withHeaders($headers)->withBodyFormat('json')->put(
+            $base . '/progress',
+            $this->progressBody([$answer], 1),
+        )->assertOK();
+        $finish = $this->withHeaders($headers)->withBodyFormat('json')->post(
+            $base . '/finish',
+            $this->finishBody($attempt, [$answer], 2),
         );
-        $ack->assertOK();
-        self::assertArrayNotHasKey('student', json_decode($ack->response()->getBody(), true)['data']);
+        $finish->assertOK();
+        $data = json_decode($finish->response()->getBody(), true)['data'];
+        self::assertSame('completed', $data['status']);
+        self::assertSame(1, $data['result']['score']);
+    }
+
+    public function testMalformedJsonAndForeignAnswerCodesAreRejected(): void
+    {
+        $attempt = $this->startQuiz($this->quiz(count: 1));
+        $base = '/api/v1/player/assessments/' . $attempt['attemptId'];
+        $headers = ['X-EduTest-Player' => '1', 'Content-Type' => 'application/json', 'Authorization' => 'Bearer ' . $attempt['credential']];
+        $this->withHeaders($headers)->withBody('{broken')->put($base . '/progress')->assertStatus(400);
+        $answer = $this->submission($attempt, 0);
+        $answer['answerCode'] = 'foreign-code';
+        $this->withHeaders($headers)->withBodyFormat('json')->put($base . '/progress', $this->progressBody([$answer], 1))->assertStatus(422);
     }
 }

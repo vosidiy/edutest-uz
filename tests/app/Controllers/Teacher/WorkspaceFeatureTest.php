@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Tests\App\Controllers\Teacher;
 
 use App\Models\UserModel;
+use App\Services\AttemptSnapshotService;
 use App\Services\AuthService;
-use App\Services\QuizPaperService;
 use App\Services\TeacherQueryService;
 use App\Services\TeacherResultsService;
 use CodeIgniter\Test\FeatureTestTrait;
@@ -27,238 +27,92 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $this->queries = new TeacherQueryService($this->db, $this->media);
         Services::injectMock('teacherQueries', $this->queries);
         Services::injectMock('quizAuthoring', $this->authoring);
-        Services::injectMock('teacherResults', new TeacherResultsService($this->db, $this->media, new QuizPaperService($this->db, $this->media)));
+        Services::injectMock('teacherResults', new TeacherResultsService(
+            $this->db,
+            $this->media,
+            new AttemptSnapshotService($this->db, $this->media),
+            $this->player,
+        ));
         Services::injectMock('auth', new AuthService(new UserModel($this->db), service('session')));
     }
 
     protected function tearDown(): void
     {
-        foreach (['teacherQueries', 'quizAuthoring', 'teacherResults', 'auth'] as $name) Services::resetSingle($name);
+        foreach (['teacherQueries', 'quizAuthoring', 'teacherResults', 'auth'] as $name) {
+            Services::resetSingle($name);
+        }
         service('session')->destroy();
         $_SESSION = [];
         parent::tearDown();
     }
 
-    public function testQuizCardsExposeOnlyMvpActivityWithoutLoadingAnswerDocuments(): void
-    {
-        $quiz = $this->quiz();
-        $first = $this->startQuiz($quiz);
-        $this->db->table('attempts')->where('public_id', $first['attemptId'])->update([
-            'status' => 'completed', 'score' => 0, 'percent' => '0.00',
-            'finished_at' => '2026-01-01 21:30:00', 'ended_reason' => 'completed',
-        ]);
-        $this->startQuiz($quiz);
-        $this->db->table('quizzes')->where('public_id', $quiz['publicId'])->update(['mode' => 'practice', 'email_mode' => 'hidden', 'practice_starts' => 12]);
-        $other = $this->quiz();
-        $this->startQuiz($other);
-
-        $library = $this->queries->library($quiz['owner'], [], 'Asia/Tashkent');
-        $row = $library['rows'][0];
-        $this->assertSame(2, $row['questionCount']);
-        $this->assertSame(1, $row['assessmentSubmissions']);
-        $this->assertSame(12, $row['practiceStarts']);
-        $this->assertNull($row['cover']);
-        $this->assertNotNull($row['resultsUrl']);
-        $this->assertArrayNotHasKey('inProgressAttempts', $row);
-        $this->assertArrayNotHasKey('averagePercent', $row);
-        $this->assertArrayNotHasKey('latestSubmission', $row);
-        $this->assertArrayNotHasKey('responses', $row);
-        $this->assertArrayNotHasKey('id', $row);
-
-        $this->db->table('quizzes')->where('public_id', $quiz['publicId'])->update(['status' => 'archived', 'deleted_at' => '2026-01-02 00:00:00']);
-        $this->assertSame([], $this->queries->library($quiz['owner'])['rows']);
-        $trashed = $this->queries->library($quiz['owner'], ['status' => 'trash']);
-        $this->assertNull($trashed['rows'][0]['editUrl']);
-        $this->assertTrue($trashed['rows'][0]['deleted']);
-        $emptyDashboard = $this->withSession([AuthService::SESSION_KEY => $quiz['owner']])->get('/dashboard');
-        $emptyDashboard->assertOK();
-        $emptyDashboard->assertDontSee('aria-label="Quiz pagination"');
-    }
-
-    public function testFinalizedAttemptSortingUsesFinalizedCounts(): void
-    {
-        $low = $this->quiz();
-        $high = $this->quiz();
-        $this->db->table('quizzes')->where('public_id', $high['publicId'])->update(['user_id' => $low['owner'], 'title' => 'High scoring quiz']);
-        foreach ([[$low, '0.00'], [$high, '80.00'], [$high, '80.00']] as [$quiz, $percent]) {
-            $attempt = $this->startQuiz($quiz);
-            $this->db->table('attempts')->where('public_id', $attempt['attemptId'])->update([
-                'status' => 'completed', 'finished_at' => '2026-01-01 01:00:00', 'ended_reason' => 'completed',
-                'score' => (int) round((float) $percent * 2 / 100), 'percent' => $percent,
-            ]);
-        }
-        $rows = $this->queries->library($low['owner'], ['sort' => 'submissions_desc'])['rows'];
-        $this->assertSame($high['publicId'], $rows[0]['publicId']);
-        $this->assertSame(2, $rows[0]['assessmentSubmissions']);
-        $this->assertArrayNotHasKey('averagePercent', $rows[0]);
-    }
-
-    public function testQuizCardUsesSignedWorkingCoverInsteadOfDefaultIcon(): void
-    {
-        $quiz = $this->quiz();
-        $record = $this->db->table('quizzes')->select('id')->where('public_id', $quiz['publicId'])->get()->getRowArray();
-        $quizId = (int) $record['id'];
-        $filename = str_repeat('a', 40) . '.png';
-        $relative = 'quiz-media/' . $quiz['owner'] . '/' . $quizId . '/' . $filename;
-        $directory = $this->mediaRoot . '/' . $quiz['owner'] . '/' . $quizId;
-        if (! is_dir($directory)) mkdir($directory, 0750, true);
-        file_put_contents($directory . '/' . $filename, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='));
-        $this->db->table('quizzes')->where('id', $quizId)->update(['cover_src' => $relative]);
-
-        $row = $this->queries->library($quiz['owner'])['rows'][0];
-        $this->assertSame('image', $row['cover']['type']);
-        $this->assertStringStartsWith(site_url('media/'), $row['cover']['url']);
-        $this->assertFileExists($this->media->resolveSigned(basename($row['cover']['url']))['path']);
-        $this->assertArrayNotHasKey('cover_src', $row);
-
-        $response = $this->withSession([AuthService::SESSION_KEY => $quiz['owner']])->get('/dashboard');
-        $response->assertOK();
-        $response->assertSee('class="quiz-card-cover"');
-        $response->assertDontSee('images/icon-quiz.png');
-    }
-
-    public function testLegacyFiltersAreTranslatedAndUnrecognizedInputsAreIgnored(): void
-    {
-        $url = $this->queries->legacyDashboardUrl(['lifecycle' => 'deleted', 'q' => 'Algebra', 'sort' => 'score_desc', 'page' => 3, 'redirect' => 'https://foreign.invalid'], 'results');
-        parse_str(parse_url($url, PHP_URL_QUERY), $filters);
-        $this->assertSame(['status' => 'trash', 'sort' => 'updated_desc', 'page' => '3'], $filters);
-        $quiz = $this->quiz();
-        $this->assertSame([], $this->queries->library($quiz['owner'] + 100)['rows']);
-    }
-
-    public function testFiltersSortsPaginationAndEmptyStates(): void
-    {
-        $quiz = $this->quiz();
-        $owner = $quiz['owner'];
-        $this->authoring->create($owner, 'Anonymous practice', 'practice');
-        $archived = $this->authoring->create($owner, 'Archived assessment', 'assessment');
-        $this->authoring->transition($owner, $archived['publicId'], 'archive');
-        $trashed = $this->authoring->create($owner, 'Trashed assessment', 'assessment');
-        $this->authoring->transition($owner, $trashed['publicId'], 'trash');
-        $this->assertSame(3, $this->queries->library($owner)['pagination']['total']);
-        $this->assertSame(1, $this->queries->library($owner, ['status' => 'archived'])['pagination']['total']);
-        $this->assertSame(1, $this->queries->library($owner, ['status' => 'trash'])['pagination']['total']);
-        $practice = $this->queries->library($owner, ['mode' => 'practice', 'status' => 'draft']);
-        $this->assertCount(1, $practice['rows']);
-        $this->assertNull($practice['rows'][0]['resultsUrl']);
-        $this->assertArrayNotHasKey('averagePercent', $practice['rows'][0]);
-        foreach (['updated_desc', 'created_desc', 'title_asc', 'submissions_desc'] as $sort) {
-            $this->assertCount(3, $this->queries->library($owner, ['sort' => $sort])['rows']);
-        }
-        for ($i = 0; $i < 21; $i++) $this->authoring->create($owner, sprintf('Page %02d', $i), 'assessment');
-        $page = $this->queries->library($owner, ['sort' => 'title_asc', 'page' => 999]);
-        $this->assertSame(2, $page['pagination']['page']);
-        $this->assertCount(4, $page['rows']);
-        $this->assertSame('updated_desc', $this->queries->normalizeFilters(['sort' => 'DROP TABLE quizzes'])['sort']);
-        $this->assertSame(['status', 'mode', 'sort', 'page'], array_keys($this->queries->normalizeFilters(['q' => 'ignored', 'reports' => '1', 'view' => 'trash'])));
-    }
-
-    public function testDashboardAndCompatibilityRedirectsAreOwnerScoped(): void
-    {
-        $quiz = $this->quiz();
-        $this->authoring->create($quiz['owner'], '<script>unsafe title</script>', 'assessment');
-        $other = $this->quiz();
-        $this->db->table('quizzes')->where('public_id', $other['publicId'])->update(['title' => 'Other private quiz']);
-        $session = [AuthService::SESSION_KEY => $quiz['owner']];
-        $response = $this->withSession($session)->get('/dashboard');
-        $response->assertOK();
-        $response->assertSee('teacher-topbar');
-        $response->assertSee('data-account-menu');
-        $response->assertSee('class="dropdown"');
-        $response->assertSee('class="dropdown-item"');
-        $response->assertSee('href="' . site_url('account') . '"');
-        $response->assertDontSee('account-popover');
-        $response->assertSee('create-quiz-dialog');
-        $response->assertSee('class="card quiz-card"');
-        $response->assertSee('class="quiz-card-media"');
-        $response->assertSee('class="quiz-card-media" href="' . site_url('quizzes/' . $quiz['publicId'] . '/edit') . '"');
-        $response->assertSee('src="' . base_url('images/icon-quiz.png') . '"');
-        $response->assertSee('class="quiz-card-actions"');
-        $response->assertSee('class="dropdown"');
-        $response->assertDontSee('dashboard-metrics');
-        $response->assertDontSee('library-tabs');
-        $response->assertDontSee('name="q"');
-        $response->assertDontSee('name="reports"');
-        $response->assertDontSee('class="menu"');
-        $response->assertDontSee('aria-label="Quiz pagination"');
-        $response->assertDontSee('teacher-sidebar');
-        $response->assertDontSee('Other private quiz');
-        $this->assertStringContainsString('&lt;script&gt;unsafe title&lt;/script&gt;', $response->response()->getBody());
-        $this->assertStringContainsString('no-store', $response->response()->getHeaderLine('Cache-Control'));
-        foreach (['/quizzes' => 'active', '/quizzes/archived' => 'archived', '/quizzes/trash' => 'trash', '/results' => 'results'] as $url => $source) {
-            $input = ['q' => 'Capital', 'sort' => 'title_asc', 'page' => '2', 'lifecycle' => 'deleted'];
-            $this->withSession($session)->get($url . '?' . http_build_query($input))
-                ->assertRedirectTo($this->queries->legacyDashboardUrl($input, $source));
-        }
-    }
-
-    public function testDashboardPagerUsesPreviousAndNextWithOnlySupportedFilters(): void
-    {
-        $quiz = $this->quiz();
-        for ($i = 0; $i < 41; $i++) {
-            $this->authoring->create($quiz['owner'], sprintf('Pager quiz %02d', $i), 'assessment');
-        }
-
-        $session = [AuthService::SESSION_KEY => $quiz['owner']];
-        $query = static fn (int $page): string => http_build_query([
-            'status' => 'draft',
-            'mode' => 'assessment',
-            'sort' => 'title_asc',
-            'ignored' => 'drop-me',
-            'page' => $page,
-        ]);
-
-        $first = html_entity_decode($this->withSession($session)->get('/dashboard?' . $query(1))->response()->getBody(), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $this->assertStringNotContainsString('rel="prev"', $first);
-        $this->assertStringContainsString('rel="next"', $first);
-        $this->assertStringContainsString('status=draft&mode=assessment&sort=title_asc&page=2', $first);
-        $this->assertStringNotContainsString('ignored=drop-me', $first);
-
-        $middle = html_entity_decode($this->withSession($session)->get('/dashboard?' . $query(2))->response()->getBody(), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $this->assertStringContainsString('rel="prev"', $middle);
-        $this->assertStringContainsString('rel="next"', $middle);
-        $this->assertStringContainsString('status=draft&mode=assessment&sort=title_asc&page=1', $middle);
-        $this->assertStringContainsString('status=draft&mode=assessment&sort=title_asc&page=3', $middle);
-        $this->assertStringNotContainsString('ignored=drop-me', $middle);
-
-        $last = html_entity_decode($this->withSession($session)->get('/dashboard?' . $query(3))->response()->getBody(), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $this->assertStringContainsString('rel="prev"', $last);
-        $this->assertStringNotContainsString('rel="next"', $last);
-        $this->assertStringNotContainsString('ignored=drop-me', $last);
-    }
-
-    public function testQuizHeadersAreSharedAndHistoricalReportsKeepUnavailableBuilder(): void
+    public function testLibraryIsAssessmentOnlyAndCountsFinalizedAttempts(): void
     {
         $quiz = $this->quiz();
         $attempt = $this->startQuiz($quiz);
+        $answers = [$this->submission($attempt, 0), $this->submission($attempt, 1)];
+        $this->player->assessment->finish(
+            $attempt['attemptId'],
+            $attempt['credential'],
+            $this->finishBody($attempt, $answers, 2),
+        );
+
+        $row = $this->queries->library($quiz['owner'])['rows'][0];
+        self::assertSame(2, $row['questionCount']);
+        self::assertSame(1, $row['assessmentSubmissions']);
+        self::assertNotNull($row['resultsUrl']);
+        self::assertArrayNotHasKey('mode', $row);
+        self::assertArrayNotHasKey('practiceStarts', $row);
+    }
+
+    public function testFiltersOnlyAcceptDraftPublishedAndTrash(): void
+    {
+        $quiz = $this->quiz();
+        $draft = $this->authoring->create($quiz['owner'], 'Draft quiz');
+        $trash = $this->authoring->create($quiz['owner'], 'Trash quiz');
+        $this->authoring->transition($quiz['owner'], $trash['publicId'], 'trash');
+
+        self::assertSame(2, $this->queries->library($quiz['owner'])['pagination']['total']);
+        self::assertSame(1, $this->queries->library($quiz['owner'], ['status' => 'published'])['pagination']['total']);
+        self::assertSame(1, $this->queries->library($quiz['owner'], ['status' => 'draft'])['pagination']['total']);
+        self::assertSame(1, $this->queries->library($quiz['owner'], ['status' => 'trash'])['pagination']['total']);
+        self::assertSame(['status', 'sort', 'page'], array_keys($this->queries->normalizeFilters(['mode' => 'practice', 'status' => 'archived'])));
+        self::assertSame('', $this->queries->normalizeFilters(['status' => 'archived'])['status']);
+        self::assertNotEmpty($draft['publicId']);
+    }
+
+    public function testDashboardAndLegacyRoutesAreOwnerScoped(): void
+    {
+        $quiz = $this->quiz();
+        $other = $this->quiz();
+        $this->db->table('quizzes')->where('public_id', $other['publicId'])->update(['title' => 'Other private quiz']);
         $session = [AuthService::SESSION_KEY => $quiz['owner']];
-        foreach (['/quizzes/' . $quiz['publicId'] . '/edit', '/results/quizzes/' . $quiz['publicId'], '/results/attempts/' . $attempt['attemptId']] as $url) {
-            $response = $this->withSession($session)->get($url);
-            $response->assertOK();
-            $response->assertSee('builder-bar');
-            $response->assertSee('Quiz builder');
-            $response->assertSee('Responses');
-            $response->assertDontSee('teacher-topbar');
-            $response->assertDontSee('teacher-sidebar');
-            if (str_contains($url, '/edit')) {
-                $body = $response->response()->getBody();
-                $response->assertSee('text-secondary text-uppercase text-sm');
-                $this->assertStringContainsString('@click="preview = true"', $body);
-                $this->assertStringContainsString('@click="preview = false"', $body);
-                $response->assertDontSee('data-save-quiz');
-                $response->assertDontSee('preview-heading');
-                $response->assertDontSee('mode-badge');
-            }
-        }
-        $this->db->table('quizzes')->where('public_id', $quiz['publicId'])->update(['status' => 'archived']);
-        foreach ([null, '2026-01-02 00:00:00'] as $deleted) {
-            $this->db->table('quizzes')->where('public_id', $quiz['publicId'])->update(['deleted_at' => $deleted]);
-            $response = $this->withSession($session)->get('/results/quizzes/' . $quiz['publicId']);
-            $response->assertOK();
-            $response->assertSee('builder-unavailable');
-            $response->assertSee('aria-disabled="true"');
-            $response->assertDontSee('/quizzes/' . $quiz['publicId'] . '/edit');
-            $this->withSession($session)->get('/results/quizzes/' . $quiz['publicId'] . '/export.csv')->assertOK();
-        }
+
+        $response = $this->withSession($session)->get('/dashboard');
+        $response->assertOK();
+        $response->assertSee('Create a quiz');
+        $response->assertSee('class="card quiz-card"');
+        $response->assertDontSee('Other private quiz');
+        $response->assertDontSee('Practice');
+        self::assertStringContainsString('no-store', $response->response()->getHeaderLine('Cache-Control'));
+
+        $this->withSession($session)->get('/quizzes')->assertRedirectTo($this->queries->legacyDashboardUrl([], 'active'));
+        $this->withSession($session)->get('/quizzes/trash')->assertRedirectTo($this->queries->legacyDashboardUrl([], 'trash'));
+    }
+
+    public function testBuilderShowsPublishOrUnpublishWithoutLegacyControls(): void
+    {
+        $quiz = $this->quiz();
+        $response = $this->withSession([AuthService::SESSION_KEY => $quiz['owner']])
+            ->get('/quizzes/' . $quiz['publicId'] . '/edit');
+
+        $response->assertOK();
+        $response->assertSee('Unpublish');
+        $response->assertSee('Questions per attempt');
+        $response->assertSee('List');
+        $response->assertSee('Grid');
+        $response->assertDontSee('Practice');
+        $response->assertDontSee('Passcode');
+        $response->assertDontSee('Short text');
     }
 }

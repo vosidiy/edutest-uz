@@ -1,3 +1,7 @@
+-- HISTORICAL PRE-REFACTOR DUMP — DO NOT IMPORT OR USE AS APPLICATION DDL.
+-- The only current schema is docs/schema.sql. For the destructive development
+-- upgrade that preserves users, import docs/attempt-snapshot-reset.sql instead.
+--
 -- phpMyAdmin SQL Dump
 -- version 5.2.3
 -- https://www.phpmyadmin.net/

@@ -10,20 +10,46 @@ final class DefinitionService
 {
     public function assertReady(array $document): void
     {
-        $settings = $document['settings'];
-        $valid = trim($document['title']) !== '' && $document['questions'] !== []
-            && (! $settings['showExplain'] || $settings['showAnswers'])
-            && ($settings['mode'] !== 'practice' || (! $settings['cheatCheck'] && $settings['emailMode'] === 'hidden' && $settings['phoneMode'] === 'hidden'));
-        foreach ($document['questions'] as $question) {
-            $valid = $valid && trim($question['content']) !== '';
-            if ($question['type'] === 'short_text') {
-                $valid = $valid && count(array_filter($question['acceptedAnswers'], static fn ($answer): bool => is_string($answer) && ScoringService::normalize($answer) !== '')) > 0;
-            } else {
-                $valid = $valid && count($question['options']) >= 2 && count($question['correctCodes']) >= 1
-                    && ($question['type'] === 'multi_select' || ($question['type'] === 'single_choice' && count($question['correctCodes']) === 1));
-                foreach ($question['options'] as $option) $valid = $valid && (trim($option['content']) !== '' || $option['media'] !== null);
+        $quiz = $document['quiz'] ?? null;
+        $questions = $document['questions'] ?? null;
+        $valid = is_array($quiz)
+            && is_array($questions)
+            && array_is_list($questions)
+            && $questions !== []
+            && trim((string) ($quiz['title'] ?? '')) !== ''
+            && in_array($quiz['feedback'] ?? null, ['at_end', 'after_each'], true)
+            && is_int($quiz['timeLimitSec'] ?? null)
+            && $quiz['timeLimitSec'] >= 30
+            && $quiz['timeLimitSec'] <= 7200
+            && $quiz['timeLimitSec'] % 30 === 0
+            && (! (bool) ($quiz['showExplain'] ?? false) || (bool) ($quiz['showAnswers'] ?? false));
+
+        foreach (is_array($questions) ? $questions : [] as $question) {
+            $options = is_array($question['options'] ?? null) ? $question['options'] : [];
+            $codes = [];
+            $valid = $valid
+                && trim((string) ($question['content'] ?? '')) !== ''
+                && in_array($question['optionsLayout'] ?? null, ['list', 'grid'], true)
+                && count($options) >= 2
+                && is_string($question['correctCode'] ?? null);
+
+            foreach ($options as $option) {
+                $code = $option['code'] ?? null;
+                $valid = $valid
+                    && is_string($code)
+                    && $code !== ''
+                    && ! isset($codes[$code])
+                    && (trim((string) ($option['content'] ?? '')) !== '' || ($option['media'] ?? null) !== null);
+                if (is_string($code)) {
+                    $codes[$code] = true;
+                }
             }
+
+            $valid = $valid && isset($codes[(string) ($question['correctCode'] ?? '')]);
         }
-        if (! $valid) throw new PlayerException('invalid_quiz', 409);
+
+        if (! $valid) {
+            throw new PlayerException('invalid_quiz', 409);
+        }
     }
 }

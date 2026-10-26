@@ -20,7 +20,7 @@ final class PlayerRequestFilter implements FilterInterface
             || in_array($request->getHeaderLine('Sec-Fetch-Site'), ['cross-site', 'same-site'], true)) return $this->error('origin_rejected', 403);
         if (in_array($method, ['POST', 'PUT'], true) && ! preg_match('~^application/json(?:\s*;|$)~i', $request->getHeaderLine('Content-Type'))) return $this->error('invalid_json', 415);
         if (strlen((string) $request->getBody()) > 1048576) return $this->error('request_too_large', 413);
-        // Deliberately endpoint-wide, without IP, user-agent, credential, or practice-session keys.
+        // Deliberately endpoint-wide, without IP, user-agent, or credential keys.
         $parts = explode('/', trim($request->getUri()->getPath(), '/'));
         $index = array_search('player', $parts, true);
         $endpoint = $index === false ? 'unknown' : ($parts[$index + 1] ?? 'unknown');

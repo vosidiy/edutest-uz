@@ -21,7 +21,7 @@ abstract class ApiController extends BaseController
             $status = $error->status;
             $body = ['error' => ['code' => $error->errorCode, 'message' => $error->getMessage(), 'fields' => (object) $error->fields]];
         } catch (Throwable $error) {
-            // Never record a request, credential, answer, query, or practice body.
+            // Never record a request, credential, answer, or query body.
             log_message('error', 'Student API failure ({type}).', ['type' => $error::class]);
             $status = 500;
             $body = ['error' => ['code' => 'server_error', 'message' => lang('Player.errors.server_error'), 'fields' => (object) []]];

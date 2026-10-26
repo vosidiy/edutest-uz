@@ -1,78 +1,55 @@
-# Assessment answer storage
+# Attempt answer storage
 
-The filename is retained for existing documentation links, but assessment answers are no longer stored in `attempts.responses`. The canonical model is one compact attempt summary plus one immutable `attempt_answers` row for every question presented to that attempt.
+Assessment answers are stored in `attempts.answers`; there is no per-question answer table. The same attempt row also owns its immutable `snapshot`, answer version, timing, lifecycle, and result summary.
 
-## Ownership of data
+## Progress document
 
-- `quiz_papers` stores immutable paper schema version 3: published quiz metadata, settings, questions, answer keys, explanations, and private media references. New papers omit the removed instructions property; older papers may retain it as ignored immutable data. A paper is shared by all starts that receive that published revision.
-- `attempts` stores searchable run-level data: the paper, public identifier, hashed bearer credential, retry key, shuffle seed, disclosed identity, IP/browser details, lifecycle, authoritative deadline, integer score, and percentage.
-- `attempt_answers` stores presented order and the student's confirmed answer. It has no foreign key to mutable live questions; `question_id` is interpreted against the attempt's bound paper.
-- Practice stores no individual attempt or answer rows.
+```json
+[
+  {
+    "questionId": "12",
+    "answerCode": "opaque-code",
+    "answeredAt": "2026-10-25T12:00:00.000Z"
+  },
+  {
+    "questionId": "13",
+    "answerCode": null,
+    "answeredAt": "2026-10-25T12:00:20.000Z"
+  }
+]
+```
 
-## `attempt_answers` state
+Progress is an ordered confirmed prefix of `snapshot.questions`. An option code is one of that question's presented stable codes. A null code with a timestamp means the student explicitly skipped it. Submitted/skipped entries are locked; no backtracking is supported.
 
-Every assessment start inserts all question rows in the same transaction as the attempt:
+The progress endpoint receives the complete prefix:
 
-| Column | Purpose |
-| --- | --- |
-| `attempt_id` | Owning assessment; cascades when the attempt is deleted. |
-| `question_id` | Historical question identifier from the immutable paper. |
-| `pos` | Exact presented question position after shuffling. |
-| `presented_option_codes` | JSON array preserving the exact presented A/B/C option order; empty for short text. |
-| `status` | `not_reached`, `answered`, or `skipped`. |
-| `selected_option_codes` | Confirmed choice codes, or `NULL` for short text/skips/unreached rows. |
-| `text_answer` | Confirmed short-text value, otherwise `NULL`. |
-| `is_correct` | Server-calculated result; `NULL` until confirmation and `0`/`1` afterward. |
-| `answered_at` | Server receipt time; `NULL` while not reached. |
-| `client_answered_at` | Reported confirmation occurrence time; nullable for historical rows. Retried operations reuse it. |
+```json
+{"answerVersion": 2, "answers": []}
+```
 
-The unique `(attempt_id, question_id)` and `(attempt_id, pos)` keys prevent duplicate question rows and ambiguous order. Database checks enforce the valid null/value combinations for each status. Application validation additionally rejects unknown questions, foreign or duplicate option codes, wrong answer shapes, and invalid text.
+A higher version replaces the stored prefix. An identical same-version retry is a no-op; a changed same-version body conflicts; a lower version is stale. The browser keeps the document in a localStorage outbox and retries silently.
 
-## Confirmation protocol
+## Final document
 
-The browser keeps unconfirmed selections locally. Submit or Skip appends one durable local operation and calls:
+Finish sends every snapshot question in order:
 
-```http
-PUT /api/v1/player/assessments/{attemptPublicId}/answers/{questionId}
-Authorization: Bearer {attemptCredential}
-Content-Type: application/json
-
+```json
 {
-  "status": "answered",
-  "answerCodes": ["5605a8cabf9b24d3"],
-  "textAnswer": "",
-  "clientAnsweredAt": "2026-10-01T12:01:00.000Z",
-  "clientActivityAt": "2026-10-01T12:01:00.000Z"
+  "answerVersion": 4,
+  "answers": [],
+  "finishReason": "completed",
+  "clientFinishedAt": "2026-10-25T12:03:00.000Z"
 }
 ```
 
-The service locks the attempt, resolves expiry, validates against the bound paper, calculates correctness itself, and conditionally updates only a `not_reached` row. An identical retry is a no-op. A different retry for an already confirmed row returns `answer_locked`. Confirmations for different questions do not replace one another, so delayed or out-of-order delivery cannot erase newer answers.
+Reasons are `completed`, `exited`, or `expired`. For exit/expiry, unreached tail entries use `answerCode:null` and `answeredAt:null`. For normal completion, every entry has an answer timestamp (explicit skips still have a timestamp).
 
-The response is a small acknowledgement: `attemptId`, `questionId`, `answerStatus`, `receivedAt`, current status/deadline/reason, client activity, and late-sync flag. It contains neither the full paper nor other answers. Grading reads the bound paper directly, without shuffling or creating signed media URLs.
+Finish is authoritative over the latest checkpoint. Under an attempt row lock the server validates shape, order, option membership, timestamps, version, and reason; calculates the result from `snapshot.questions[*].correctCode`; and atomically writes the complete answers, terminal status, reason, score, maximum, percentage, and finish time.
 
-After all queued confirmations, Finish sends `finishReason`, `clientFinishedAt`, `clientActivityAt`, and `confirmedCount`. Normal completion requires every row; timeout or explicit Quit requires a confirmed prefix followed by unreached rows, and Quit may use an empty prefix. Missing confirmations return retryable `incomplete_sync`. The server regrades confirmed rows and returns the official result without a quiz payload. An acknowledged Quit is `status=completed`, `ended_reason=quit`; this means synchronization is final, not that every question was reached. Identical retries return the same result; conflicting final records are rejected. The browser removes only acknowledged operations and preserves newer local work.
+An identical Finish retry returns the stored official result. Changed terminal retries conflict. A delayed valid Finish may replace a provisional lazy `abandoned/expired` result and records `late_sync=1`.
 
-## Deadlines and terminal state
+## Expiry and reporting
 
-`attempts.expires_at` is authoritative:
+An overdue in-progress attempt is lazily changed to `abandoned/expired` and graded from its latest checkpoint with the missing tail treated as skipped. This result is provisional.
 
-- Timed: `started_at + total timer`, capped by the paper's closing time.
-- Untimed: accepted `client_activity_at + 8 hours`, capped by the paper's closing time.
-
-Meaningful interactions, not receipt/retry time, extend inactivity. Untimed clients coalesce bearer-protected activity updates at most once per minute while changes exist. This internal deadline remains enforced but is not displayed as a student countdown, and routine activity waiting is excluded from pending-answer/Retry presentation. Server load, media, integrity, and passive visibility do not extend it. Timestamps are bounded by start and server time plus five seconds; continuous offline activity cannot be independently verified.
-
-Every attempt endpoint checks expiry under the attempt lock. Expiry produces provisional `abandoned` results from received work. Delayed confirmations recorded before the browser deadline remain acceptable; `late_sync` flags reconciliation. Untimed activity may revive In progress. A validated final record becomes immutable `completed`, including timeout outcomes. `finished_at` is the effective ending time, while receipt timestamps remain separate. Invalid actions still commit legitimate lazy expiry; unrelated database failures roll back. Teacher report access also resolves overdue rows. No background worker is required.
-
-## Historical review and scoring
-
-Teacher and student review combine the immutable paper with `attempt_answers`. Presented positions and option-code order reproduce the exact historical question and A/B/C layout even if the live working copy is later edited or deleted. Per-quiz reporting defaults to all statuses and obtains response/correct counts with a grouped query limited to the displayed attempt IDs. Unfinished score fields remain null; running correctness is a projection only, and browser-local unsynchronized answers cannot appear until received.
-
-Single choice and short text are full-or-zero. Multi-select uses exact-set, all-or-nothing comparison. Attempt `score` and `max_score` are integers; `percent` is an exact two-decimal summary. Client-reported correctness is never accepted.
-
-## Deployment
-
-Fresh databases import only [`schema.sql`](schema.sql). For an existing normalized-answer database, back up and stop student traffic. Apply [`offline-continuity-upgrade.sql`](offline-continuity-upgrade.sql) if it is not already installed, then apply the independent [`quit-attempt-upgrade.sql`](quit-attempt-upgrade.sql) and deploy matching code. The first adds offline-continuity fields; the second replaces only the ended-reason constraint. Both preserve records and are run manually in phpMyAdmin. Do not use the older destructive reset for this update. The application never runs schema changes automatically.
-
-## Storage benchmark
-
-The opt-in isolated-MySQL helper `tests/mysql/attempt-answers.php` measures table-plus-index allocation and single-row confirmation latency for 20-, 100-, and 500-question assessments. It validates the canonical schema first and refuses non-temporary MySQL data directories. Results depend on InnoDB page allocation, server version, row contents, buffer state, and sample size; row counts alone are not a storage estimate. Normalization intentionally trades more rows/index entries for small independent writes and simpler historical queries.
+Teacher reports decode `snapshot` and `answers` together. This reproduces exact historical wording and presentation even when the live quiz is edited, unpublished, or soft-deleted. CSV uses summary fields and protects formula-leading identity cells. Browser-local unsynchronized answers cannot appear in reports until received.

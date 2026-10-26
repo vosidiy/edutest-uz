@@ -16,8 +16,8 @@ test('result counts keep wrong and unanswered questions separate', () => {
   assert.deepEqual(resultCounts([
     {result: 'correct'},
     {result: 'wrong'},
-    {result: 'unanswered'}, // Explicit skip.
-    {result: 'unanswered'}, // Unreached after Quit or timeout.
+    {result: 'skipped'}, // Explicit skip.
+    {result: 'skipped'}, // Unreached after exit or timeout.
   ], 4), {correct: 1, wrong: 1, unanswered: 2});
 });
 

@@ -17,28 +17,42 @@ final class SchemaSqlTest extends CIUnitTestCase
         $this->assertStringContainsString('user_id BIGINT UNSIGNED NOT NULL', $sql);
         $this->assertStringNotContainsString('auth_identities', $sql);
         $this->assertStringNotContainsString('auth_groups', $sql);
-        $this->assertStringContainsString('CREATE TABLE quiz_papers', $sql);
-        $this->assertStringContainsString('paper_id BIGINT UNSIGNED NOT NULL', $sql);
-        $this->assertStringContainsString('current_paper_id BIGINT UNSIGNED NULL', $sql);
-        $this->assertStringNotContainsString('first_started_at', $sql);
-        $this->assertStringContainsString('share_token VARCHAR(64)', $sql);
-        $this->assertStringNotContainsString('frozen_at', $sql);
-        $this->assertStringContainsString('CREATE TABLE attempt_answers', $sql);
-        $this->assertStringContainsString('presented_option_codes JSON NOT NULL', $sql);
-        $this->assertStringNotContainsString('responses JSON', $sql);
-        $this->assertStringNotContainsString('start_hash', $sql);
-        $this->assertStringNotContainsString('current_pos', $sql);
-        $this->assertStringNotContainsString('CREATE TABLE attempt_items', $sql);
+        $this->assertStringContainsString('share_token CHAR(9)', $sql);
+        $this->assertStringContainsString('time_limit_sec SMALLINT UNSIGNED NOT NULL DEFAULT 7200', $sql);
+        $this->assertStringContainsString('draw_count SMALLINT UNSIGNED NULL', $sql);
+        $this->assertStringContainsString('options_layout VARCHAR(8)', $sql);
+        $this->assertStringContainsString('snapshot JSON NOT NULL', $sql);
+        $this->assertStringContainsString('answers JSON NOT NULL', $sql);
+        $this->assertStringContainsString('answer_version INT UNSIGNED NOT NULL DEFAULT 0', $sql);
+        $this->assertStringContainsString('CONSTRAINT uq_attempts_quiz_start_key UNIQUE (quiz_id, start_key)', $sql);
+        $this->assertStringContainsString('CONSTRAINT chk_attempts_score_percent CHECK', $sql);
         $this->assertStringContainsString("CHECK (status IN ('in_progress', 'completed', 'abandoned'))", $sql);
-        $this->assertStringContainsString("ended_reason IN ('completed', 'quit', 'timer_expired', 'scheduled_close', 'stale_timeout')", $sql);
+        $this->assertStringContainsString("ended_reason IN ('completed', 'exited', 'expired')", $sql);
         $this->assertStringContainsString("CHECK (media_type IS NULL OR media_type = 'image')", $sql);
-        $this->assertStringNotContainsString('points DECIMAL', $sql);
-        $this->assertStringNotContainsString('chk_questions_time_limit', $sql);
-        $this->assertStringNotContainsString('ix_item_due', $sql);
-        $this->assertStringNotContainsString('question_timeout', $sql);
-        $this->assertStringContainsString("type IN (\n        'tab_hidden',\n        'fullscreen_exit'", $sql);
-        $this->assertStringNotContainsString("'window_blur'", $sql);
-        $this->assertStringNotContainsString("'inactivity_start'", $sql);
+        foreach (['quiz_papers', 'attempt_answers', 'practice_keys', 'cheat_events', 'mode ', 'current_paper_id', 'text_answers'] as $removed) {
+            $this->assertStringNotContainsString($removed, $sql);
+        }
         $this->assertStringNotContainsString('ALTER TABLE users', $sql);
+    }
+
+    public function testDevelopmentResetPreservesUsersAndRecreatesOnlyCurrentQuizTables(): void
+    {
+        $sql = file_get_contents(ROOTPATH . 'docs/attempt-snapshot-reset.sql');
+
+        $this->assertIsString($sql);
+        $this->assertStringContainsString('SET FOREIGN_KEY_CHECKS = 0', $sql);
+        $this->assertStringContainsString('SET FOREIGN_KEY_CHECKS = 1', $sql);
+        $this->assertStringNotContainsString('DROP TABLE IF EXISTS users', $sql);
+        $this->assertStringNotContainsString('CREATE TABLE users', $sql);
+        foreach (['quizzes', 'questions', 'question_options', 'attempts'] as $table) {
+            $this->assertStringContainsString('DROP TABLE IF EXISTS ' . $table, $sql);
+            $this->assertStringContainsString('CREATE TABLE ' . $table, $sql);
+        }
+        foreach (['quiz_papers', 'attempt_answers', 'practice_keys', 'cheat_events'] as $table) {
+            $this->assertStringContainsString('DROP TABLE IF EXISTS ' . $table, $sql);
+            $this->assertStringNotContainsString('CREATE TABLE ' . $table, $sql);
+        }
+        $this->assertStringContainsString('snapshot JSON NOT NULL', $sql);
+        $this->assertStringContainsString('answers JSON NOT NULL', $sql);
     }
 }

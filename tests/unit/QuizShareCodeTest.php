@@ -14,7 +14,7 @@ final class QuizShareCodeTest extends CIUnitTestCase
         }
 
         $this->assertTrue(QuizShareCode::isValid('000000001'));
-        $this->assertTrue(QuizShareCode::isValid(str_repeat('a', 64)));
+        $this->assertFalse(QuizShareCode::isValid(str_repeat('a', 64)));
         $this->assertFalse(QuizShareCode::isValid('12345678'));
         $this->assertFalse(QuizShareCode::isValid(str_repeat('g', 64)));
     }

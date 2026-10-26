@@ -18,12 +18,11 @@ final class QuestionModel extends Model
     protected $allowedFields  = [
         'quiz_id',
         'pos',
-        'type',
         'content',
+        'options_layout',
         'media_type',
         'media_src',
         'explanation',
-        'text_answers',
     ];
     protected bool $allowEmptyInserts = false;
     protected bool $updateOnlyChanged = true;
@@ -31,7 +30,6 @@ final class QuestionModel extends Model
         'id'             => 'int',
         'quiz_id'        => 'int',
         'pos'            => 'int',
-        'text_answers'   => '?json-array',
         'created_at'     => 'datetime',
         'updated_at'     => 'datetime',
     ];

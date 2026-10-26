@@ -1,193 +1,206 @@
-export const uniqueKey = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
 const copy = value => JSON.parse(JSON.stringify(value));
-const iso = time => new Date(Math.ceil(time)).toISOString();
 const time = value => Date.parse(value);
-export const receiptOnly = settings => !settings.showScore && !settings.showAnswers && !settings.showExplain;
-const firstOpen = items => Math.max(0, items.findIndex(item => item.answerStatus === 'not_reached'));
+const nowIso = value => new Date(value).toISOString();
 
-export function createState(data, serverTime, wallTime = Date.now()) {
-  const serverItems = new Map((data.items || []).map(item => [item.questionId, item]));
-  const items = data.quiz.questions.map((question, index) => {
-    const saved = serverItems.get(question.id);
-    return saved ? copy(saved) : {questionId: question.id, status: index === 0 ? 'active' : 'pending', answerStatus: 'not_reached', answerCodes: [], textAnswer: ''};
-  });
-  const finished = data.status === 'completed';
-  const allConfirmed = items.length > 0 && items.every(item => item.answerStatus !== 'not_reached');
-  const index = finished || allConfirmed ? Math.max(0, items.length - 1) : firstOpen(items);
-  if (!finished && items[index]?.answerStatus === 'not_reached') items[index].status = 'active';
+export const receiptOnly = settings => !settings.showScore && !settings.showAnswers && !settings.showExplain;
+
+function browserQuiz(snapshot) {
+  const settings = snapshot.quiz;
   return {
-    format: 4, mode: data.mode, attemptId: data.attemptId || null, credential: data.credential,
-    quiz: data.quiz, student: data.student || null, startedAt: data.startedAt, expiresAt: data.expiresAt, deadlineReason: data.deadlineReason,
-    clientActivityAt: data.clientActivityAt || data.startedAt, activityPending: false, activitySentAt: 0,
-    serverStatus: data.status, lateSync: Boolean(data.lateSync),
-    items, index, phase: finished ? 'complete' : allConfirmed ? 'feedback' : 'answering', pendingAnswers: [], finishPending: false, finishRecord: null,
-    finishReason: finished ? data.finishReason : null, result: finished ? data.result : null, serverResult: data.result || null, events: [],
-    clock: {server: time(serverTime), wall: wallTime}, lastClock: time(serverTime),
+    title: settings.title,
+    description: settings.description,
+    shareToken: settings.shareToken,
+    cover: snapshot.cover,
+    settings: copy(settings),
+    questions: snapshot.questions.map(question => ({
+      ...copy(question),
+      type: 'single_choice',
+      correctCodes: [question.correctCode],
+    })),
+  };
+}
+
+function itemsFrom(quiz, answers) {
+  return quiz.questions.map((question, index) => {
+    const answer = answers[index];
+    return {
+      questionId: question.id,
+      status: answer ? 'locked' : (index === answers.length ? 'active' : 'pending'),
+      answerStatus: answer ? (answer.answerCode === null ? 'skipped' : 'answered') : 'not_reached',
+      answerCodes: answer?.answerCode === null || answer === undefined ? [] : [answer.answerCode],
+      textAnswer: '',
+      clientAnsweredAt: answer?.answeredAt ?? null,
+    };
+  });
+}
+
+export function createState(data) {
+  const quiz = browserQuiz(data.quiz);
+  const answers = copy(data.answers || []);
+  const terminal = data.status !== 'in_progress';
+  return {
+    format: 5,
+    shareToken: quiz.shareToken,
+    attemptId: data.attemptId,
+    credential: data.credential,
+    quiz,
+    student: copy(data.student || null),
+    startedAt: data.startedAt,
+    expiresAt: data.expiresAt,
+    answers,
+    answerVersion: Number(data.answerVersion || 0),
+    serverVersion: Number(data.answerVersion || 0),
+    items: itemsFrom(quiz, answers),
+    index: terminal ? Math.max(0, quiz.questions.length - 1) : Math.min(answers.length, Math.max(0, quiz.questions.length - 1)),
+    phase: terminal ? 'complete' : 'answering',
+    status: data.status,
+    finishReason: data.finishReason || null,
+    result: data.result || null,
+    lateSync: Boolean(data.lateSync),
+    progressPending: false,
+    finishPending: false,
+    finishRecord: null,
+    draftCode: null,
+    clock: {server: Date.now(), wall: Date.now()},
+    lastClock: Date.now(),
   };
 }
 
 export function deadlines(state) {
-  if (!state.expiresAt) return [];
-  const labels = {timer_expired: 'quizTimer', scheduled_close: 'closingTimer'};
-  return [{at: time(state.expiresAt), reason: state.deadlineReason, label: labels[state.deadlineReason] || 'quizTimer'}];
+  return [{at: time(state.expiresAt), reason: 'expired', label: 'quizTimer'}];
 }
+export const visibleDeadlines = deadlines;
 
-// Inactivity remains an enforced deadline, but it is an internal recovery rule rather than a quiz timer.
-export function visibleDeadlines(state) {
-  return deadlines(state).filter(deadline => deadline.reason !== 'stale_timeout');
-}
-
-function setFinish(state, reason, at) {
-  state.finishReason = reason; state.finishPending = state.mode === 'assessment'; state.phase = 'complete';
-  state.finishRecord = {finishReason: reason, clientFinishedAt: at, clientActivityAt: state.clientActivityAt,
-    confirmedCount: state.items.filter(item => item.answerStatus !== 'not_reached').length};
-  state.activityPending = false;
-}
-
-export function finishTimed(state, reason = state.deadlineReason) {
-  if (state.finishReason) return false;
-  setFinish(state, reason, state.expiresAt);
+export function editAnswer(state, answerCode, now = state.lastClock) {
+  if (state.finishReason || expireIfDue(state, now) || state.phase !== 'answering') return false;
+  const question = state.quiz.questions[state.index];
+  if (answerCode !== null && !question.options.some(option => option.code === answerCode)) return false;
+  state.draftCode = answerCode;
+  state.items[state.index].answerCodes = answerCode === null ? [] : [answerCode];
   return true;
 }
 
-export function quitQuiz(state, now = state.lastClock) {
-  if (expireIfDue(state, now) || state.finishReason) return false;
-  recordActivity(state, now);
-  setFinish(state, 'quit', state.clientActivityAt);
-  return true;
-}
-
-export function expireIfDue(state, now = state.lastClock) {
-  if (!state.finishReason && state.expiresAt && now >= time(state.expiresAt)) return finishTimed(state);
-  return false;
-}
-
-export function recordActivity(state, now = state.lastClock) {
-  if (expireIfDue(state, now) || state.finishReason) return false;
-  state.clientActivityAt = iso(Math.max(now, time(state.clientActivityAt)));
-  if (state.quiz.settings.timeLimitSec === null) {
-    let deadline = time(state.clientActivityAt) + 8 * 60 * 60 * 1000;
-    state.deadlineReason = 'stale_timeout';
-    const closes = time(state.quiz.settings.closesAt);
-    if (Number.isFinite(closes) && closes < deadline) { deadline = closes; state.deadlineReason = 'scheduled_close'; }
-    state.expiresAt = iso(deadline);
-    state.activityPending = state.mode === 'assessment';
-  }
-  return true;
-}
-
-export function editAnswer(state, answer, now = state.lastClock) {
-  if (expireIfDue(state, now) || state.finishReason || state.items[state.index].status !== 'active') return false;
-  recordActivity(state, now);
-  Object.assign(state.items[state.index], answer);
-  return true;
-}
-
-export function submitAnswer(state, reason = 'answered', now = state.lastClock) {
+export function submitAnswer(state, skipped = false, now = state.lastClock) {
+  if (state.finishReason || expireIfDue(state, now) || state.phase !== 'answering') return false;
+  if (!skipped && state.draftCode === null) return false;
+  const answerCode = skipped ? null : state.draftCode;
+  const answeredAt = nowIso(now);
+  state.answers.push({questionId: state.quiz.questions[state.index].id, answerCode, answeredAt});
+  state.answerVersion++;
+  state.progressPending = true;
   const item = state.items[state.index];
-  if (expireIfDue(state, now) || state.finishReason || item.status !== 'active') return false;
-  recordActivity(state, now);
-  if (reason === 'skipped') Object.assign(item, {answerCodes: [], textAnswer: ''});
   item.status = 'locked';
-  item.answerStatus = reason === 'skipped' ? 'skipped' : 'answered';
-  item.clientAnsweredAt = state.clientActivityAt;
-  if (state.mode === 'assessment') state.pendingAnswers.push({
-    questionId: item.questionId, status: item.answerStatus, answerCodes: [...item.answerCodes].sort(), textAnswer: item.textAnswer || '',
-    clientAnsweredAt: item.clientAnsweredAt, clientActivityAt: state.clientActivityAt,
-  });
+  item.answerStatus = answerCode === null ? 'skipped' : 'answered';
+  item.answerCodes = answerCode === null ? [] : [answerCode];
+  item.clientAnsweredAt = answeredAt;
   state.phase = 'feedback';
+  state.draftCode = null;
   return true;
 }
 
 export function nextQuestion(state, now = state.lastClock) {
-  if (expireIfDue(state, now) || state.finishReason || state.phase !== 'feedback') return false;
-  recordActivity(state, now);
-  if (state.index === state.items.length - 1) { setFinish(state, 'completed', state.clientActivityAt); return true; }
+  if (state.finishReason || expireIfDue(state, now) || state.phase !== 'feedback') return false;
+  if (state.index >= state.quiz.questions.length - 1) {
+    finishQuiz(state, 'completed', nowIso(now));
+    return true;
+  }
   state.index++;
-  const item = state.items[state.index];
-  if (item.status === 'pending') item.status = 'active';
-  state.phase = item.status === 'locked' ? 'feedback' : 'answering';
+  state.items[state.index].status = 'active';
+  state.phase = 'answering';
   return true;
 }
 
+function finishQuiz(state, reason, clientFinishedAt) {
+  if (state.finishReason) return false;
+  while (state.answers.length < state.quiz.questions.length) {
+    const question = state.quiz.questions[state.answers.length];
+    state.answers.push({questionId: question.id, answerCode: null, answeredAt: null});
+  }
+  state.answerVersion++;
+  state.finishReason = reason;
+  state.finishPending = true;
+  state.phase = 'complete';
+  state.status = 'completed';
+  state.finishRecord = {
+    answerVersion: state.answerVersion,
+    answers: copy(state.answers),
+    finishReason: reason,
+    clientFinishedAt,
+  };
+  return true;
+}
+
+export function finishTimed(state) {
+  return finishQuiz(state, 'expired', state.expiresAt);
+}
+
+export function quitQuiz(state, now = state.lastClock) {
+  if (expireIfDue(state, now)) return true;
+  return finishQuiz(state, 'exited', nowIso(now));
+}
+
+export function expireIfDue(state, now = state.lastClock) {
+  if (!state.finishReason && now >= time(state.expiresAt)) return finishTimed(state);
+  return false;
+}
+
 export function hasPending(state) {
-  if (state.format !== 4) return state.mode === 'assessment'; // Preserve unsupported work on exit, too.
-  return state.mode === 'assessment' && (state.pendingAnswers.length > 0 || state.finishPending || state.events.length > 0 || state.activityPending);
+  return state?.format === 5 && (state.progressPending || state.finishPending);
 }
-export function hasUploadPending(state) {
-  return state?.mode === 'assessment' && (state.pendingAnswers.length > 0 || state.finishPending);
-}
-export function isFullscreenExit(previouslyActive, currentlyActive) { return Boolean(previouslyActive) && !currentlyActive; }
+export const hasUploadPending = hasPending;
 
-function sameAnswer(item, operation) {
-  return JSON.stringify([...(item.answerCodes || [])].sort()) === JSON.stringify([...(operation.answerCodes || [])].sort())
-    && (item.textAnswer || '') === (operation.textAnswer || '') && item.answerStatus === operation.status;
-}
-
-/** Small acknowledgements never replace local question state or drafts. */
-export function acknowledge(state, ack, operation = null) {
-  if (ack.attemptId !== state.attemptId) throw new Error('Attempt membership changed');
-  if (operation) {
-    if (ack.questionId !== operation.questionId || ack.answerStatus !== operation.status || state.pendingAnswers[0] !== operation) throw new Error('Invalid answer acknowledgement');
-    state.pendingAnswers.shift();
-  }
-  state.serverStatus = ack.status; state.lateSync ||= Boolean(ack.lateSync);
-  if (ack.clientActivityAt && time(ack.clientActivityAt) >= time(state.clientActivityAt)) {
-    state.activityPending = false;
-    state.expiresAt = ack.expiresAt; state.deadlineReason = ack.deadlineReason;
-  }
-  // Only an explicit Finish acknowledgement can seal the local run.
-  if (ack.result?.confirmed) {
-    if (state.pendingAnswers.length) throw new Error('Completion preceded answer acknowledgements');
-    state.result = ack.result; state.finishPending = false; state.finishReason = ack.finishReason; state.phase = 'complete';
-  }
+function sameAnswers(left, right) {
+  if (left.length !== right.length) return false;
+  return left.every((answer, index) => answer.questionId === right[index].questionId
+    && answer.answerCode === right[index].answerCode
+    && (answer.answeredAt === right[index].answeredAt
+      || (answer.answeredAt !== null && right[index].answeredAt !== null
+        && time(answer.answeredAt) === time(right[index].answeredAt))));
 }
 
-/** Resume/recovery merges saved confirmations while preserving local drafts and unfinished uploads. */
 export function mergeServer(state, server) {
   if (server.attemptId !== state.attemptId) return false;
-  const remote = new Map(server.items.map(item => [item.questionId, item]));
-  const pending = new Map(state.pendingAnswers.map(operation => [operation.questionId, operation]));
-  const items = [];
-  for (const local of state.items) {
-    const saved = remote.get(local.questionId);
-    if (!saved) return false;
-    const operation = pending.get(local.questionId);
-    if (saved.answerStatus !== 'not_reached') {
-      if (operation && (!sameAnswer(saved, operation) || (saved.clientAnsweredAt && time(saved.clientAnsweredAt) !== time(operation.clientAnsweredAt)))) return false;
-      items.push(copy(saved));
-    } else {
-      if (server.status === 'completed' && operation) return false;
-      items.push(copy(local));
-    }
+  const remoteVersion = Number(server.answerVersion || 0);
+  const remoteAnswers = copy(server.answers || []);
+  if (remoteVersion > state.answerVersion) return false;
+  if (remoteVersion === state.answerVersion) {
+    const localPrefix = state.answers.slice(0, remoteAnswers.length);
+    if (!sameAnswers(localPrefix, remoteAnswers)) return false;
   }
-  if (server.status === 'completed' && state.finishRecord
-      && (server.finishReason !== state.finishRecord.finishReason || time(server.result.finishedAt) !== time(state.finishRecord.clientFinishedAt))) return false;
-  state.items = items;
-  state.pendingAnswers = state.pendingAnswers.filter(operation => remote.get(operation.questionId).answerStatus === 'not_reached');
-  for (const item of items) {
-    if (item.answerStatus !== 'not_reached' && item.clientAnsweredAt && remote.get(item.questionId).answerStatus === 'not_reached'
-        && !state.pendingAnswers.some(operation => operation.questionId === item.questionId)) {
-      state.pendingAnswers.push({questionId:item.questionId, status:item.answerStatus, answerCodes:[...item.answerCodes].sort(),
-        textAnswer:item.textAnswer || '', clientAnsweredAt:item.clientAnsweredAt, clientActivityAt:item.clientAnsweredAt});
-    }
-  }
-  const positions = new Map(items.map((item,index) => [item.questionId,index]));
-  state.pendingAnswers.sort((a,b) => positions.get(a.questionId) - positions.get(b.questionId));
-  state.serverStatus = server.status; state.serverResult = server.result; state.lateSync ||= Boolean(server.lateSync);
-  if (server.student) state.student = copy(server.student);
-  if (time(server.clientActivityAt) >= time(state.clientActivityAt)) {
-    state.activityPending = false; state.clientActivityAt = server.clientActivityAt;
-    state.expiresAt = server.expiresAt; state.deadlineReason = server.deadlineReason;
-  }
+  state.serverVersion = Math.max(state.serverVersion, remoteVersion);
+  state.lateSync ||= Boolean(server.lateSync);
+
   if (server.status === 'completed') {
-    state.result = server.result; state.finishReason = server.finishReason; state.finishPending = false; state.activityPending = false; state.phase = 'complete';
-  } else if (!state.finishReason && state.phase !== 'feedback') {
-    state.index = firstOpen(state.items);
-    if (state.items[state.index].answerStatus === 'not_reached') state.items[state.index].status = 'active';
-    else {
-      // All answers may be received while the Finish response was lost.
-      state.index = state.items.length - 1; state.phase = 'feedback';
+    state.answers = remoteAnswers;
+    state.answerVersion = remoteVersion;
+    state.serverVersion = remoteVersion;
+    state.items = itemsFrom(state.quiz, remoteAnswers);
+    state.index = Math.max(0, state.items.length - 1);
+    state.status = server.status;
+    state.finishReason = server.finishReason;
+    state.result = server.result;
+    state.progressPending = false;
+    state.finishPending = false;
+    state.finishRecord = null;
+    state.phase = 'complete';
+  } else if (!state.finishPending) {
+    state.status = server.status;
+    if (server.status === 'abandoned') {
+      state.finishReason = server.finishReason;
+      state.result = server.result;
+      state.phase = 'complete';
+    }
+  }
+  if (server.quiz?.questions) {
+    const renewed = browserQuiz(server.quiz);
+    state.quiz.cover = renewed.cover;
+    const incoming = new Map(renewed.questions.map(question => [question.id, question]));
+    for (const question of state.quiz.questions) {
+      const fresh = incoming.get(question.id);
+      if (!fresh) continue;
+      question.media = fresh.media;
+      const options = new Map(fresh.options.map(option => [option.id, option]));
+      for (const option of question.options) option.media = options.get(option.id)?.media || null;
     }
   }
   return true;
@@ -195,13 +208,16 @@ export function mergeServer(state, server) {
 
 export class PlayerClock {
   constructor(state, monotonic = () => performance.now(), wall = () => Date.now()) {
-    this.state = state; this.monotonic = monotonic; this.wall = wall;
-    this.base = Math.max(state.lastClock || 0, state.clock.server + Math.max(0, wall() - state.clock.wall));
+    this.state = state;
+    this.monotonic = monotonic;
+    this.wall = wall;
+    this.base = Math.max(state.lastClock || 0, wall());
     this.mark = monotonic();
   }
   now() {
-    const value = Math.max(this.base + this.monotonic() - this.mark, this.state.clock.server + this.wall() - this.state.clock.wall, this.state.lastClock || 0);
-    this.state.lastClock = value; return value;
+    const value = Math.max(this.base + this.monotonic() - this.mark, this.wall(), this.state.lastClock || 0);
+    this.state.lastClock = value;
+    return value;
   }
-  iso() { return iso(this.now()); }
+  iso() { return nowIso(this.now()); }
 }

@@ -20,8 +20,9 @@
         <a :href="quiz.resultsUrl"><?= esc(lang('EduTest.builder.navigation.responses')) ?></a>
     </nav>
     <div class="builder-actions">
-        <button v-if="quiz.status === 'draft' || quiz.hasUnpublishedChanges" class="btn btn-primary" type="button" @click="lifecycle('publish')" :disabled="saving || mediaBusy || !publishReady" :aria-describedby="!publishReady ? 'publish-readiness' : null" :title="publishReadinessMessage">{{ quiz.hasPublished ? 'Publish changes' : 'Publish' }}</button>
-        <button v-if="quiz.hasPublished" class="btn btn-default" type="button" @click="copyShare">Copy link</button>
+        <button v-if="quiz.status === 'draft'" class="btn btn-primary" type="button" @click="lifecycle('publish')" :disabled="saving || mediaBusy || !publishReady" :aria-describedby="!publishReady ? 'publish-readiness' : null" :title="publishReadinessMessage">Publish</button>
+        <button v-if="quiz.status === 'published'" class="btn btn-default" type="button" @click="lifecycle('unpublish')" :disabled="saving || mediaBusy">Unpublish</button>
+        <button v-if="quiz.status === 'published'" class="btn btn-default" type="button" @click="copyShare">Copy link</button>
     </div>
 </header>
 
@@ -37,7 +38,7 @@
                 <strong><?= esc($report['quiz']['title']) ?></strong>
             </div>
             <small>
-                <?= esc(lang('Workspace.mode.' . $report['quiz']['currentMode'])) ?> · <?= esc(lang('Workspace.status.' . $report['quiz']['status'])) ?>
+                <?= esc(lang('Workspace.status.' . $report['quiz']['status'])) ?>
             </small>
         </div>
     </div>

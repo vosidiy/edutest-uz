@@ -16,11 +16,6 @@ final class QuizController extends BaseController
         return $this->library('active');
     }
 
-    public function archived(): RedirectResponse
-    {
-        return $this->library('archived');
-    }
-
     public function trash(): RedirectResponse
     {
         return $this->library('trash');

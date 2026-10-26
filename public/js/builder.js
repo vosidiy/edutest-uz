@@ -2,26 +2,16 @@
   'use strict';
 
   const BuilderRules = Object.freeze({
-    editable(quiz, passcodeValue = '') {
+    editable(quiz) {
       if (!quiz) return '';
-      const fields = ['title', 'description', 'mode', 'listed', 'timeLimitMinutes', 'opensAtLocal', 'closesAtLocal',
-        'emailMode', 'phoneMode', 'shuffleQuestions', 'shuffleOptions', 'feedback', 'showScore', 'showAnswers', 'showExplain', 'cheatCheck'];
+      const fields = ['title', 'description', 'listed', 'timeLimitSec', 'askEmail', 'askPhone', 'drawCount',
+        'shuffleQuestions', 'shuffleOptions', 'feedback', 'showScore', 'showAnswers', 'showExplain'];
       const value = Object.fromEntries(fields.map(key => [key, quiz[key]]));
-      value.passcode = {action: quiz.passcode?.action || 'unchanged', value: quiz.passcode?.action === 'set' ? passcodeValue : ''};
-      value.questions = (quiz.questions || []).map(q => ({id:q.id, type:q.type, content:q.content, explanation:q.explanation,
-        textAnswers:q.textAnswers, options:q.options.map(o => ({id:o.id, content:o.content, isCorrect:o.isCorrect}))}));
+      value.questions = (quiz.questions || []).map(q => ({id:q.id, content:q.content, optionsLayout:q.optionsLayout,
+        explanation:q.explanation, options:q.options.map(o => ({id:o.id, content:o.content, isCorrect:o.isCorrect}))}));
       return JSON.stringify(value);
     },
-    shouldAutosave(quiz) { return ['draft', 'published', 'closed'].includes(quiz?.status); },
-    modeTransition(currentMode, nextMode, confirmChange) {
-      if (!['assessment', 'practice'].includes(nextMode) || nextMode === currentMode) {
-        return {accepted: false, mode: currentMode, clearAssessmentSettings: false};
-      }
-      if (!confirmChange(nextMode)) {
-        return {accepted: false, mode: currentMode, clearAssessmentSettings: false};
-      }
-      return {accepted: true, mode: nextMode, clearAssessmentSettings: nextMode === 'practice'};
-    },
+    shouldAutosave(quiz) { return ['draft', 'published'].includes(quiz?.status); },
     publicationIssues(quiz, messages = {}) {
       const message = (key, number = null) => String(messages[key] || key).replace('{number}', String(number ?? ''));
       const issues = [];
@@ -31,17 +21,13 @@
       questions.forEach((question, index) => {
         const number = index + 1;
         if (String(question?.content || '').trim() === '') issues.push(message('questionText', number));
-        if (question?.type === 'short_text') {
-          if (!(question.textAnswers || []).some(answer => String(answer || '').trim() !== '')) issues.push(message('acceptedAnswer', number));
-          return;
-        }
         const options = Array.isArray(question?.options) ? question.options : [];
         if (options.length < 2) issues.push(message('twoChoices', number));
         if (options.some(option => String(option?.content || '').trim() === '' && !option?.media)) issues.push(message('emptyChoice', number));
         const correct = options.filter(option => option?.isCorrect).length;
-        if (question?.type === 'single_choice' && correct !== 1) issues.push(message('singleCorrect', number));
-        if (question?.type === 'multi_select' && correct < 1) issues.push(message('multiCorrect', number));
+        if (correct !== 1) issues.push(message('singleCorrect', number));
       });
+      if (quiz?.drawCount !== null && quiz?.drawCount !== '' && Number(quiz.drawCount) > questions.length) issues.push(message('drawCount'));
       return issues;
     }
   });
@@ -80,7 +66,6 @@
         lastSavedAt: null,
         autosaveTimer: null,
         hydrating: true,
-        passcodeValue: '',
         savedFingerprint: '',
         savePromise: null,
         mediaBusy: false,
@@ -94,12 +79,11 @@
         coverUrls: new Set(),
         workspaceMessages: JSON.parse(root.dataset.workspaceMessages || '{}'),
         conflictVersion: null,
-        publicationMessages: JSON.parse(root.dataset.publicationMessages || '{}'),
-        modeMessages: JSON.parse(root.dataset.modeMessages || '{}')
+        publicationMessages: JSON.parse(root.dataset.publicationMessages || '{}')
       };
     },
     computed: {
-      editableFingerprint() { return BuilderRules.editable(this.quiz, this.passcodeValue); },
+      editableFingerprint() { return BuilderRules.editable(this.quiz); },
       hasChanges() { return !!this.quiz && (this.editableFingerprint !== this.savedFingerprint || this.pendingCover !== null); },
       detailsCoverUrl() {
         if (this.detailsCover?.action === 'remove') return null;
@@ -160,7 +144,6 @@
         this.quiz = quiz;
         this.savedFingerprint = BuilderRules.editable(quiz);
         this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, quiz.questions.length - 1));
-        this.passcodeValue = '';
         this.$nextTick(() => { this.hydrating = false; });
       },
       scheduleAutosave() {
@@ -180,20 +163,14 @@
         this.hydrating = true;
         const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
         for (const key of Object.keys(server)) {
-          if (['questions', 'passcode'].includes(key)) continue;
-          if (['version', 'revision', 'status', 'resultsAvailable', 'resultsUrl', 'updatedAt', 'hasPublished', 'publishedRevision', 'hasUnpublishedChanges', 'publishedMode'].includes(key) || same(this.quiz[key], sent[key])) this.quiz[key] = server[key];
-        }
-        if (same(this.quiz.passcode, sent.passcode) && this.passcodeValue === sentPasscode) {
-          this.quiz.passcode = server.passcode;
-          this.passcodeValue = '';
-        } else {
-          this.quiz.passcode.configured = server.passcode.configured;
+          if (key === 'questions') continue;
+          if (['version', 'status', 'resultsAvailable', 'resultsUrl', 'updatedAt', 'publishedAt'].includes(key) || same(this.quiz[key], sent[key])) this.quiz[key] = server[key];
         }
         references.forEach(({question, options}, index) => {
           const remote = server.questions[index], before = sent.questions[index];
           if (!remote || !this.quiz.questions.includes(question)) return;
           question.id = remote.id;
-          for (const key of ['type', 'content', 'explanation', 'textAnswers', 'media']) {
+          for (const key of ['content', 'optionsLayout', 'explanation', 'media']) {
             if (same(question[key], before[key])) question[key] = remote[key];
           }
           options.forEach((option, optionIndex) => {
@@ -228,15 +205,13 @@
         this.globalError = '';
         this.fieldErrors = {};
         const sent = JSON.parse(JSON.stringify(this.quiz));
-        const sentPasscode = this.passcodeValue;
         const references = this.quiz.questions.map(question => ({question, options:[...question.options]}));
         const cover = this.pendingCover;
         let contentSaved = this.editableFingerprint === this.savedFingerprint;
         try {
           if (!contentSaved || overwrite) {
-            const payload = {...sent, passcode:{...sent.passcode, value:sentPasscode}};
-            const response = await EduTestApi.request('/api/v1/quizzes/' + this.publicId + (overwrite ? '?overwrite=1' : ''), {method:'PUT', body:JSON.stringify(payload)});
-            await this.acceptSaved(response.data.quiz, sent, references, sentPasscode);
+            const response = await EduTestApi.request('/api/v1/quizzes/' + this.publicId + (overwrite ? '?overwrite=1' : ''), {method:'PUT', body:JSON.stringify(sent)});
+            await this.acceptSaved(response.data.quiz, sent, references);
             contentSaved = true;
           }
           if (cover && this.pendingCover === cover) {
@@ -379,9 +354,7 @@
         this.markDirty();
         this.closeDetails();
       },
-      typeLabel(type) {
-        return { single_choice: 'Single choice', multi_select: 'Multi-select', short_text: 'Short text' }[type] || 'Question';
-      },
+      typeLabel() { return 'Single choice'; },
       formatBytes(bytes) {
         if (!Number.isFinite(Number(bytes))) return 'unlimited';
         return `${Math.floor(Number(bytes) / 1048576)} MiB`;
@@ -399,7 +372,7 @@
       },
       addQuestion() {
         const options = [{ id: null, content: '', isCorrect: true, media: null }, { id: null, content: '', isCorrect: false, media: null }];
-        this.quiz.questions.push({ id: null, position: this.quiz.questions.length + 1, type: 'single_choice', content: '', explanation: '', textAnswers: [], media: null, options });
+        this.quiz.questions.push({ id: null, position: this.quiz.questions.length + 1, content: '', optionsLayout: 'list', explanation: '', media: null, options });
         this.selectQuestion(this.quiz.questions.length - 1);
         this.preview = false;
       },
@@ -416,18 +389,6 @@
         this.quiz.questions.splice(target, 0, question);
         this.selectedIndex = target;
       },
-      changeQuestionType(type) {
-        const question = this.selectedQuestion;
-        if (!question || type === question.type) return;
-        question.type = type;
-        if (type === 'short_text') {
-          question.options = [];
-          question.textAnswers = [''];
-        } else {
-          question.textAnswers = [];
-          question.options = [{ id: null, content: '', isCorrect: true, media: null }, { id: null, content: '', isCorrect: false, media: null }];
-        }
-      },
       addOption() { this.selectedQuestion.options.push({ id: null, content: '', isCorrect: false, media: null }); },
       removeOption(index) {
         const option = this.selectedQuestion.options[index];
@@ -435,36 +396,8 @@
         this.selectedQuestion.options.splice(index, 1);
       },
       setCorrect(index, checked) {
-        if (this.selectedQuestion.type === 'single_choice') {
-          if (!checked) return;
-          this.selectedQuestion.options.forEach((option, i) => { option.isCorrect = i === index; });
-        } else this.selectedQuestion.options[index].isCorrect = checked;
-      },
-      changeMode(event) {
-        const select = event?.target;
-        const mode = String(select?.value || '');
-        const previousMode = this.quiz.mode;
-        const transition = BuilderRules.modeTransition(previousMode, mode, nextMode => (
-          window.confirm(this.modeMessages[nextMode] || 'Change the mode for future starts?')
-        ));
-        if (!transition.accepted) {
-          if (select) select.value = previousMode;
-          return;
-        }
-        this.quiz.mode = transition.mode;
-        if (transition.clearAssessmentSettings) {
-          this.quiz.passcode.action = 'clear';
-          this.quiz.passcode.configured = false;
-          this.passcodeValue = '';
-          this.quiz.emailMode = 'hidden';
-          this.quiz.phoneMode = 'hidden';
-          this.quiz.cheatCheck = false;
-        }
-      },
-      clearPasscode() {
-        this.quiz.passcode.action = 'clear';
-        this.quiz.passcode.configured = false;
-        this.passcodeValue = '';
+        if (!checked) return;
+        this.selectedQuestion.options.forEach((option, i) => { option.isCorrect = i === index; });
       },
       targetAt(questionIndex, optionIndex) {
         const question = this.quiz.questions[questionIndex];
@@ -552,17 +485,16 @@
           return;
         }
         if (!await this.save(true)) return;
-        if (!window.confirm(action === 'publish' ? (this.quiz.hasPublished ? 'Publish these saved changes for future starts?' : 'Publish this quiz and activate its stable share page?') : `${action} this quiz?`)) return;
+        if (!window.confirm(action === 'publish' ? 'Publish this quiz for future starts?' : `${action} this quiz?`)) return;
         const sent = JSON.parse(JSON.stringify(this.quiz));
-        const sentPasscode = this.passcodeValue;
         const references = this.quiz.questions.map(question => ({question, options:[...question.options]}));
         this.mediaBusy = true;
         clearTimeout(this.autosaveTimer);
         try {
           const response = await EduTestApi.request(`/api/v1/quizzes/${this.publicId}/${action}`, { method: 'POST', body: '{}' });
-          await this.acceptSaved(response.data.quiz, sent, references, sentPasscode);
+          await this.acceptSaved(response.data.quiz, sent, references);
           this.saveState = this.hasChanges ? 'dirty' : 'saved';
-          EduTestApi.toast(action === 'publish' ? (sent.hasPublished ? 'Quiz changes published.' : 'Quiz published.') : 'Quiz updated.');
+          EduTestApi.toast(action === 'publish' ? 'Quiz published.' : 'Quiz updated.');
         } catch (error) {
           this.fieldErrors = error.fields || {};
           this.globalError = error.message;

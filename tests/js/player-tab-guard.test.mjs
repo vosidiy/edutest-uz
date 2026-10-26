@@ -43,36 +43,34 @@ test('page exit during acquisition cannot activate an old page or leave a lock h
   const pending=guard.acquire();guard.release();await callback({name:'q'});
   assert.equal(await pending,false);assert.equal(guard.allowed,false);
 });
-test('player resumes at the first server-reported unconfirmed item',()=>{
-  const questions=[{id:'large-9007199254740993'},{id:'2'},{id:'3'}];
-  const payload={mode:'assessment',startedAt:'2026-01-01T00:00:00Z',quiz:{settings:{timeLimitSec:120},questions},items:[
-    {questionId:questions[0].id,status:'locked',answerStatus:'answered',answerCodes:[],textAnswer:''},{questionId:'2',status:'active',answerStatus:'not_reached',answerCodes:[],textAnswer:''},{questionId:'3',status:'pending',answerStatus:'not_reached',answerCodes:[],textAnswer:''}]};
-  assert.equal(createState(payload,payload.startedAt).index,1);
-  payload.items[1].status='locked';payload.items[1].answerStatus='answered';
-  const resumed=createState(payload,payload.startedAt);
-  assert.equal(resumed.index,2);assert.equal(resumed.phase,'answering');
-  payload.result={confirmed:true};payload.status='completed';
-  assert.equal(createState(payload,payload.startedAt).phase,'complete');
+const payload=()=>({attemptId:'a',credential:'secret',status:'in_progress',answerVersion:1,startedAt:'2026-01-01T00:00:00Z',
+  expiresAt:'2026-01-01T02:00:00Z',finishReason:null,lateSync:false,result:null,student:{name:'Student'},
+  answers:[{questionId:'1',answerCode:'a',answeredAt:'2026-01-01T00:01:00.000Z'}],quiz:{schemaVersion:1,cover:null,
+    quiz:{title:'Quiz',description:'',shareToken:'123456789',timeLimitSec:7200,feedback:'at_end',showScore:true,showAnswers:false,showExplain:false},
+    questions:[{id:'1',content:'One',optionsLayout:'list',correctCode:'a',media:null,explanation:'',options:[{id:'11',code:'a',content:'A',media:null},{id:'12',code:'b',content:'B',media:null}]},
+      {id:'2',content:'Two',optionsLayout:'list',correctCode:'a',media:null,explanation:'',options:[{id:'21',code:'a',content:'A',media:null},{id:'22',code:'b',content:'B',media:null}]}]}});
+test('player resumes after the stored confirmed prefix',()=>{
+  const state=createState(payload());
+  assert.equal(state.index,1);assert.equal(state.phase,'answering');
+  const complete=payload();complete.status='completed';complete.answerVersion=2;complete.finishReason='completed';complete.result={official:true};
+  complete.answers.push({questionId:'2',answerCode:'a',answeredAt:'2026-01-01T00:02:00.000Z'});
+  assert.equal(createState(complete).phase,'complete');
 });
-test('sync cannot send drafts or integrity events without tab ownership',async()=>{
-  const startedAt='2026-01-01T00:00:00Z';
-  const state=createState({mode:'assessment',attemptId:'a',version:1,startedAt,quiz:{settings:{timeLimitSec:120},questions:[{id:'1'},{id:'2'}]}},startedAt);
-  editAnswer(state,{answerCodes:['a']});submitAnswer(state);
-  state.events.push({key:'event'});
+test('sync cannot send confirmed progress without tab ownership',async()=>{
+  const state=createState({...payload(),answerVersion:0,answers:[]});
+  editAnswer(state,'a',Date.parse('2026-01-01T00:01:00Z'));submitAnswer(state,false,Date.parse('2026-01-01T00:01:00Z'));
   let allowed=false,requests=0;
   const worker=new PlayerSync(()=>state,async()=>{requests++;throw new Error('Not expected');},{canSend:()=>allowed});
   await worker.flush();assert.equal(requests,0);
   worker.stop();
 });
-test('losing ownership during one sync prevents subsequent event requests',async()=>{
-  const startedAt='2026-01-01T00:00:00Z';
-  const state=createState({mode:'assessment',attemptId:'a',version:1,startedAt,quiz:{settings:{timeLimitSec:120},questions:[{id:'1'}]}},startedAt);
-  editAnswer(state,{answerCodes:['a']});submitAnswer(state);nextQuestion(state);
-  state.events.push({key:'event'});
+test('losing ownership during progress prevents a subsequent Finish request',async()=>{
+  const state=createState({...payload(),answerVersion:0,answers:[]});
+  editAnswer(state,'a',Date.parse('2026-01-01T00:01:00Z'));submitAnswer(state,false,Date.parse('2026-01-01T00:01:00Z'));
   let allowed=true,requests=0;
   const worker=new PlayerSync(()=>state,async()=>{
     requests++;allowed=false;
-    return {data:{attemptId:state.attemptId,questionId:state.pendingAnswers[0].questionId,answerStatus:'answered',status:'in_progress',clientActivityAt:state.clientActivityAt,expiresAt:state.expiresAt}};
+    return {data:{attemptId:state.attemptId,answerVersion:state.answerVersion,status:'in_progress'}};
   },{canSend:()=>allowed});
-  await worker.flush();assert.equal(requests,1);assert.equal(state.events.length,1);worker.stop();
+  await worker.flush();assert.equal(requests,1);worker.stop();
 });

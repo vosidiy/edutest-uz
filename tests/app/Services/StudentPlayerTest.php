@@ -5,160 +5,157 @@ declare(strict_types=1);
 namespace Tests\App\Services;
 
 use App\Exceptions\PlayerException;
-use App\Services\QuizPaperService;
+use App\Services\AttemptSnapshotService;
+use App\Services\Player\PlayerStore;
 use App\Services\TeacherResultsService;
 use Tests\Support\PlayerTestCase;
 
 final class StudentPlayerTest extends PlayerTestCase
 {
-    public function testPublishedPaperChangesOnlyAfterExplicitPublish(): void
-    {
-        $quiz = $this->quiz();
-        $oldTicket = $this->player->admission->ticket($quiz['share']);
-        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
-        $oldPaper = $document['publishedRevision'];
-        $document['title'] = 'Unpublished working title';
-        $saved = $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
-
-        $this->assertTrue($saved['hasUnpublishedChanges']);
-        $this->assertSame('Capital cities', $this->authoring->publicSummary($quiz['share'])['title']);
-        $published = $this->authoring->transition($quiz['owner'], $quiz['publicId'], 'publish')['quiz'];
-        $this->assertFalse($published['hasUnpublishedChanges']);
-        $this->assertGreaterThan($oldPaper, $published['publishedRevision']);
-        $this->assertSame('Unpublished working title', $this->authoring->publicSummary($quiz['share'])['title']);
-
-        $this->expectPlayerError('quiz_changed', fn () => $this->player->admission->start(['ticket' => $oldTicket['ticket'], 'name' => 'Old ticket']));
-    }
-
-    public function testStartCreatesEveryAnswerRowAndRetryReturnsSameAttempt(): void
+    public function testStartStoresSnapshotAndIsIdempotentBeforeCheckingLiveVersion(): void
     {
         $quiz = $this->quiz(count: 3);
         $ticket = $this->player->admission->ticket($quiz['share']);
-        $first = $this->player->admission->start(['ticket' => $ticket['ticket'], 'name' => 'Alice'], '192.0.2.1', 'Example browser');
-        $again = $this->player->admission->start(['ticket' => $ticket['ticket']]);
+        $first = $this->player->admission->start(['ticket' => $ticket['ticket'], 'name' => 'Alice']);
 
-        $this->assertSame($first, $again);
-        $this->assertSame(1, $this->db->table('attempts')->countAllResults());
-        $this->assertSame(3, $this->db->table('attempt_answers')->countAllResults());
-        $this->assertSame(['not_reached', 'not_reached', 'not_reached'], array_column($this->db->table('attempt_answers')->orderBy('pos')->get()->getResultArray(), 'status'));
-        $this->assertSame('Alice', $this->db->table('attempts')->get()->getRow('name'));
+        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        $document['title'] = 'Changed after start';
+        $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
+        $retry = $this->player->admission->start(['ticket' => $ticket['ticket']]);
+
+        self::assertSame($first, $retry);
+        $row = $this->db->table('attempts')->get()->getRowArray();
+        self::assertNotNull($row);
+        self::assertSame('[]', $row['answers']);
+        self::assertStringContainsString('Capital cities', (string) $row['snapshot']);
+        self::assertStringNotContainsString('Changed after start', (string) $row['snapshot']);
     }
 
-    public function testConfirmedAnswersAreIndependentIdempotentAndImmutable(): void
+    public function testPublishedEditsAffectOnlyFutureStarts(): void
     {
-        $attempt = $this->startQuiz($this->quiz());
-        $first = $this->submission($attempt, 0);
-        $body = $this->answerBody($first);
-        $saved = $this->player->assessment->answer($attempt['attemptId'], $first['questionId'], $attempt['credential'], $body);
-        $again = $this->player->assessment->answer($attempt['attemptId'], $first['questionId'], $attempt['credential'], $body);
-        $this->assertSame($saved, $again);
-        $this->assertArrayNotHasKey('quiz', $saved);
-        $this->assertArrayNotHasKey('items', $saved);
+        $quiz = $this->quiz(count: 1);
+        $first = $this->startQuiz($quiz);
+        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        $document['questions'][0]['content'] = 'Edited question';
+        $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
+        $second = $this->startQuiz($quiz);
 
-        $second = $this->submission($attempt, 1);
-        $this->player->assessment->answer($attempt['attemptId'], $second['questionId'], $attempt['credential'], $this->answerBody($second));
-        $this->assertSame(['answered', 'answered'], array_column($this->db->table('attempt_answers')->orderBy('pos')->get()->getResultArray(), 'status'));
-
-        $wrong = $body;
-        $wrong['answerCodes'] = [$this->wrongCode($attempt['quiz']['questions'][0])];
-        $this->expectPlayerError('answer_locked', fn () => $this->player->assessment->answer($attempt['attemptId'], $first['questionId'], $attempt['credential'], $wrong));
+        self::assertStringStartsWith('Capital of France?', $first['quiz']['questions'][0]['content']);
+        self::assertSame('Edited question', $second['quiz']['questions'][0]['content']);
     }
 
-    public function testFinishRequiresEveryQuestionAndUsesServerScoring(): void
+    public function testHigherProgressVersionWinsAndSameVersionMustBeIdentical(): void
     {
         $attempt = $this->startQuiz($this->quiz(count: 2));
         $first = $this->submission($attempt, 0);
-        $this->player->assessment->answer($attempt['attemptId'], $first['questionId'], $attempt['credential'], $this->answerBody($first));
-        $this->expectPlayerError('incomplete_sync', fn () => $this->player->assessment->finish($attempt['attemptId'], $attempt['credential'], $finishBody ?? $this->finishBody($attempt)));
+        $ack = $this->player->assessment->progress($attempt['attemptId'], $attempt['credential'], $this->progressBody([$first], 1));
+        self::assertSame(1, $ack['answerVersion']);
+        self::assertSame($ack, $this->player->assessment->progress($attempt['attemptId'], $attempt['credential'], $this->progressBody([$first], 1)));
 
-        $second = $this->submission($attempt, 1);
-        $this->player->assessment->answer($attempt['attemptId'], $second['questionId'], $attempt['credential'], $this->answerBody($second));
-        $finishBody = $this->finishBody($attempt);
-        $finished = $this->player->assessment->finish($attempt['attemptId'], $attempt['credential'], $finishBody ?? $this->finishBody($attempt));
-        $this->assertSame('completed', $finished['status']);
-        $this->assertSame('2', $finished['result']['score']);
-        $this->assertSame('2', $finished['result']['maxScore']);
-        $this->assertSame('100.00', $finished['result']['percent']);
-        $this->assertSame($finished['result'], $this->player->assessment->finish($attempt['attemptId'], $attempt['credential'], $finishBody ?? $this->finishBody($attempt))['result']);
+        $changed = $first;
+        $changed['answerCode'] = null;
+        $this->expectPlayerError('progress_conflict', fn () => $this->player->assessment->progress(
+            $attempt['attemptId'], $attempt['credential'], $this->progressBody([$changed], 1),
+        ));
+
+        $second = $this->submission($attempt, 1, false);
+        $ack = $this->player->assessment->progress($attempt['attemptId'], $attempt['credential'], $this->progressBody([$first, $second], 3));
+        self::assertSame(3, $ack['answerVersion']);
     }
 
-    public function testSkipAndExactSetMultiSelectAreAllOrNothing(): void
+    public function testFinishOverridesPrefixAndServerGradesOfficialResult(): void
     {
-        $quiz = $this->quiz(count: 2);
-        $doc = $this->authoring->document($quiz['owner'], $quiz['publicId']);
-        $doc['questions'][0]['type'] = 'multi_select';
-        $doc['questions'][0]['options'][0]['isCorrect'] = true;
-        $this->authoring->save($quiz['owner'], $quiz['publicId'], $doc);
-        $this->authoring->transition($quiz['owner'], $quiz['publicId'], 'publish');
-        $attempt = $this->startQuiz($quiz);
-        $question = $attempt['quiz']['questions'][0];
-        $incomplete = ['status' => 'answered', 'answerCodes' => [$question['correctCodes'][0]], 'textAnswer' => ''];
-        $this->player->assessment->answer($attempt['attemptId'], $question['id'], $attempt['credential'], $this->confirmation($incomplete));
-        $second = $attempt['quiz']['questions'][1];
-        $this->player->assessment->answer($attempt['attemptId'], $second['id'], $attempt['credential'], $this->confirmation(['status' => 'skipped', 'answerCodes' => [], 'textAnswer' => '']));
-        $result = $this->player->assessment->finish($attempt['attemptId'], $attempt['credential'], $finishBody ?? $this->finishBody($attempt));
-        $this->assertSame('0', $result['result']['score']);
-        $this->assertSame(['wrong', 'unanswered'], array_column($result['result']['items'], 'result'));
-    }
-
-    public function testProvisionalAbandonmentCanRecoverWithoutLosingConfirmedHistory(): void
-    {
-        $attempt = $this->startQuiz($this->quiz(settings: ['timeLimitMinutes' => '0.5']));
+        $attempt = $this->startQuiz($this->quiz(count: 2));
         $first = $this->submission($attempt, 0);
-        $this->player->assessment->answer($attempt['attemptId'], $first['questionId'], $attempt['credential'], $this->answerBody($first));
-        $this->db->table('attempts')->where('public_id', $attempt['attemptId'])->update(['expires_at' => '2000-01-01 00:00:00.000000']);
-        $terminal = $this->player->assessment->load($attempt['attemptId'], $attempt['credential']);
-        $this->assertSame('abandoned', $terminal['status']);
-        $this->assertSame('timer_expired', $terminal['finishReason']);
-        $this->assertSame('1', $terminal['result']['score']);
-        $second = $this->submission($attempt, 1);
-        $recovered = $this->player->assessment->answer($attempt['attemptId'], $second['questionId'], $attempt['credential'], $this->answerBody($second));
-        $this->assertTrue($recovered['lateSync']);
-        $this->assertSame('in_progress', $recovered['status']);
+        $this->player->assessment->progress($attempt['attemptId'], $attempt['credential'], $this->progressBody([$first], 1));
+        $second = $this->submission($attempt, 1, false);
+        $body = $this->finishBody($attempt, [$first, $second], 2);
+        $finished = $this->player->assessment->finish($attempt['attemptId'], $attempt['credential'], $body);
+
+        self::assertSame('completed', $finished['status']);
+        self::assertSame(1, $finished['result']['score']);
+        self::assertSame('50.00', $finished['result']['percent']);
+        self::assertSame($finished, $this->player->assessment->finish($attempt['attemptId'], $attempt['credential'], $body));
     }
 
-    public function testHistoricalReviewUsesPaperAfterLiveQuestionsAreDeleted(): void
+    public function testExitFillsUnreachedTailAndRejectsFurtherProgress(): void
     {
-        $quiz = $this->quiz();
+        $attempt = $this->startQuiz($this->quiz(count: 2));
+        $first = $this->submission($attempt, 0);
+        $tail = ['questionId' => $attempt['quiz']['questions'][1]['id'], 'answerCode' => null, 'answeredAt' => null];
+        $finished = $this->player->assessment->finish(
+            $attempt['attemptId'],
+            $attempt['credential'],
+            $this->finishBody($attempt, [$first, $tail], 1, 'exited'),
+        );
+        self::assertSame('exited', $finished['finishReason']);
+        $this->expectPlayerError('attempt_finalized', fn () => $this->player->assessment->progress(
+            $attempt['attemptId'], $attempt['credential'], $this->progressBody([$first], 2),
+        ));
+    }
+
+    public function testNormalCompletionCannotContainAnUnreachedTail(): void
+    {
+        $attempt = $this->startQuiz($this->quiz(count: 2));
+        $first = $this->submission($attempt, 0);
+        $tail = ['questionId' => $attempt['quiz']['questions'][1]['id'], 'answerCode' => null, 'answeredAt' => null];
+
+        $this->expectPlayerError('invalid_progress', fn () => $this->player->assessment->finish(
+            $attempt['attemptId'],
+            $attempt['credential'],
+            $this->finishBody($attempt, [$first, $tail], 1, 'completed'),
+        ));
+    }
+
+    public function testLazyExpiryIsProvisionalAndDelayedFinishCanReplaceIt(): void
+    {
+        $attempt = $this->startQuiz($this->quiz(count: 1));
+        $answer = $this->submission($attempt, 0);
+        $this->player->assessment->progress($attempt['attemptId'], $attempt['credential'], $this->progressBody([$answer], 1));
+        $this->db->table('attempts')->where('public_id', $attempt['attemptId'])->update([
+            'started_at' => '1999-12-31 23:00:00.000000',
+            'expires_at' => '2000-01-01 00:00:00.000000',
+        ]);
+        $provisional = $this->player->assessment->load($attempt['attemptId'], $attempt['credential']);
+        self::assertSame('abandoned', $provisional['status']);
+        self::assertTrue($provisional['result']['provisional']);
+
+        // Simulate a browser record made at the original deadline. It remains valid even
+        // though the server resolved the attempt lazily before receiving it.
+        $answer['answeredAt'] = '1999-12-31T23:30:00.000Z';
+        $body = $this->finishBody($attempt, [$answer], 2, 'expired', PlayerStore::iso('2000-01-01 00:00:00.000000'));
+        $finished = $this->player->assessment->finish($attempt['attemptId'], $attempt['credential'], $body);
+        self::assertSame('completed', $finished['status']);
+        self::assertTrue($finished['lateSync']);
+    }
+
+    public function testHistoricalReportUsesSnapshotAfterLiveQuestionDeletion(): void
+    {
+        $quiz = $this->quiz(count: 1);
         $attempt = $this->startQuiz($quiz);
-        foreach ([0, 1] as $index) {
-            $answer = $this->submission($attempt, $index);
-            $this->player->assessment->answer($attempt['attemptId'], $answer['questionId'], $attempt['credential'], $this->answerBody($answer));
-        }
-        $this->player->assessment->finish($attempt['attemptId'], $attempt['credential'], $finishBody ?? $this->finishBody($attempt));
-        $doc = $this->authoring->document($quiz['owner'], $quiz['publicId']);
-        $doc['questions'] = [];
-        $this->authoring->save($quiz['owner'], $quiz['publicId'], $doc);
+        $answer = $this->submission($attempt, 0);
+        $this->player->assessment->finish($attempt['attemptId'], $attempt['credential'], $this->finishBody($attempt, [$answer], 1));
+        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        $document['questions'] = [];
+        $document['status'] = 'draft';
+        $this->authoring->transition($quiz['owner'], $quiz['publicId'], 'unpublish');
+        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        $document['questions'] = [];
+        $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
 
-        $report = (new TeacherResultsService($this->db, $this->media, new QuizPaperService($this->db, $this->media)))
+        $report = (new TeacherResultsService($this->db, $this->media, new AttemptSnapshotService($this->db, $this->media), $this->player))
             ->attempt($quiz['owner'], $attempt['attemptId'], 'UTC');
-        $this->assertCount(2, $report['questions']);
-        $this->assertSame(['correct', 'correct'], array_column($report['questions'], 'result'));
-    }
-
-    public function testPracticeCreatesNoAttemptOrAnswerRows(): void
-    {
-        $practice = $this->startQuiz($this->quiz('practice'));
-        $this->assertSame('practice', $practice['mode']);
-        $this->assertSame(0, $this->db->table('attempts')->countAllResults());
-        $this->assertSame(0, $this->db->table('attempt_answers')->countAllResults());
-        $this->assertSame(1, $this->db->table('practice_keys')->countAllResults());
-    }
-
-    private function answerBody(array $answer): array
-    {
-        return $this->confirmation($answer);
-    }
-
-    private function wrongCode(array $question): string
-    {
-        foreach ($question['options'] as $option) if (! in_array($option['code'], $question['correctCodes'], true)) return $option['code'];
-        self::fail('Fixture requires a wrong option.');
+        self::assertCount(1, $report['questions']);
+        self::assertSame('correct', $report['questions'][0]['result']);
     }
 
     private function expectPlayerError(string $code, callable $operation): void
     {
-        try { $operation(); self::fail("Expected {$code}."); }
-        catch (PlayerException $error) { self::assertSame($code, $error->errorCode); }
+        try {
+            $operation();
+            self::fail("Expected {$code}.");
+        } catch (PlayerException $error) {
+            self::assertSame($code, $error->errorCode);
+        }
     }
 }

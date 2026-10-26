@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\App\Services;
 
 use App\Exceptions\ReportingException;
-use App\Services\QuizPaperService;
+use App\Services\AttemptSnapshotService;
 use App\Services\TeacherResultsService;
 use Tests\Support\PlayerTestCase;
 
@@ -16,31 +16,37 @@ final class TeacherResultsServiceTest extends PlayerTestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->results = new TeacherResultsService($this->db, $this->media, new QuizPaperService($this->db, $this->media));
+        $this->results = new TeacherResultsService(
+            $this->db,
+            $this->media,
+            new AttemptSnapshotService($this->db, $this->media),
+            $this->player,
+        );
     }
 
-    public function testQuizReportCountsCompletedInProgressAndLazilyAbandonedAttempts(): void
+    public function testQuizReportReadsCountsAndCorrectnessFromAttemptDocuments(): void
     {
         $quiz = $this->quiz(count: 2);
         $completed = $this->startQuiz($quiz);
         $this->complete($completed);
         $this->startQuiz($quiz);
         $expired = $this->startQuiz($quiz);
-        $this->db->table('attempts')->where('public_id', $expired['attemptId'])->update(['expires_at' => '2000-01-01 00:00:00.000000']);
+        $this->db->table('attempts')->where('public_id', $expired['attemptId'])->update([
+            'expires_at' => '2000-01-01 00:00:00.000000',
+        ]);
 
         $report = $this->results->quiz($quiz['owner'], $quiz['publicId'], [], 'UTC');
-        $this->assertSame(2, $report['metrics']['finalizedAttempts']);
-        $this->assertSame(1, $report['metrics']['inProgressAttempts']);
-        $this->assertSame('all', $report['filters']['status']);
-        $this->assertCount(3, $report['attempts']);
+        self::assertSame(2, $report['metrics']['finalizedAttempts']);
+        self::assertSame(1, $report['metrics']['inProgressAttempts']);
+        self::assertCount(3, $report['attempts']);
         $byStatus = array_column($report['attempts'], null, 'status');
-        $this->assertSame(2, $byStatus['completed']['responsesReceived']);
-        $this->assertSame(2, $byStatus['completed']['correctReceived']);
-        $this->assertSame(0, $byStatus['in_progress']['responsesReceived']);
-        $this->assertSame(0, $byStatus['abandoned']['responsesReceived']);
+        self::assertSame(2, $byStatus['completed']['responsesReceived']);
+        self::assertSame(2, $byStatus['completed']['correctReceived']);
+        self::assertSame(0, $byStatus['in_progress']['responsesReceived']);
+        self::assertSame(0, $byStatus['abandoned']['responsesReceived']);
     }
 
-    public function testStatusFiltersAndCsvUseNewLifecycleNames(): void
+    public function testStatusFiltersAndCsvProtectFormulaCells(): void
     {
         $quiz = $this->quiz();
         $attempt = $this->startQuiz($quiz);
@@ -48,15 +54,15 @@ final class TeacherResultsServiceTest extends PlayerTestCase
         $this->db->table('attempts')->where('public_id', $attempt['attemptId'])->update(['name' => '=Formula']);
 
         $report = $this->results->quiz($quiz['owner'], $quiz['publicId'], ['status' => 'completed'], 'UTC');
-        $this->assertCount(1, $report['attempts']);
-        $this->assertSame('completed', $report['attempts'][0]['status']);
+        self::assertCount(1, $report['attempts']);
         $rows = iterator_to_array($this->results->export($quiz['owner'], $quiz['publicId'], ['status' => 'completed'], 'UTC')['rows']);
-        $this->assertSame('=Formula', $rows[0]['name']);
-        $this->assertSame("'=Formula", $this->results->protectCsvCell($rows[0]['name']));
-        $this->assertArrayNotHasKey('ip', $rows[0]);
+        self::assertSame('=Formula', $rows[0]['name']);
+        self::assertSame("'=Formula", $this->results->protectCsvCell($rows[0]['name']));
+        self::assertArrayNotHasKey('ip', $rows[0]);
+        self::assertArrayNotHasKey('agent', $rows[0]);
     }
 
-    public function testAttemptReviewUsesNormalizedRowsAndImmutablePaperOrder(): void
+    public function testAttemptReviewKeepsTheImmutableSnapshotAfterLiveEdits(): void
     {
         $quiz = $this->quiz(settings: ['shuffleOptions' => true]);
         $attempt = $this->startQuiz($quiz);
@@ -64,61 +70,64 @@ final class TeacherResultsServiceTest extends PlayerTestCase
         $before = array_column($attempt['quiz']['questions'][0]['options'], 'content');
 
         $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
-        $document['questions'] = [];
+        $document['questions'][0]['content'] = 'A future-start edit';
         $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
         $report = $this->results->attempt($quiz['owner'], $attempt['attemptId'], 'Asia/Tashkent');
 
-        $this->assertSame('completed', $report['attempt']['status']);
-        $this->assertSame($before, array_column($report['questions'][0]['options'], 'content'));
-        $this->assertSame(['A', 'B'], array_column($report['questions'][0]['options'], 'label'));
-        $this->assertNotNull($report['questions'][0]['answeredAt']);
+        self::assertSame('completed', $report['attempt']['status']);
+        self::assertSame($before, array_column($report['questions'][0]['options'], 'content'));
+        self::assertSame(['A', 'B'], array_column($report['questions'][0]['options'], 'label'));
+        self::assertNotNull($report['questions'][0]['answeredAt']);
         $json = json_encode($report, JSON_THROW_ON_ERROR);
-        foreach (['token_hash', 'start_key', 'passcode_hash', 'media_src'] as $private) self::assertStringNotContainsString($private, $json);
-    }
-
-    public function testNonOwnerAndMalformedAttemptsReturnTheSameNotFoundError(): void
-    {
-        $quiz = $this->quiz();
-        $attempt = $this->startQuiz($quiz);
-        foreach ([str_repeat('f', 32), 'bad-id'] as $id) {
-            try { $this->results->attempt($quiz['owner'] + 999, $id === 'bad-id' ? $id : $attempt['attemptId'], 'UTC'); self::fail(); }
-            catch (ReportingException $error) { self::assertSame(404, $error->status); }
+        foreach (['token_hash', 'start_key', 'media_src'] as $private) {
+            self::assertStringNotContainsString($private, $json);
         }
     }
 
-    public function testQuitIsACompletedResultWithReceivedProgressAndCsvReason(): void
+    public function testNonOwnerAndMalformedAttemptsShareTheNotFoundBoundary(): void
+    {
+        $quiz = $this->quiz();
+        $attempt = $this->startQuiz($quiz);
+        foreach ([[$quiz['owner'] + 999, $attempt['attemptId']], [$quiz['owner'], 'bad-id']] as [$owner, $id]) {
+            try {
+                $this->results->attempt($owner, $id, 'UTC');
+                self::fail('Expected a reporting not-found error.');
+            } catch (ReportingException $error) {
+                self::assertSame(404, $error->status);
+            }
+        }
+    }
+
+    public function testExitIsACompletedResultWithSkippedTail(): void
     {
         $quiz = $this->quiz(count: 2);
         $attempt = $this->startQuiz($quiz);
-        $submission = $this->submission($attempt, 0);
-        $this->player->assessment->answer(
+        $first = $this->submission($attempt, 0);
+        $tail = ['questionId' => $attempt['quiz']['questions'][1]['id'], 'answerCode' => null, 'answeredAt' => null];
+        $this->player->assessment->finish(
             $attempt['attemptId'],
-            $submission['questionId'],
             $attempt['credential'],
-            $this->confirmation($submission),
+            $this->finishBody($attempt, [$first, $tail], 1, 'exited'),
         );
-        $this->player->assessment->finish($attempt['attemptId'], $attempt['credential'], $this->finishBody($attempt, 'quit', count: 1));
 
         $report = $this->results->quiz($quiz['owner'], $quiz['publicId'], [], 'UTC');
-        $this->assertSame('completed', $report['attempts'][0]['status']);
-        $this->assertSame('quit', $report['attempts'][0]['finishReason']);
-        $this->assertSame(1, $report['attempts'][0]['responsesReceived']);
-        $this->assertSame(1, $report['attempts'][0]['correctReceived']);
-        $this->assertSame('50.00', $report['attempts'][0]['percent']);
-
-        $rows = iterator_to_array($this->results->export($quiz['owner'], $quiz['publicId'], [], 'UTC')['rows']);
-        $this->assertSame('quit', $rows[0]['finishReason']);
-        $this->assertSame('1.00', $rows[0]['score']);
+        self::assertSame('completed', $report['attempts'][0]['status']);
+        self::assertSame('exited', $report['attempts'][0]['finishReason']);
+        self::assertSame(2, $report['attempts'][0]['responsesReceived']);
+        self::assertSame(1, $report['attempts'][0]['correctReceived']);
+        self::assertSame('50.00', $report['attempts'][0]['percent']);
     }
 
     private function complete(array $attempt): void
     {
-        foreach ($attempt['quiz']['questions'] as $index => $question) {
-            $submission = $this->submission($attempt, $index);
-            $this->player->assessment->answer($attempt['attemptId'], $question['id'], $attempt['credential'], $this->confirmation([
-                'status' => $submission['status'], 'answerCodes' => $submission['answerCodes'], 'textAnswer' => $submission['textAnswer'],
-            ]));
+        $answers = [];
+        foreach (array_keys($attempt['quiz']['questions']) as $index) {
+            $answers[] = $this->submission($attempt, $index);
         }
-        $this->player->assessment->finish($attempt['attemptId'], $attempt['credential'], $this->finishBody($attempt));
+        $this->player->assessment->finish(
+            $attempt['attemptId'],
+            $attempt['credential'],
+            $this->finishBody($attempt, $answers, count($answers)),
+        );
     }
 }

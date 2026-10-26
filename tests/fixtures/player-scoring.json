@@ -1,38 +1,20 @@
 [
   {
     "name": "single correct",
-    "question": {"id":"9007199254740993","type":"single_choice","acceptedAnswers":[],"correctCodes":["right"],"options":[{"code":"wrong"},{"code":"right"}]},
-    "answer": {"answerCodes":["right"],"textAnswer":""},
+    "question": {"id":"9007199254740993","correctCode":"right","options":[{"code":"wrong"},{"code":"right"}]},
+    "answer": {"answerCode":"right"},
     "expected": {"result":"correct","isCorrect":true}
   },
   {
     "name": "single wrong",
-    "question": {"id":"1","type":"single_choice","acceptedAnswers":[],"correctCodes":["right"],"options":[{"code":"wrong"},{"code":"right"}]},
-    "answer": {"answerCodes":["wrong"],"textAnswer":""},
+    "question": {"id":"1","correctCode":"right","options":[{"code":"wrong"},{"code":"right"}]},
+    "answer": {"answerCode":"wrong"},
     "expected": {"result":"wrong","isCorrect":false}
   },
   {
     "name": "choice unanswered",
-    "question": {"id":"1","type":"single_choice","acceptedAnswers":[],"correctCodes":["right"],"options":[{"code":"wrong"},{"code":"right"}]},
-    "answer": {"answerCodes":[],"textAnswer":""},
-    "expected": {"result":"unanswered","isCorrect":false}
-  },
-  {
-    "name": "multi exact set correct regardless of order",
-    "question": {"id":"2","type":"multi_select","acceptedAnswers":[],"correctCodes":["a","c"],"options":[{"code":"a"},{"code":"b"},{"code":"c"}]},
-    "answer": {"answerCodes":["c","a"],"textAnswer":""},
-    "expected": {"result":"correct","isCorrect":true}
-  },
-  {
-    "name": "multi incomplete set is wrong",
-    "question": {"id":"2","type":"multi_select","acceptedAnswers":[],"correctCodes":["a","c"],"options":[{"code":"a"},{"code":"b"},{"code":"c"}]},
-    "answer": {"answerCodes":["a"],"textAnswer":""},
-    "expected": {"result":"wrong","isCorrect":false}
-  },
-  {
-    "name": "normalized short text",
-    "question": {"id":"3","type":"short_text","acceptedAnswers":["Tashkent"],"correctCodes":[],"options":[]},
-    "answer": {"answerCodes":[],"textAnswer":"  TASHKENT  "},
-    "expected": {"result":"correct","isCorrect":true}
+    "question": {"id":"1","correctCode":"right","options":[{"code":"wrong"},{"code":"right"}]},
+    "answer": {"answerCode":null},
+    "expected": {"result":"skipped","isCorrect":false}
   }
 ]

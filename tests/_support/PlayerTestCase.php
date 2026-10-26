@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Tests\Support;
 
 use App\Services\MediaService;
+use App\Services\AttemptSnapshotService;
 use App\Services\Player\PlayerRuntime;
 use App\Services\QuizAuthoringService;
-use App\Services\QuizPaperService;
 use CodeIgniter\Database\BaseConnection;
 use CodeIgniter\Test\CIUnitTestCase;
 use Config\Database;
@@ -57,9 +57,9 @@ abstract class PlayerTestCase extends CIUnitTestCase
         }
         $this->mediaRoot = WRITEPATH . 'testing/player-' . bin2hex(random_bytes(6));
         $this->media = new MediaService($this->db, $this->mediaRoot);
-        $papers = new QuizPaperService($this->db, $this->media);
-        $this->authoring = new QuizAuthoringService($this->db, $this->media, $papers);
-        $this->player = new PlayerRuntime($this->db, $this->media, $papers);
+        $snapshots = new AttemptSnapshotService($this->db, $this->media);
+        $this->authoring = new QuizAuthoringService($this->db, $this->media);
+        $this->player = new PlayerRuntime($this->db, $this->media, $snapshots);
     }
 
     protected function tearDown(): void
@@ -75,17 +75,17 @@ abstract class PlayerTestCase extends CIUnitTestCase
         parent::tearDown();
     }
 
-    protected function quiz(string $mode = 'assessment', array $settings = [], int $count = 2): array
+    protected function quiz(array $settings = [], int $count = 2): array
     {
         $now = '2026-01-01 00:00:00.000000';
         $this->db->table('users')->insert(['email' => bin2hex(random_bytes(4)) . '@example.test', 'password_hash' => 'unused', 'display_name' => 'Quiz Teacher', 'created_at' => $now, 'updated_at' => $now]);
         $owner = (int) $this->db->insertID();
-        $created = $this->authoring->create($owner, 'Capital cities', $mode);
+        $created = $this->authoring->create($owner, 'Capital cities');
         $doc = array_replace($this->authoring->document($owner, $created['publicId']), $settings);
         $doc['questions'] = [];
         for ($i = 0; $i < $count; $i++) {
-            $doc['questions'][] = ['id' => null, 'type' => 'single_choice', 'content' => 'Capital of France? ' . $i,
-                'explanation' => 'Paris is the capital of France.', 'textAnswers' => [],
+            $doc['questions'][] = ['id' => null, 'content' => 'Capital of France? ' . $i,
+                'optionsLayout' => $i % 2 === 0 ? 'list' : 'grid', 'explanation' => 'Paris is the capital of France.',
                 'options' => [['id' => null, 'content' => 'Berlin', 'isCorrect' => false], ['id' => null, 'content' => 'Paris', 'isCorrect' => true]]];
         }
         $this->authoring->save($owner, $created['publicId'], $doc);
@@ -96,28 +96,28 @@ abstract class PlayerTestCase extends CIUnitTestCase
     protected function startQuiz(array $quiz, array $identity = []): array
     {
         $ticket = $this->player->admission->ticket($quiz['share']);
-        $data = $this->player->admission->start(['ticket' => $ticket['ticket']] + $identity + ($ticket['mode'] === 'assessment' ? ['name' => 'Student'] : []));
-        return $data['mode'] === 'assessment' ? $data + $this->player->assessment->load($data['attemptId'], $data['credential']) : $data;
+        $data = $this->player->admission->start(['ticket' => $ticket['ticket'], 'name' => 'Student'] + $identity);
+        return $data + $this->player->assessment->load($data['attemptId'], $data['credential']);
     }
 
     protected function submission(array $attempt, int $index, bool $correct = true): array
     {
         $question = $attempt['quiz']['questions'][$index];
-        return ['status' => 'answered', 'questionId' => $question['id'],
-            'answerCodes' => [$correct ? $question['correctCodes'][0] : $question['options'][0]['code']], 'textAnswer' => ''];
+        $code = $correct ? $question['correctCode'] : current(array_values(array_filter(
+            array_column($question['options'], 'code'),
+            static fn (string $code): bool => $code !== $question['correctCode'],
+        )));
+        return ['questionId' => $question['id'], 'answerCode' => $code, 'answeredAt' => \App\Services\Player\PlayerStore::iso(\App\Services\Player\PlayerStore::now())];
     }
 
-    protected function confirmation(array $answer, ?string $at = null): array
+    protected function progressBody(array $answers, int $version): array
     {
-        $at ??= \App\Services\Player\PlayerStore::iso(\App\Services\Player\PlayerStore::now());
-        return array_intersect_key($answer, array_flip(['status', 'answerCodes', 'textAnswer']))
-            + ['clientAnsweredAt' => $at, 'clientActivityAt' => $at];
+        return ['answerVersion' => $version, 'answers' => $answers];
     }
 
-    protected function finishBody(array $attempt, string $reason = 'completed', ?string $at = null, ?string $activity = null, ?int $count = null): array
+    protected function finishBody(array $attempt, array $answers, int $version, string $reason = 'completed', ?string $at = null): array
     {
         $at ??= \App\Services\Player\PlayerStore::iso(\App\Services\Player\PlayerStore::now());
-        return ['finishReason' => $reason, 'clientFinishedAt' => $at, 'clientActivityAt' => $activity ?? $at,
-            'confirmedCount' => $count ?? count($attempt['quiz']['questions'])];
+        return ['answerVersion' => $version, 'answers' => $answers, 'finishReason' => $reason, 'clientFinishedAt' => $at];
     }
 }

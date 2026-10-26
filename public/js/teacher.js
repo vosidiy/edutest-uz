@@ -88,7 +88,7 @@
     if (!createForm) return;
     createForm.setAttribute('aria-busy', String(createBusy || coverChecking));
     createForm.querySelectorAll('input, button').forEach(control => { control.disabled = createBusy; });
-    createForm.querySelectorAll('[name="title"], [name="mode"]').forEach(control => { control.disabled = createBusy || !!createdDraft; });
+    createForm.querySelectorAll('[name="title"]').forEach(control => { control.disabled = createBusy || !!createdDraft; });
     const submit = createForm.querySelector('[data-create-submit]');
     submit.disabled = createBusy || coverChecking;
     submit.textContent = createdDraft ? (selectedCover ? createText.retryCover : createText.continueWithoutCover) : createText.create;
@@ -175,7 +175,7 @@
     updateCreateControls(createdDraft ? createText.uploading : createText.creating);
     try {
       if (!createdDraft) {
-        const result = await request('/api/v1/quizzes', { method: 'POST', body: JSON.stringify({ title: data.get('title'), mode: data.get('mode') }) });
+        const result = await request('/api/v1/quizzes', { method: 'POST', body: JSON.stringify({ title: data.get('title') }) });
         createdDraft = result.data;
       }
       if (selectedCover) {
@@ -189,7 +189,7 @@
       } else await removeUnconfirmedCover();
       window.location.href = createdDraft.editUrl;
     } catch (failure) {
-      error.textContent = failure.fields?.title || failure.fields?.mode || failure.message;
+      error.textContent = failure.fields?.title || failure.message;
     } finally {
       createBusy = false; updateCreateControls();
     }
@@ -229,10 +229,7 @@
     if (!publicId) return;
     const confirmation = {
       publish: 'Publish this quiz and activate its share page?',
-      close: 'Close this quiz to new starts?',
-      reopen: 'Reopen this quiz?',
-      archive: 'Archive this quiz?',
-      unarchive: 'Restore this quiz from the archive?',
+      unpublish: 'Unpublish this quiz for new starts?',
       trash: 'Move this quiz to trash?',
       restore: 'Restore this quiz from trash?',
       duplicate: 'Create an independent draft copy of this quiz?'

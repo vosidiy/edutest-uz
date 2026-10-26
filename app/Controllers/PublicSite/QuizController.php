@@ -25,9 +25,9 @@ final class QuizController extends BaseController
         return view('public/quiz', ['quiz' => $quiz, 'title' => $quiz['title'] . ' — EduTest', 'shareToken' => $shareToken, 'page' => 'intro']);
     }
 
-    public function play(string $shareToken): string
+    public function start(string $shareToken): string
     {
-        return $this->shell($shareToken, 'play');
+        return $this->shell($shareToken, 'start');
     }
 
     public function results(string $shareToken): string
@@ -38,7 +38,7 @@ final class QuizController extends BaseController
     private function shell(string $shareToken, string $page): string
     {
         if (! QuizShareCode::isValid($shareToken)) throw PageNotFoundException::forPageNotFound();
-        // Existing bearers may finish after the teacher closes or archives the quiz.
+        // Existing bearer-authorized attempts remain available after unpublish or soft deletion.
         $this->privateResponse();
         return view('student/player', ['title' => lang('Player.ui.quizPlayer') . ' — EduTest', 'shareToken' => $shareToken, 'page' => $page]);
     }

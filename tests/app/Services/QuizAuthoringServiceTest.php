@@ -5,529 +5,93 @@ declare(strict_types=1);
 namespace Tests\App\Services;
 
 use App\Exceptions\AuthoringException;
-use App\Services\MediaService;
-use App\Services\QuizAuthoringService;
-use App\Services\QuizPaperService;
-use App\Services\TeacherQueryService;
-use CodeIgniter\Database\BaseConnection;
-use CodeIgniter\Database\Forge;
-use CodeIgniter\HTTP\Files\UploadedFile;
-use CodeIgniter\Test\CIUnitTestCase;
-use Config\Database;
+use Tests\Support\PlayerTestCase;
 
-final class QuizAuthoringServiceTest extends CIUnitTestCase
+final class QuizAuthoringServiceTest extends PlayerTestCase
 {
-    private BaseConnection $authoringDb;
-    private Forge $forge;
-    private QuizAuthoringService $authoring;
-    private MediaService $media;
-    private string $mediaRoot;
-
-    protected function setUp(): void
+    public function testNewQuizUsesMvpDefaults(): void
     {
-        parent::setUp();
-        $this->authoringDb = Database::connect('tests');
-        $this->forge = Database::forge('tests');
-        $this->dropTables();
-        $this->createTables();
-        $this->mediaRoot = WRITEPATH . 'testing/quiz-media-' . bin2hex(random_bytes(5));
-        $this->media = new MediaService($this->authoringDb, $this->mediaRoot);
-        $this->authoring = new QuizAuthoringService($this->authoringDb, $this->media);
+        $quiz = $this->quiz(count: 1);
+        $document = $quiz['document'];
+        self::assertSame('published', $document['status']);
+        self::assertSame(7200, $document['timeLimitSec']);
+        self::assertFalse($document['askEmail']);
+        self::assertFalse($document['askPhone']);
+        self::assertNull($document['drawCount']);
+        self::assertSame('list', $document['questions'][0]['optionsLayout']);
+        self::assertArrayNotHasKey('mode', $document);
+        self::assertArrayNotHasKey('revision', $document);
     }
 
-    protected function tearDown(): void
+    public function testTimerValidationCoversThirtyToSevenThousandTwoHundredSeconds(): void
     {
-        $this->dropTables();
-        $this->removeDirectory($this->mediaRoot);
-        parent::tearDown();
+        $quiz = $this->quiz(count: 1);
+        $this->authoring->transition($quiz['owner'], $quiz['publicId'], 'unpublish');
+        foreach ([0, 29, 31, 7230] as $invalid) {
+            $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+            $document['timeLimitSec'] = $invalid;
+            $this->expectAuthoringError('validation_failed', fn () => $this->authoring->save($quiz['owner'], $quiz['publicId'], $document));
+        }
+        foreach ([30, 60, 7170, 7200] as $valid) {
+            $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+            $document['timeLimitSec'] = $valid;
+            self::assertSame($valid, $this->authoring->save($quiz['owner'], $quiz['publicId'], $document)['timeLimitSec']);
+        }
     }
 
-    public function testCreateSavePublishAndLifecycle(): void
+    public function testPublishUnpublishAndPublishedSaveSafety(): void
     {
-        $owner = $this->insertUser('owner@example.test');
-        $created = $this->authoring->create($owner, 'Biology review', 'assessment');
-        $document = $this->authoring->document($owner, $created['publicId']);
+        $quiz = $this->quiz(count: 2);
+        self::assertSame('draft', $this->authoring->transition($quiz['owner'], $quiz['publicId'], 'unpublish')['quiz']['status']);
+        self::assertSame('published', $this->authoring->transition($quiz['owner'], $quiz['publicId'], 'publish')['quiz']['status']);
 
-        $this->assertSame('draft', $document['status']);
-        $this->assertSame(1, $document['version']);
-        $this->assertSame([], $document['questions']);
-        $this->assertArrayNotHasKey('instructions', $document);
-        $this->assertFalse($document['resultsAvailable']);
-        $this->assertNull($document['resultsUrl']);
-        $this->assertMatchesRegularExpression('/^[0-9]{9}$/D', basename($document['shareUrl']));
+        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        $document['questions'][0]['options'][1]['isCorrect'] = false;
+        $this->expectAuthoringError('not_publishable', fn () => $this->authoring->save($quiz['owner'], $quiz['publicId'], $document));
+        self::assertTrue($this->authoring->document($quiz['owner'], $quiz['publicId'])['questions'][0]['options'][1]['isCorrect']);
+    }
 
-        $document['questions'] = [[
-            'id' => null,
-            'type' => 'single_choice',
-            'content' => 'Which structure contains DNA?',
-            'explanation' => 'The nucleus contains chromosomes.',
-            'textAnswers' => [],
-            'options' => [
-                ['id' => null, 'content' => 'Nucleus', 'isCorrect' => true],
-                ['id' => null, 'content' => 'Cell wall', 'isCorrect' => false],
-            ],
-        ]];
-        $document['instructions'] = 'Ignored legacy client value';
-        $saved = $this->authoring->save($owner, $created['publicId'], $document);
+    public function testDrawCountCannotExceedPublishedQuestionPool(): void
+    {
+        $quiz = $this->quiz(count: 2);
+        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        $document['drawCount'] = 3;
+        $this->expectAuthoringError('not_publishable', fn () => $this->authoring->save($quiz['owner'], $quiz['publicId'], $document));
+    }
 
-        $this->assertSame(2, $saved['version']);
-        $this->assertArrayNotHasKey('instructions', $saved);
-        $this->assertNotSame('', $saved['questions'][0]['id']);
-        $this->assertCount(2, $saved['questions'][0]['options']);
-        $this->assertNotSame('', $saved['questions'][0]['options'][0]['code']);
+    public function testListAndGridLayoutsAndOptimisticLockingPersist(): void
+    {
+        $quiz = $this->quiz(count: 2);
+        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        $stale = $document;
+        $document['questions'][0]['optionsLayout'] = 'grid';
+        $saved = $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
+        self::assertSame('grid', $saved['questions'][0]['optionsLayout']);
+        $this->expectAuthoringError('version_conflict', fn () => $this->authoring->save($quiz['owner'], $quiz['publicId'], $stale));
+    }
 
-        $firstQuestion = $saved['questions'][0];
-        $saved['questions'] = [[
-            'id' => null,
-            'type' => 'short_text',
-            'content' => 'Name the process.',
-            'explanation' => '',
-            'textAnswers' => ['photosynthesis'],
-            'options' => [],
-        ], $firstQuestion];
-        $reordered = $this->authoring->save($owner, $created['publicId'], $saved);
-        $this->assertSame('Name the process.', $reordered['questions'][0]['content']);
-        $this->assertSame($firstQuestion['id'], $reordered['questions'][1]['id']);
+    public function testQuestionAndOptionReorderingAvoidsTransientUniquePositionCollisions(): void
+    {
+        $quiz = $this->quiz(count: 2);
+        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        $firstQuestionId = $document['questions'][0]['id'];
+        $firstOptionCodes = array_column($document['questions'][0]['options'], 'code');
+        $document['questions'] = array_reverse($document['questions']);
+        $document['questions'][1]['options'] = array_reverse($document['questions'][1]['options']);
 
+        $saved = $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
+
+        self::assertSame($firstQuestionId, $saved['questions'][1]['id']);
+        self::assertSame(array_reverse($firstOptionCodes), array_column($saved['questions'][1]['options'], 'code'));
+    }
+
+    private function expectAuthoringError(string $code, callable $operation): void
+    {
         try {
-            $this->authoring->save($owner, $created['publicId'], $document);
-            $this->fail('A stale version should fail.');
-        } catch (AuthoringException $exception) {
-            $this->assertSame('version_conflict', $exception->errorCode);
-            $this->assertSame(409, $exception->status);
+            $operation();
+            self::fail("Expected {$code}.");
+        } catch (AuthoringException $error) {
+            self::assertSame($code, $error->errorCode);
         }
-
-        $published = $this->authoring->transition($owner, $created['publicId'], 'publish')['quiz'];
-        $this->assertSame('published', $published['status']);
-        $summary = $this->authoring->publicSummary(basename($published['shareUrl']));
-        $this->assertNotNull($summary);
-        $this->assertArrayNotHasKey('instructions', $summary);
-        $quizRow = $this->authoringDb->table('quizzes')->where('public_id', $created['publicId'])->get()->getRowArray();
-        $this->assertNotNull($quizRow);
-        $paper = $this->authoringDb->table('quiz_papers')->where('quiz_id', $quizRow['id'])->get()->getRowArray();
-        $this->assertNotNull($paper);
-        $definition = json_decode((string) $paper['definition'], true, 512, JSON_THROW_ON_ERROR);
-        $this->assertArrayNotHasKey('instructions', $definition['quiz']);
-        $definition['quiz']['instructions'] = 'Legacy immutable directions';
-        $paper['definition'] = json_encode($definition, JSON_THROW_ON_ERROR);
-        $legacyStudent = (new QuizPaperService($this->authoringDb, $this->media))->studentDocument($paper, str_repeat('a', 32));
-        $this->assertArrayNotHasKey('instructions', $legacyStudent);
-
-        $duplicate = $this->authoring->duplicate($owner, $created['publicId']);
-        $duplicateDocument = $this->authoring->document($owner, $duplicate['publicId']);
-        $this->assertSame('draft', $duplicateDocument['status']);
-        $this->assertFalse($duplicateDocument['listed']);
-        $this->assertCount(2, $duplicateDocument['questions']);
-        $this->assertMatchesRegularExpression('/^[0-9]{9}$/D', basename($duplicateDocument['shareUrl']));
-        $this->assertNotSame(basename($published['shareUrl']), basename($duplicateDocument['shareUrl']));
-
-        $queries = new TeacherQueryService($this->authoringDb);
-        $this->assertSame(2, $queries->library($owner)['pagination']['total']);
-
-        $this->assertSame('closed', $this->authoring->transition($owner, $created['publicId'], 'close')['quiz']['status']);
-        $this->assertSame('published', $this->authoring->transition($owner, $created['publicId'], 'reopen')['quiz']['status']);
-        $this->assertSame('archived', $this->authoring->transition($owner, $created['publicId'], 'archive')['quiz']['status']);
-        $this->assertSame('closed', $this->authoring->transition($owner, $created['publicId'], 'unarchive')['quiz']['status']);
-        $this->assertTrue($this->authoring->transition($owner, $created['publicId'], 'trash')['quiz']['deleted']);
-        $this->assertFalse($this->authoring->transition($owner, $created['publicId'], 'restore')['quiz']['deleted']);
-    }
-
-    public function testPracticeSaveClearsAssessmentOnlySettings(): void
-    {
-        $owner = $this->insertUser('practice@example.test');
-        $created = $this->authoring->create($owner, 'Private practice', 'assessment');
-        $document = $this->authoring->document($owner, $created['publicId']);
-        $document['mode'] = 'practice';
-        $document['emailMode'] = 'required';
-        $document['phoneMode'] = 'optional';
-        $document['cheatCheck'] = true;
-        $document['passcode'] = ['action' => 'set', 'value' => 'secret12'];
-
-        $saved = $this->authoring->save($owner, $created['publicId'], $document);
-
-        $this->assertSame('practice', $saved['mode']);
-        $this->assertSame('hidden', $saved['emailMode']);
-        $this->assertSame('hidden', $saved['phoneMode']);
-        $this->assertFalse($saved['cheatCheck']);
-        $this->assertFalse($saved['passcode']['configured']);
-        $this->assertFalse($saved['resultsAvailable']);
-        $this->assertNull($saved['resultsUrl']);
-
-        $saved['mode'] = 'assessment';
-        $assessment = $this->authoring->save($owner, $created['publicId'], $saved);
-        $this->assertFalse($assessment['resultsAvailable']);
-        $this->assertNull($assessment['resultsUrl']);
-    }
-
-    public function testShareCodeCollisionRetriesWithoutOverwritingAQuiz(): void
-    {
-        $owner = $this->insertUser('codes@example.test');
-        $codes = ['000000001', '000000001', '000000002'];
-        $authoring = new QuizAuthoringService(
-            $this->authoringDb,
-            $this->media,
-            null,
-            static function () use (&$codes): string { return array_shift($codes); },
-        );
-
-        $first = $authoring->create($owner, 'First code', 'assessment');
-        $second = $authoring->create($owner, 'Second code', 'assessment');
-
-        $this->assertSame('000000001', basename($authoring->document($owner, $first['publicId'])['shareUrl']));
-        $this->assertSame('000000002', basename($authoring->document($owner, $second['publicId'])['shareUrl']));
-        $this->assertSame(2, $this->authoringDb->table('quizzes')->countAllResults());
-    }
-
-    public function testTotalTimerUsesHalfMinuteSteps(): void
-    {
-        $owner = $this->insertUser('timer@example.test');
-        $created = $this->authoring->create($owner, 'Timer quiz', 'assessment');
-        $document = $this->authoring->document($owner, $created['publicId']);
-
-        foreach (['0.5' => 30, '1' => 60, '1.5' => 90, '1440' => 86400] as $minutes => $seconds) {
-            $document['timeLimitMinutes'] = $minutes;
-            $document = $this->authoring->save($owner, $created['publicId'], $document);
-            $this->assertSame((string) $minutes, $document['timeLimitMinutes']);
-            $this->assertSame($seconds, (int) $this->authoringDb->table('quizzes')->select('time_limit_sec')->where('public_id', $created['publicId'])->get()->getRow('time_limit_sec'));
-        }
-
-        $document['timeLimitMinutes'] = null;
-        $document = $this->authoring->save($owner, $created['publicId'], $document);
-        $this->assertNull($document['timeLimitMinutes']);
-
-        foreach (['0', '0.25', '1.25', '1440.5'] as $invalid) {
-            $document['timeLimitMinutes'] = $invalid;
-            try {
-                $this->authoring->save($owner, $created['publicId'], $document);
-                $this->fail('An invalid timer should fail: ' . $invalid);
-            } catch (AuthoringException $exception) {
-                $this->assertSame('validation_failed', $exception->errorCode);
-                $this->assertArrayHasKey('timeLimitMinutes', $exception->fields);
-            }
-        }
-    }
-
-    public function testIncompleteDraftCannotPublish(): void
-    {
-        $owner = $this->insertUser('incomplete@example.test');
-        $created = $this->authoring->create($owner, 'Incomplete quiz', 'assessment');
-
-        try {
-            $this->authoring->transition($owner, $created['publicId'], 'publish');
-            $this->fail('An empty quiz should not publish.');
-        } catch (AuthoringException $exception) {
-            $this->assertSame('not_publishable', $exception->errorCode);
-            $this->assertArrayHasKey('questions', $exception->fields);
-        }
-    }
-
-    public function testOwnershipAndPublishedWorkingCopyChangesRemainEditable(): void
-    {
-        $owner = $this->insertUser('owner2@example.test');
-        $other = $this->insertUser('other@example.test');
-        $created = $this->authoring->create($owner, 'Started quiz', 'assessment');
-
-        try {
-            $this->authoring->document($other, $created['publicId']);
-            $this->fail('A non-owner should not load the quiz.');
-        } catch (AuthoringException $exception) {
-            $this->assertSame(404, $exception->status);
-        }
-
-        $quizId = (int) $this->authoringDb->table('quizzes')->select('id')->where('public_id', $created['publicId'])->get()->getRow('id');
-        $this->authoringDb->table('attempts')->insert(['quiz_id' => $quizId, 'status' => 'completed']);
-        $document = $this->authoring->document($owner, $created['publicId']);
-        $originalRevision = $document['revision'];
-        $document['title'] = 'Changed after a start';
-        $saved = $this->authoring->save($owner, $created['publicId'], $document);
-        $this->assertSame('Changed after a start', $saved['title']);
-        $this->assertSame($originalRevision + 1, $saved['revision']);
-
-        $saved['listed'] = true;
-        $listingOnly = $this->authoring->save($owner, $created['publicId'], $saved);
-        $this->assertTrue($listingOnly['listed']);
-        $this->assertSame($saved['revision'], $listingOnly['revision']);
-
-        $listingOnly['mode'] = 'practice';
-        $listingOnly['emailMode'] = 'required';
-        $listingOnly['phoneMode'] = 'optional';
-        $listingOnly['cheatCheck'] = true;
-        $practice = $this->authoring->save($owner, $created['publicId'], $listingOnly);
-        $this->assertSame('practice', $practice['mode']);
-        $this->assertSame('hidden', $practice['emailMode']);
-        $this->assertSame('hidden', $practice['phoneMode']);
-        $this->assertFalse($practice['cheatCheck']);
-        $this->assertSame($listingOnly['revision'] + 1, $practice['revision']);
-        $this->assertArrayNotHasKey('hasStarted', $practice);
-        $this->assertFalse($practice['hasPublished']);
-        $this->assertTrue($practice['resultsAvailable']);
-        $this->assertSame(site_url('results/quizzes/' . $created['publicId']), $practice['resultsUrl']);
-
-        $practice['mode'] = 'assessment';
-        $assessment = $this->authoring->save($owner, $created['publicId'], $practice);
-        $this->assertSame('assessment', $assessment['mode']);
-        $this->assertSame($practice['revision'] + 1, $assessment['revision']);
-    }
-
-    public function testPrivateImageAndValidatedVideoMedia(): void
-    {
-        config('Encryption')->key = 'authoring-test-signing-key';
-        $owner = $this->insertUser('media@example.test');
-        $created = $this->authoring->create($owner, 'Media quiz', 'assessment');
-        $document = $this->authoring->document($owner, $created['publicId']);
-        $document['questions'] = [[
-            'id' => null, 'type' => 'single_choice', 'content' => 'Media question',
-            'explanation' => '', 'textAnswers' => [],
-            'options' => [
-                ['id' => null, 'content' => 'A', 'isCorrect' => true],
-                ['id' => null, 'content' => 'B', 'isCorrect' => false],
-            ],
-        ]];
-        $saved = $this->authoring->save($owner, $created['publicId'], $document);
-        $questionId = (int) $saved['questions'][0]['id'];
-        $optionId = (int) $saved['questions'][0]['options'][0]['id'];
-
-        $temp = tempnam(sys_get_temp_dir(), 'edutest-image-');
-        $this->assertNotFalse($temp);
-        file_put_contents($temp, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', true));
-        $upload = new TestUploadedFile($temp, 'pixel.png', 'image/png', filesize($temp), UPLOAD_ERR_OK);
-        $attached = $this->media->attachFile($owner, $created['publicId'], 'question', $questionId, $upload, $saved['version']);
-
-        $this->assertSame('image', $attached['media']['type']);
-        $this->assertStringNotContainsString('quiz-media', $attached['media']['url']);
-        $token = basename((string) parse_url($attached['media']['url'], PHP_URL_PATH));
-        $resolved = $this->media->resolveSigned($token);
-        $this->assertFileExists($resolved['path']);
-        $this->assertSame('image/png', $resolved['mime']);
-
-        try {
-            $this->media->resolveSigned($token . 'tampered');
-            $this->fail('A tampered media token should fail.');
-        } catch (AuthoringException $exception) {
-            $this->assertSame(404, $exception->status);
-        }
-
-        $waveTemp = tempnam(sys_get_temp_dir(), 'edutest-audio-');
-        $this->assertNotFalse($waveTemp);
-        $wave = 'RIFF' . pack('V', 36) . 'WAVEfmt ' . pack('VvvVVvv', 16, 1, 1, 8000, 8000, 1, 8) . 'data' . pack('V', 0);
-        file_put_contents($waveTemp, $wave);
-        try {
-            $this->media->attachFile(
-                $owner,
-                $created['publicId'],
-                'option',
-                $optionId,
-                new TestUploadedFile($waveTemp, 'sample.wav', 'audio/wav', filesize($waveTemp), UPLOAD_ERR_OK),
-                $attached['version'],
-            );
-            $this->fail('Answer choices must reject audio media.');
-        } catch (AuthoringException $exception) {
-            $this->assertSame('invalid_option_media', $exception->errorCode);
-        }
-        $waveUpload = new TestUploadedFile($waveTemp, 'sample.wav', 'audio/wav', filesize($waveTemp), UPLOAD_ERR_OK);
-        $audio = $this->media->attachFile($owner, $created['publicId'], 'question', $questionId, $waveUpload, $attached['version']);
-        $this->assertSame('audio', $audio['media']['type']);
-        $this->assertFileDoesNotExist($resolved['path']);
-        $audioToken = basename((string) parse_url($audio['media']['url'], PHP_URL_PATH));
-        $originalAudio = $this->media->resolveSigned($audioToken);
-
-        $duplicate = $this->authoring->duplicate($owner, $created['publicId']);
-        $duplicateDocument = $this->authoring->document($owner, $duplicate['publicId']);
-        $duplicateToken = basename((string) parse_url($duplicateDocument['questions'][0]['media']['url'], PHP_URL_PATH));
-        $duplicateMedia = $this->media->resolveSigned($duplicateToken);
-        $this->assertFileExists($duplicateMedia['path']);
-        $this->assertNotSame($duplicateMedia['path'], $originalAudio['path']);
-
-        $fakeTemp = tempnam(sys_get_temp_dir(), 'edutest-fake-');
-        file_put_contents($fakeTemp, '<?php echo "not media";');
-        try {
-            $this->media->attachFile(
-                $owner,
-                $created['publicId'],
-                'question',
-                $questionId,
-                new TestUploadedFile($fakeTemp, 'fake.jpg', 'image/jpeg', filesize($fakeTemp), UPLOAD_ERR_OK),
-                $audio['version'],
-            );
-            $this->fail('A disguised file should be rejected.');
-        } catch (AuthoringException $exception) {
-            $this->assertSame('unsupported_media', $exception->errorCode);
-        } finally {
-            @unlink($fakeTemp);
-        }
-
-        $largeTemp = tempnam(sys_get_temp_dir(), 'edutest-large-');
-        file_put_contents($largeTemp, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', true));
-        $largeHandle = fopen($largeTemp, 'ab');
-        ftruncate($largeHandle, (5 * 1024 * 1024) + 1);
-        fclose($largeHandle);
-        try {
-            $this->media->attachFile(
-                $owner,
-                $created['publicId'],
-                'question',
-                $questionId,
-                new TestUploadedFile($largeTemp, 'large.png', 'image/png', filesize($largeTemp), UPLOAD_ERR_OK),
-                $audio['version'],
-            );
-            $this->fail('An oversized image should be rejected.');
-        } catch (AuthoringException $exception) {
-            $this->assertSame('media_too_large', $exception->errorCode);
-        } finally {
-            @unlink($largeTemp);
-        }
-
-        $video = $this->media->attachVideo(
-            $owner,
-            $created['publicId'],
-            'question',
-            $questionId,
-            'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-            $audio['version'],
-        );
-        $this->assertSame('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ', $video['media']['embedUrl']);
-        $this->assertFileDoesNotExist($originalAudio['path']);
-        $this->assertFileExists($duplicateMedia['path']);
-        try {
-            $this->media->attachVideo($owner, $created['publicId'], 'option', $optionId, 'https://vimeo.com/123456789', $video['version']);
-            $this->fail('Answer choices must reject video media.');
-        } catch (AuthoringException $exception) {
-            $this->assertSame('invalid_option_media', $exception->errorCode);
-        }
-
-        $this->expectException(AuthoringException::class);
-        $this->media->attachVideo(
-            $owner,
-            $created['publicId'],
-            'question',
-            $questionId,
-            'http://example.com/video.mp4',
-            $video['version'],
-        );
-    }
-
-    private function insertUser(string $email): int
-    {
-        $now = '2026-01-01 00:00:00';
-        $this->authoringDb->table('users')->insert([
-            'email' => $email,
-            'password_hash' => password_hash('secret1', PASSWORD_DEFAULT),
-            'display_name' => 'Test Teacher',
-            'timezone' => 'Asia/Tashkent',
-            'active' => 1,
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]);
-        return (int) $this->authoringDb->insertID();
-    }
-
-    private function createTables(): void
-    {
-        $this->forge->addField([
-            'id' => ['type' => 'INTEGER', 'constraint' => 11, 'auto_increment' => true],
-            'email' => ['type' => 'VARCHAR', 'constraint' => 254],
-            'password_hash' => ['type' => 'VARCHAR', 'constraint' => 255],
-            'display_name' => ['type' => 'VARCHAR', 'constraint' => 120],
-            'timezone' => ['type' => 'VARCHAR', 'constraint' => 64],
-            'active' => ['type' => 'INTEGER', 'default' => 1],
-            'created_at' => ['type' => 'DATETIME'], 'updated_at' => ['type' => 'DATETIME'],
-            'deleted_at' => ['type' => 'DATETIME', 'null' => true],
-        ]);
-        $this->forge->addKey('id', true);
-        $this->forge->createTable('users');
-
-        $this->forge->addField([
-            'id' => ['type' => 'INTEGER', 'constraint' => 11, 'auto_increment' => true],
-            'user_id' => ['type' => 'INTEGER'], 'public_id' => ['type' => 'VARCHAR', 'constraint' => 32],
-            'share_token' => ['type' => 'VARCHAR', 'constraint' => 64], 'mode' => ['type' => 'VARCHAR', 'constraint' => 16],
-            'status' => ['type' => 'VARCHAR', 'constraint' => 12], 'listed' => ['type' => 'INTEGER'],
-            'title' => ['type' => 'VARCHAR', 'constraint' => 200], 'description' => ['type' => 'TEXT'],
-            'revision' => ['type' => 'INTEGER'], 'version' => ['type' => 'INTEGER'],
-            'cover_src' => ['type' => 'TEXT', 'null' => true],
-            'current_paper_id' => ['type' => 'INTEGER', 'null' => true], 'time_limit_sec' => ['type' => 'INTEGER', 'null' => true],
-            'opens_at' => ['type' => 'DATETIME', 'null' => true], 'closes_at' => ['type' => 'DATETIME', 'null' => true],
-            'passcode_hash' => ['type' => 'VARCHAR', 'constraint' => 255, 'null' => true],
-            'email_mode' => ['type' => 'VARCHAR', 'constraint' => 8], 'phone_mode' => ['type' => 'VARCHAR', 'constraint' => 8],
-            'shuffle_questions' => ['type' => 'INTEGER'], 'shuffle_options' => ['type' => 'INTEGER'],
-            'feedback' => ['type' => 'VARCHAR', 'constraint' => 12], 'show_score' => ['type' => 'INTEGER'],
-            'show_answers' => ['type' => 'INTEGER'], 'show_explain' => ['type' => 'INTEGER'], 'cheat_check' => ['type' => 'INTEGER'],
-            'practice_starts' => ['type' => 'INTEGER'], 'published_at' => ['type' => 'DATETIME', 'null' => true],
-            'created_at' => ['type' => 'DATETIME'], 'updated_at' => ['type' => 'DATETIME'], 'deleted_at' => ['type' => 'DATETIME', 'null' => true],
-        ]);
-        $this->forge->addKey('id', true); $this->forge->addUniqueKey('public_id'); $this->forge->addUniqueKey('share_token');
-        $this->forge->createTable('quizzes');
-
-        $this->forge->addField([
-            'id' => ['type' => 'INTEGER', 'constraint' => 11, 'auto_increment' => true], 'quiz_id' => ['type' => 'INTEGER'],
-            'pos' => ['type' => 'INTEGER'], 'type' => ['type' => 'VARCHAR', 'constraint' => 16], 'content' => ['type' => 'TEXT'],
-            'media_type' => ['type' => 'VARCHAR', 'constraint' => 8, 'null' => true], 'media_src' => ['type' => 'TEXT', 'null' => true],
-            'explanation' => ['type' => 'TEXT', 'null' => true], 'text_answers' => ['type' => 'TEXT', 'null' => true],
-            'created_at' => ['type' => 'DATETIME'], 'updated_at' => ['type' => 'DATETIME'],
-        ]);
-        $this->forge->addKey('id', true); $this->forge->addUniqueKey(['quiz_id', 'pos']); $this->forge->createTable('questions');
-
-        $this->forge->addField([
-            'id' => ['type' => 'INTEGER', 'constraint' => 11, 'auto_increment' => true], 'question_id' => ['type' => 'INTEGER'],
-            'pos' => ['type' => 'INTEGER'], 'code' => ['type' => 'VARCHAR', 'constraint' => 16], 'content' => ['type' => 'TEXT'],
-            'media_type' => ['type' => 'VARCHAR', 'constraint' => 8, 'null' => true], 'media_src' => ['type' => 'TEXT', 'null' => true],
-            'is_correct' => ['type' => 'INTEGER'], 'created_at' => ['type' => 'DATETIME'], 'updated_at' => ['type' => 'DATETIME'],
-        ]);
-        $this->forge->addKey('id', true); $this->forge->addUniqueKey(['question_id', 'pos']); $this->forge->createTable('question_options');
-
-
-        $this->forge->addField([
-            'id' => ['type' => 'INTEGER', 'constraint' => 11, 'auto_increment' => true],
-            'quiz_id' => ['type' => 'INTEGER'], 'public_id' => ['type' => 'VARCHAR', 'constraint' => 32],
-            'revision' => ['type' => 'INTEGER'], 'passcode_hash' => ['type' => 'VARCHAR', 'constraint' => 255, 'null' => true], 'definition' => ['type' => 'TEXT'],
-            'created_at' => ['type' => 'DATETIME'],
-        ]);
-        $this->forge->addKey('id', true); $this->forge->createTable('quiz_papers');
-        $this->forge->addField([
-            'id' => ['type' => 'INTEGER', 'constraint' => 11, 'auto_increment' => true], 'quiz_id' => ['type' => 'INTEGER'],
-            'status' => ['type' => 'VARCHAR', 'constraint' => 12],
-            'percent' => ['type' => 'DECIMAL', 'constraint' => '5,2', 'null' => true],
-            'finished_at' => ['type' => 'DATETIME', 'null' => true],
-        ]);
-        $this->forge->addKey('id', true); $this->forge->createTable('attempts');
-    }
-
-    private function dropTables(): void
-    {
-        foreach (['attempts', 'quiz_papers', 'question_options', 'questions', 'quizzes', 'users'] as $table) {
-            if ($this->authoringDb->tableExists($table)) $this->forge->dropTable($table, true);
-        }
-    }
-
-    private function removeDirectory(string $directory): void
-    {
-        if (! is_dir($directory)) return;
-        $items = array_diff(scandir($directory) ?: [], ['.', '..']);
-        foreach ($items as $item) {
-            $path = $directory . DIRECTORY_SEPARATOR . $item;
-            if (is_dir($path)) $this->removeDirectory($path); else @unlink($path);
-        }
-        @rmdir($directory);
-    }
-}
-
-final class TestUploadedFile extends UploadedFile
-{
-    public function isValid(): bool
-    {
-        return $this->error === UPLOAD_ERR_OK && is_file($this->path);
-    }
-
-    public function move(string $targetPath, ?string $name = null, bool $overwrite = false)
-    {
-        $targetPath = rtrim($targetPath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
-        if (! is_dir($targetPath)) mkdir($targetPath, 0750, true);
-        $name ??= $this->getName();
-        $destination = $targetPath . $name;
-        if (! copy($this->path, $destination)) return false;
-        @unlink($this->path);
-        $this->hasMoved = true;
-        $this->path = $targetPath;
-        $this->name = $name;
-        return true;
     }
 }

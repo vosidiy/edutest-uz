@@ -6,69 +6,38 @@ namespace App\Services\Player;
 
 use App\Exceptions\PlayerException;
 
-/** Equal-weight, all-or-nothing scoring mirrored by player-scoring.js. */
+/** Equal-weight, server-authoritative single-choice scoring. */
 final class ScoringService
 {
-    public static function normalize(string $text): string
+    public function validateCode(array $question, mixed $code, bool $nullable = true): ?string
     {
-        return mb_strtolower(trim(preg_replace('/[\p{Z}\x{0009}-\x{000D}\x{0085}]+/u', ' ', $text) ?? ''), 'UTF-8');
-    }
+        if ($code === null && $nullable) {
+            return null;
+        }
+        if (! is_string($code) || $code === '') {
+            throw new PlayerException('invalid_answer');
+        }
 
-    /** @return array{answerCodes: list<string>, textAnswer: string} */
-    public function answer(array $question, array $input): array
-    {
-        $codes = $input['answerCodes'] ?? [];
-        $text = $input['textAnswer'] ?? '';
-        if (! is_array($codes) || ! array_is_list($codes) || ! is_string($text)
-            || ! mb_check_encoding($text, 'UTF-8') || mb_strlen($text) > 500) {
-            throw new PlayerException('invalid_answer');
-        }
-        if ($question['type'] === 'short_text') {
-            if ($codes !== []) throw new PlayerException('invalid_answer');
-            return ['answerCodes' => [], 'textAnswer' => $text];
-        }
-        $allowed = array_column($question['options'], 'code');
-        if ($text !== '' || count($codes) > count($allowed)
-            || ($question['type'] === 'single_choice' && count($codes) > 1)) {
-            throw new PlayerException('invalid_answer');
-        }
-        $seen = [];
-        foreach ($codes as $code) {
-            if (! is_string($code) || ! in_array($code, $allowed, true) || isset($seen[$code])) {
-                throw new PlayerException('invalid_answer');
+        foreach ($question['options'] as $option) {
+            if (hash_equals((string) $option['code'], $code)) {
+                return $code;
             }
-            $seen[$code] = true;
         }
-        sort($codes, SORT_STRING);
-        return ['answerCodes' => $codes, 'textAnswer' => ''];
+
+        throw new PlayerException('invalid_answer');
     }
 
-    /** @return array{result: string, isCorrect: bool} */
-    public function grade(array $question, array $input): array
+    public function isCorrect(array $question, ?string $code): bool
     {
-        $answer = $this->answer($question, $input);
-        if ($question['type'] === 'short_text') {
-            $text = self::normalize($answer['textAnswer']);
-            $correct = $text !== '' && in_array($text, array_map(self::normalize(...), $question['acceptedAnswers']), true);
-            return ['result' => $text === '' ? 'unanswered' : ($correct ? 'correct' : 'wrong'), 'isCorrect' => $correct];
-        }
-        $codes = $answer['answerCodes'];
-        if ($codes === []) return ['result' => 'unanswered', 'isCorrect' => false];
-        $correct = array_values(array_unique(array_map('strval', $question['correctCodes'])));
-        sort($correct, SORT_STRING);
-        if ($correct === []) throw new PlayerException('invalid_quiz', 409);
-        $isCorrect = $codes === $correct;
-        return ['result' => $isCorrect ? 'correct' : 'wrong', 'isCorrect' => $isCorrect];
+        return $code !== null && hash_equals((string) $question['correctCode'], $code);
     }
 
     public static function percent(int $score, int $maximum): string
     {
-        if ($maximum < 1) throw new PlayerException('invalid_quiz', 409);
-        return number_format(round(($score * 100) / $maximum, 2, PHP_ROUND_HALF_UP), 2, '.', '');
-    }
+        if ($maximum < 1) {
+            throw new PlayerException('invalid_quiz', 409);
+        }
 
-    public static function score(int $value): string
-    {
-        return number_format($value, 0, '.', '');
+        return number_format(round(($score * 100) / $maximum, 2, PHP_ROUND_HALF_UP), 2, '.', '');
     }
 }

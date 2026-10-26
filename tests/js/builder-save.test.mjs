@@ -21,15 +21,17 @@ function fixture() {
   Object.entries(component.methods).forEach(([name,fn])=>{app[name]=fn.bind(app);});
   app.scheduleAutosave=()=>{};
   Object.entries(component.computed).forEach(([name,fn])=>Object.defineProperty(app,name,{get:()=>fn.call(app)}));
-  const quiz={publicId:'fixture',title:'Quiz',mode:'assessment',status:'published',version:1,revision:1,passcode:{configured:false,action:'unchanged'},
-    questions:[{id:'1',type:'single_choice',content:'Question',explanation:'',textAnswers:[],media:null,
+  const quiz={publicId:'fixture',title:'Quiz',description:'',listed:false,status:'published',version:1,timeLimitSec:7200,
+    askEmail:false,askPhone:false,drawCount:null,shuffleQuestions:false,shuffleOptions:false,feedback:'at_end',
+    showScore:true,showAnswers:false,showExplain:false,cover:null,mediaLimits:{imageBytes:5242880,audioBytes:20971520},
+    questions:[{id:'1',content:'Question',optionsLayout:'list',explanation:'',media:null,
       options:[{id:'11',code:'a',content:'Yes',isCorrect:true,media:null},{id:'12',code:'b',content:'No',isCorrect:false,media:null}]}]};
   app.applyServerQuiz(clone(quiz)); app.loading=false; app.hydrating=false;
   return {app,quiz,revoked,setRequest:fn=>{request=fn;}};
 }
 function deferred() {let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};}
 function response(payload) {
-  const quiz=clone(payload); quiz.version++;quiz.passcode={configured:quiz.passcode.action==='set',action:'unchanged'};
+  const quiz=clone(payload); quiz.version++;
   quiz.questions.forEach((q,i)=>{q.id ||= String(100+i);q.options.forEach((o,j)=>{o.id ||= String(1000+i*10+j);});});
   return {data:{quiz}};
 }
@@ -42,7 +44,7 @@ test('unchanged saves never mutate and reverting restores clean state', async()=
   assert.equal(app.hasChanges,true);assert.equal(app.saveState,'dirty');
   app.quiz.title='Quiz';app.markDirty();assert.equal(app.hasChanges,false);assert.equal(app.saveState,'saved');
 });
-test('one save pipeline preserves newer text, passcodes, reorders, deletions and new row identities',async()=>{
+test('one save pipeline preserves newer text, layouts, reorders, deletions and new row identities',async()=>{
   const {app,setRequest}=fixture(); const gate=deferred();let sent,requests=0;
   app.quiz.questions[0].id=null; app.quiz.questions[0].options[0].id=null;
   setRequest((_url,options)=>{requests++;sent=JSON.parse(options.body);return gate.promise;});
@@ -51,13 +53,13 @@ test('one save pipeline preserves newer text, passcodes, reorders, deletions and
   assert.equal(app.save(true),saving);assert.equal(app.saveState,'saving');assert.equal(requests,1);
   app.quiz.title='Newer title';original.content='Newer question';option.content='Newer option';
   original.options.splice(1,1);
-  app.quiz.questions.unshift({id:null,type:'short_text',content:'Added while saving',textAnswers:['new'],explanation:'',options:[]});
-  app.quiz.passcode.action='set';app.passcodeValue='new passcode';
+  app.quiz.questions.unshift({id:null,content:'Added while saving',optionsLayout:'grid',explanation:'',media:null,
+    options:[{id:null,content:'A',isCorrect:true,media:null},{id:null,content:'B',isCorrect:false,media:null}]});
   gate.resolve(response(sent));assert.equal(await saving,false);
   assert.equal(app.quiz.title,'Newer title');assert.equal(original.content,'Newer question');
   assert.equal(original.id,'100');assert.equal(option.id,'1000');assert.equal(option.content,'Newer option');
   assert.equal(original.options.length,1);assert.equal(app.quiz.questions[0].id,null);
-  assert.equal(app.passcodeValue,'new passcode');assert.equal(app.saveState,'dirty');
+  assert.equal(app.quiz.questions[0].optionsLayout,'grid');assert.equal(app.saveState,'dirty');
   setRequest(async(_url,options)=>response(JSON.parse(options.body)));
   assert.equal(await app.save(true),true);assert.equal(app.hasChanges,false);
 });
@@ -148,14 +150,14 @@ test('publishing blocks overlapping writes and preserves edits made during its r
   assert.equal(app.saveState,'dirty');assert.equal(app.mediaBusy,false);
 });
 
-test('publishing saves pending edits before activating the paper',async()=>{
+test('publishing saves pending edits before changing lifecycle state',async()=>{
   const {app,setRequest}=fixture();const calls=[];
   app.quiz.title='Latest saved title';app.markDirty();
   setRequest(async(url,options)=>{
     calls.push({url,method:options.method});
     if(options.method==='PUT')return response(JSON.parse(options.body));
     assert.equal(app.quiz.title,'Latest saved title');
-    const server=clone(app.quiz);server.hasPublished=true;server.hasUnpublishedChanges=false;server.version++;
+    const server=clone(app.quiz);server.status='published';server.version++;
     return {data:{quiz:server}};
   });
   await app.lifecycle('publish');

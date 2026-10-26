@@ -16,7 +16,6 @@ final class QuizController extends ApiController
                 ...service('quizAuthoring')->create(
                     $this->userId(),
                     (string) ($data['title'] ?? ''),
-                    (string) ($data['mode'] ?? ''),
                 ),
                 '_status' => 201,
             ];

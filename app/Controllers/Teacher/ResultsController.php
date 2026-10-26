@@ -94,7 +94,7 @@ final class ResultsController extends BaseController
         fputcsv($stream, [
             'Attempt ID', 'Name', 'Email', 'Phone', 'Status', 'Finish reason',
             'Score', 'Maximum score', 'Percentage', 'Started at', 'Finished at',
-            'Duration seconds', 'Integrity events', 'Late synchronization',
+            'Duration seconds', 'Late synchronization',
         ], ',', '"', '');
 
         foreach ($export['rows'] as $row) {
@@ -129,7 +129,6 @@ final class ResultsController extends BaseController
             'dateTo'    => $this->request->getGet('dateTo'),
             'minScore'  => $this->request->getGet('minScore'),
             'maxScore'  => $this->request->getGet('maxScore'),
-            'integrity' => $this->request->getGet('integrity'),
             'sort'      => $this->request->getGet('sort'),
             'page'      => $this->request->getGet('page'),
         ];

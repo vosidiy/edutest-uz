@@ -40,10 +40,6 @@ final class MediaService
         $this->signingKey();
         $record = $this->ownedTarget($userId, $quizPublicId, $target, $targetId, true);
 
-        if ($record['status'] === 'archived') {
-            throw new AuthoringException('quiz_archived', 'Restore this quiz from the archive before changing media.', 409);
-        }
-
         [$mediaType, $extension, $mime] = $this->validateUpload($file);
         if ($target === 'cover' && $mediaType !== 'image') {
             throw new AuthoringException('invalid_cover', lang('Player.errors.invalid_cover'), 422);
@@ -99,10 +95,6 @@ final class MediaService
         $this->signingKey();
         $record = $this->ownedTarget($userId, $quizPublicId, $target, $targetId, true);
 
-        if ($record['status'] === 'archived') {
-            throw new AuthoringException('quiz_archived', 'Restore this quiz from the archive before changing media.', 409);
-        }
-
         $normalized = $this->normalizeVideoUrl($url);
         if ($target === 'cover') throw new AuthoringException('invalid_cover', lang('Player.errors.invalid_cover'), 422);
         if ($target === 'option') throw new AuthoringException('invalid_option_media', lang('Player.errors.invalid_option_media'), 422);
@@ -138,10 +130,6 @@ final class MediaService
         $record = $this->ownedTarget($userId, $quizPublicId, $target, $targetId, true);
         $targetId = (int) $record['id'];
 
-        if ($record['status'] === 'archived') {
-            throw new AuthoringException('quiz_archived', 'Restore this quiz from the archive before changing media.', 409);
-        }
-
         $result = $this->replaceReference($record, $target, $targetId, null, null, $expectedVersion);
 
         if ($record['media_type'] !== null && $record['media_type'] !== 'video') {
@@ -159,16 +147,16 @@ final class MediaService
         $payload = $this->verifyToken($token);
         $target = (string) ($payload['target'] ?? '');
 
-        if ($target === 'paper') {
-            $paperId = (string) ($payload['paper'] ?? '');
+        if ($target === 'attempt') {
+            $attemptId = (string) ($payload['attempt'] ?? '');
             $key = (string) ($payload['key'] ?? '');
-            if (! preg_match('/^[a-f0-9]{32}$/D', $paperId)
+            if (! preg_match('/^[a-f0-9]{32}$/D', $attemptId)
                 || ! preg_match('/^[a-f0-9]{32}$/D', $key)) {
                 throw new AuthoringException('media_not_found', 'Media not found.', 404);
             }
-            $paper = $this->db->table('quiz_papers')->select('definition')->where('public_id', $paperId)->get()->getRowArray();
-            $definition = $paper === null ? null : json_decode((string) $paper['definition'], true);
-            $row = is_array($definition) ? $this->findPaperMedia($definition, $key) : null;
+            $attempt = $this->db->table('attempts')->select('snapshot')->where('public_id', $attemptId)->get()->getRowArray();
+            $snapshot = $attempt === null ? null : json_decode((string) $attempt['snapshot'], true);
+            $row = is_array($snapshot) ? $this->findSnapshotMedia($snapshot, $key) : null;
         } else {
             $id = isset($payload['id']) ? (int) $payload['id'] : 0;
             if (! in_array($target, ['question', 'option', 'cover'], true) || $id < 1) {
@@ -216,7 +204,7 @@ final class MediaService
     }
 
     /** @return array<string, string>|null */
-    public function paperDescriptor(string $type, string $src, string $paperPublicId, string $key): ?array
+    public function attemptDescriptor(string $type, string $src, string $attemptPublicId, string $key): ?array
     {
         if ($type === 'video') {
             return ['type' => 'video', 'url' => $src, 'embedUrl' => $this->embedUrl($src)];
@@ -227,7 +215,7 @@ final class MediaService
         $expires = time() + self::SIGNED_TTL;
         return [
             'type' => $type,
-            'url' => site_url('media/' . $this->signPaperToken($paperPublicId, $key, $expires)),
+            'url' => site_url('media/' . $this->signAttemptToken($attemptPublicId, $key, $expires)),
             'expiresAt' => gmdate(DATE_ATOM, $expires),
         ];
     }
@@ -262,7 +250,7 @@ final class MediaService
 
     public function deleteStoredReference(string $relative): void
     {
-        if ($this->storedReferenceInPaper($relative) || $this->storedReferenceInLive($relative)) {
+        if ($this->storedReferenceInAttempt($relative) || $this->storedReferenceInLive($relative)) {
             return;
         }
         try {
@@ -283,42 +271,48 @@ final class MediaService
         return $this->db->table('question_options')->where('media_src', $relative)->countAllResults() > 0;
     }
 
-    private function storedReferenceInPaper(string $relative): bool
+    private function storedReferenceInAttempt(string $relative): bool
     {
-        foreach ($this->db->table('quiz_papers')->select('definition')->get()->getResultArray() as $row) {
-            $definition = json_decode((string) $row['definition'], true);
-            if (is_array($definition) && $this->paperContainsSource($definition, $relative)) {
+        // Historical snapshots intentionally keep media alive. Bound each cleanup scan so
+        // a single authoring request cannot traverse an unbounded attempts table.
+        $rows = $this->db->table('attempts')->select('snapshot')->orderBy('id', 'DESC')->limit(10000)->get()->getResultArray();
+        foreach ($rows as $row) {
+            $snapshot = json_decode((string) $row['snapshot'], true);
+            if (is_array($snapshot) && $this->snapshotContainsSource($snapshot, $relative)) {
                 return true;
             }
         }
-        return false;
+
+        // If the bounded scan did not reach the oldest row, fail closed. A later
+        // maintenance job can perform an exhaustive scan without slowing a save.
+        return count($rows) === 10000;
     }
 
-    private function paperContainsSource(array $value, string $relative): bool
+    private function snapshotContainsSource(array $value, string $relative): bool
     {
         foreach ($value as $key => $child) {
             if ($key === 'src' && $child === $relative) return true;
-            if (is_array($child) && $this->paperContainsSource($child, $relative)) return true;
+            if (is_array($child) && $this->snapshotContainsSource($child, $relative)) return true;
         }
         return false;
     }
 
     /** @return array{media_type: string, media_src: string}|null */
-    private function findPaperMedia(array $value, string $key): ?array
+    private function findSnapshotMedia(array $value, string $key): ?array
     {
         if (($value['key'] ?? null) === $key && is_string($value['type'] ?? null) && is_string($value['src'] ?? null)) {
             return ['media_type' => $value['type'], 'media_src' => $value['src']];
         }
         foreach ($value as $child) {
-            if (is_array($child) && ($found = $this->findPaperMedia($child, $key)) !== null) return $found;
+            if (is_array($child) && ($found = $this->findSnapshotMedia($child, $key)) !== null) return $found;
         }
         return null;
     }
 
-    private function signPaperToken(string $paperPublicId, string $key, int $expires): string
+    private function signAttemptToken(string $attemptPublicId, string $key, int $expires): string
     {
         $payload = $this->base64UrlEncode(json_encode([
-            'target' => 'paper', 'paper' => $paperPublicId, 'key' => $key, 'exp' => $expires,
+            'target' => 'attempt', 'attempt' => $attemptPublicId, 'key' => $key, 'exp' => $expires,
         ], JSON_THROW_ON_ERROR));
         return $payload . '.' . $this->base64UrlEncode(hash_hmac('sha256', $payload, $this->signingKey(), true));
     }
@@ -415,7 +409,6 @@ final class MediaService
             }
             $quiz = $this->db->query($sql, [$record['quiz_id']])->getRowArray();
             if ($quiz === null || $quiz['deleted_at'] !== null) throw new AuthoringException('media_not_found', 'Media target not found.', 404);
-            if ($quiz['status'] === 'archived') throw new AuthoringException('quiz_archived', 'Restore this quiz before changing media.', 409);
             $version = (int) $quiz['version'];
             if ($version !== (int) $record['version'] || ($expectedVersion !== null && $version !== $expectedVersion)) {
                 throw new AuthoringException(
@@ -429,9 +422,19 @@ final class MediaService
             if ($this->db->table($table)->where('id', $targetId)->countAllResults() !== 1) throw new AuthoringException('media_not_found', 'Media target not found.', 404);
             $change = $target === 'cover' ? ['cover_src' => $src] : ['media_type' => $type, 'media_src' => $src];
             $this->db->table($table)->where('id', $targetId)->update($change + ['updated_at' => $this->now()]);
+            if ($quiz['status'] === 'published' && $target === 'option' && $src === null) {
+                $option = $this->db->table('question_options')->select('content')->where('id', $targetId)->get()->getRowArray();
+                if ($option === null || trim((string) $option['content']) === '') {
+                    throw new AuthoringException(
+                        'not_publishable',
+                        'A published answer must keep text or an image.',
+                        422,
+                        ['media' => 'Add answer text before removing its image.'],
+                    );
+                }
+            }
             $this->db->table('quizzes')->where('id', $record['quiz_id'])->update([
                 'version'    => $version + 1,
-                'revision'   => (int) $quiz['revision'] + 1,
                 'updated_at' => $this->now(),
             ]);
 

@@ -1,8 +1,7 @@
 <section class="dashboard-library" aria-labelledby="quiz-library-title">
   
     <form class="library-toolbar" method="get" action="<?= site_url('dashboard') ?>">
-        <label><span class="sr-only"><?= esc(lang('Workspace.statusLabel')) ?></span><select class="form-select" name="status"><option value=""><?= esc(lang('Workspace.allStatuses')) ?></option><?php foreach (['draft', 'published', 'closed', 'archived', 'trash'] as $status) : ?><option value="<?= $status ?>" <?= $library['filters']['status'] === $status ? 'selected' : '' ?>><?= esc(lang('Workspace.status.' . $status)) ?></option><?php endforeach ?></select></label>
-        <label><span class="sr-only"><?= esc(lang('Workspace.modeLabel')) ?></span><select class="form-select" name="mode"><option value=""><?= esc(lang('Workspace.allModes')) ?></option><?php foreach (['assessment', 'practice'] as $mode) : ?><option value="<?= $mode ?>" <?= $library['filters']['mode'] === $mode ? 'selected' : '' ?>><?= esc(lang('Workspace.mode.' . $mode)) ?></option><?php endforeach ?></select></label>
+        <label><span class="sr-only"><?= esc(lang('Workspace.statusLabel')) ?></span><select class="form-select" name="status"><option value=""><?= esc(lang('Workspace.allStatuses')) ?></option><?php foreach (['draft', 'published', 'trash'] as $status) : ?><option value="<?= $status ?>" <?= $library['filters']['status'] === $status ? 'selected' : '' ?>><?= esc(lang('Workspace.status.' . $status)) ?></option><?php endforeach ?></select></label>
         <label><span class="sr-only"><?= esc(lang('Workspace.sortLabel')) ?></span><select class="form-select" name="sort"><?php foreach (['updated_desc', 'created_desc', 'title_asc', 'submissions_desc'] as $sort) : ?><option value="<?= $sort ?>" <?= $library['filters']['sort'] === $sort ? 'selected' : '' ?>><?= esc(lang('Workspace.sort.' . $sort)) ?></option><?php endforeach ?></select></label>
         <button class="btn btn-default" type="submit"><?= esc(lang('Workspace.apply')) ?></button>
     </form>
@@ -30,18 +29,13 @@
                         <span class="badge status <?= esc($quiz['deleted'] ? 'deleted' : $quiz['status'], 'attr') ?>"><?= esc(lang('Workspace.status.' . ($quiz['deleted'] ? 'deleted' : $quiz['status']))) ?></span>
                     </div>
                     <p style="font-weight:600">
-                        <?= esc(lang('Workspace.questions', [$quiz['questionCount']])) ?> · <?= esc(lang('Workspace.mode.' . $quiz['mode'])) ?><?= $quiz['hasPublished'] ? ' • ' . esc(lang('Workspace.hasPublishedPaper')) : '' ?>
+                        <?= esc(lang('Workspace.questions', [$quiz['questionCount']])) ?> · Assessment
                     </p>
                     <hr class="my-2">
                     <ul class="quiz-item-card-stat text-secondary mb-2">
                         <li>
                             <?= esc(lang('Workspace.finalized')) ?>: 
                             <?= esc((string) $quiz['assessmentSubmissions']) ?>
-                        </li>
-                        <li>•</li>
-                        <li>
-                            <?= esc(lang('Workspace.practiceStarts')) ?></b>: 
-                            <?= esc((string) $quiz['practiceStarts']) ?>
                         </li>
                     </ul>
                     <p class="text-secondary">⏱️ <?= esc(lang('Workspace.updated')) ?> <?= esc($quiz['updatedAt'] ?? '—') ?></p>
@@ -58,12 +52,10 @@
                                 <button class="dropdown-item" type="button" data-quiz-action="restore"><?= esc(lang('Workspace.action.restore')) ?></button>
                             <?php else : ?>
                                 <button class="dropdown-item" type="button" data-quiz-action="duplicate"><?= esc(lang('Workspace.action.duplicate')) ?></button>
-                                <?php foreach (['draft' => 'publish', 'published' => 'close', 'closed' => 'reopen'] as $status => $action) : ?>
+                                <?php foreach (['draft' => 'publish', 'published' => 'unpublish'] as $status => $action) : ?>
                                     <?php if ($quiz['status'] === $status) : ?><button class="dropdown-item" type="button" data-quiz-action="<?= $action ?>"><?= esc(lang('Workspace.action.' . $action)) ?></button><?php endif ?>
                                 <?php endforeach ?>
-                                <?php $action = $quiz['status'] === 'archived' ? 'unarchive' : 'archive'; ?>
-                                <button class="dropdown-item" type="button" data-quiz-action="<?= $action ?>"><?= esc(lang('Workspace.action.' . $action)) ?></button>
-                                <?php if ($quiz['status'] !== 'published') : ?><button class="dropdown-item text-red" type="button" data-quiz-action="trash"><?= esc(lang('Workspace.action.trash')) ?></button><?php endif ?>
+                                <button class="dropdown-item text-red" type="button" data-quiz-action="trash"><?= esc(lang('Workspace.action.trash')) ?></button>
                             <?php endif ?>
                         </div>
                     </div>

@@ -25,7 +25,7 @@ final class DashboardController extends BaseController
             'nextUrl' => null,
         ];
         if ($paginationNavigation['pageCount'] > 1) {
-            $pager = service('pager')->only(['status', 'mode', 'sort']);
+            $pager = service('pager')->only(['status', 'sort']);
             $pager->store(
                 'default',
                 (int) $pagination['page'],

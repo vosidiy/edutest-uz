@@ -4,9 +4,9 @@ namespace Config;
 
 use App\Models\UserModel;
 use App\Services\AuthService;
+use App\Services\AttemptSnapshotService;
 use App\Services\MediaService;
 use App\Services\QuizAuthoringService;
-use App\Services\QuizPaperService;
 use App\Services\TeacherQueryService;
 use App\Services\TeacherResultsService;
 use CodeIgniter\Config\BaseService;
@@ -50,10 +50,10 @@ class Services extends BaseService
         return new MediaService();
     }
 
-    public static function quizPapers(bool $getShared = true): QuizPaperService
+    public static function attemptSnapshots(bool $getShared = true): AttemptSnapshotService
     {
-        if ($getShared) return static::getSharedInstance('quizPapers');
-        return new QuizPaperService(null, static::media());
+        if ($getShared) return static::getSharedInstance('attemptSnapshots');
+        return new AttemptSnapshotService(null, static::media());
     }
 
     public static function quizAuthoring(bool $getShared = true): QuizAuthoringService
@@ -62,7 +62,7 @@ class Services extends BaseService
             return static::getSharedInstance('quizAuthoring');
         }
 
-        return new QuizAuthoringService(null, static::media(), static::quizPapers());
+        return new QuizAuthoringService(null, static::media());
     }
 
     public static function teacherQueries(bool $getShared = true): TeacherQueryService
@@ -80,6 +80,6 @@ class Services extends BaseService
             return static::getSharedInstance('teacherResults');
         }
 
-        return new TeacherResultsService(null, static::media(), static::quizPapers());
+        return new TeacherResultsService(null, static::media(), static::attemptSnapshots(), static::player());
     }
 }

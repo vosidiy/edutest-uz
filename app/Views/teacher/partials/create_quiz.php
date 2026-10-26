@@ -4,10 +4,6 @@
         <div class="dialog-heading"><div><p class="eyebrow"><?= esc(lang('EduTest.createQuiz.eyebrow')) ?></p><h2 id="create-quiz-title"><?= esc(lang('EduTest.createQuiz.title')) ?></h2></div><button class="btn btn-default btn-icon" type="submit" form="dismiss-create-quiz-form" value="cancel" formnovalidate data-close-create aria-label="<?= esc(lang('EduTest.createQuiz.close'), 'attr') ?>">×</button></div>
         <p class="dialog-copy"><?= esc(lang('EduTest.createQuiz.description')) ?></p>
         <label class="form-field"><span class="form-label"><?= esc(lang('EduTest.createQuiz.quizTitle')) ?></span><input class="form-control" name="title" maxlength="200" required autocomplete="off" placeholder="<?= esc(lang('EduTest.createQuiz.placeholder'), 'attr') ?>"></label>
-        <fieldset class="mode-picker"><legend><?= esc(lang('EduTest.createQuiz.mode')) ?></legend>
-            <label><input type="radio" name="mode" value="assessment" checked><span><strong><?= esc(lang('EduTest.createQuiz.assessment')) ?></strong><small><?= esc(lang('EduTest.createQuiz.assessmentHelp')) ?></small></span></label>
-            <label><input type="radio" name="mode" value="practice"><span><strong><?= esc(lang('EduTest.createQuiz.practice')) ?></strong><small><?= esc(lang('EduTest.createQuiz.practiceHelp')) ?></small></span></label>
-        </fieldset>
         <div class="create-cover-picker">
             <label class="form-field"><span class="form-label"><?= esc(lang('EduTest.createQuiz.cover')) ?></span><input class="form-control" type="file" name="cover" accept="image/jpeg,image/png,image/webp" aria-describedby="create-cover-help"></label>
             <p id="create-cover-help" class="dialog-copy"><?= esc(lang('EduTest.createQuiz.coverHelp')) ?></p>

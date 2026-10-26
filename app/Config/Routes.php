@@ -6,7 +6,7 @@ use CodeIgniter\Router\RouteCollection;
 $routes->get('/', 'Home::index');
 
 $routes->get('q/(:segment)', 'PublicSite\QuizController::show/$1', ['as' => 'public-quiz']);
-$routes->get('q/(:segment)/play', 'PublicSite\QuizController::play/$1');
+$routes->get('q/(:segment)/start', 'PublicSite\QuizController::start/$1');
 $routes->get('q/(:segment)/results', 'PublicSite\QuizController::results/$1');
 $routes->get('media/(:segment)', 'PublicSite\MediaController::show/$1', ['as' => 'signed-media']);
 
@@ -14,13 +14,10 @@ $routes->group('api/v1/player', ['namespace' => 'App\Controllers\Student', 'filt
     $routes->get('tickets/(:segment)', 'PlayerController::ticket/$1');
     $routes->post('starts', 'PlayerController::start');
     $routes->get('assessments/(:segment)', 'PlayerController::show/$1');
-    $routes->put('assessments/(:segment)/answers/(:num)', 'PlayerController::answer/$1/$2');
+    $routes->put('assessments/(:segment)/progress', 'PlayerController::progress/$1');
     $routes->post('assessments/(:segment)/finish', 'PlayerController::finish/$1');
-    $routes->post('assessments/(:segment)/activity', 'PlayerController::activity/$1');
     $routes->get('assessments/(:segment)/results', 'PlayerController::results/$1');
-    $routes->post('assessments/(:segment)/events', 'PlayerController::events/$1');
     $routes->post('assessments/(:segment)/media', 'PlayerController::assessmentMedia/$1');
-    $routes->post('practice/media', 'PlayerController::practiceMedia');
 });
 
 $routes->group('', ['namespace' => 'App\Controllers\Teacher', 'filter' => 'auth'], static function (RouteCollection $routes): void {
@@ -29,7 +26,6 @@ $routes->group('', ['namespace' => 'App\Controllers\Teacher', 'filter' => 'auth'
     $routes->post('account/profile', 'AccountController::updateProfile', ['as' => 'account-profile']);
     $routes->post('account/password', 'AccountController::updatePassword', ['as' => 'account-password']);
     $routes->get('quizzes', 'QuizController::index', ['as' => 'quizzes']);
-    $routes->get('quizzes/archived', 'QuizController::archived', ['as' => 'quizzes-archived']);
     $routes->get('quizzes/trash', 'QuizController::trash', ['as' => 'quizzes-trash']);
     $routes->get('quizzes/(:segment)/edit', 'QuizController::edit/$1', ['as' => 'quiz-edit']);
     $routes->get('results', 'ResultsController::index', ['as' => 'results']);
@@ -43,7 +39,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api', 'filter' => 'aut
     $routes->post('quizzes', 'QuizController::create');
     $routes->get('quizzes/(:segment)', 'QuizController::show/$1');
     $routes->put('quizzes/(:segment)', 'QuizController::update/$1');
-    foreach (['publish', 'close', 'reopen', 'archive', 'unarchive', 'trash', 'restore'] as $action) {
+    foreach (['publish', 'unpublish', 'trash', 'restore'] as $action) {
         $routes->post("quizzes/(:segment)/{$action}", "QuizController::transition/$1/{$action}");
     }
     $routes->post('quizzes/(:segment)/duplicate', 'QuizController::duplicate/$1');

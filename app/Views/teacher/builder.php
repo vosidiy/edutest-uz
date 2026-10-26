@@ -5,7 +5,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
-<div id="quiz-builder" data-workspace-messages="<?= esc(json_encode(lang('EduTest.builder.workspace'), JSON_THROW_ON_ERROR), 'attr') ?>" data-public-id="<?= esc($quiz['publicId'], 'attr') ?>" data-publication-messages="<?= esc(json_encode(lang('EduTest.builder.publication'), JSON_THROW_ON_ERROR), 'attr') ?>" data-mode-messages="<?= esc(json_encode(lang('EduTest.builder.modeChange'), JSON_THROW_ON_ERROR), 'attr') ?>" v-cloak>
+<div id="quiz-builder" data-workspace-messages="<?= esc(json_encode(lang('EduTest.builder.workspace'), JSON_THROW_ON_ERROR), 'attr') ?>" data-public-id="<?= esc($quiz['publicId'], 'attr') ?>" data-publication-messages="<?= esc(json_encode(lang('EduTest.builder.publication'), JSON_THROW_ON_ERROR), 'attr') ?>" v-cloak>
     <div v-if="loading" class="builder-loading">Loading quiz builder…</div>
     <div v-else-if="fatalError" class="builder-fatal"><h1>Builder unavailable</h1><p>{{ fatalError }}</p><a class="btn btn-default" href="<?= site_url('dashboard') ?>"><?= esc(lang('Workspace.backDashboard')) ?></a></div>
     <template v-else>
@@ -25,7 +25,7 @@
                 
                 <div class="question-list" ref="questionsPanel" tabindex="0" role="region" aria-label="<?= esc(lang('EduTest.builder.workspace.questions'), 'attr') ?>">
                     <button v-for="(question, index) in quiz.questions" :key="question.id || `new-${index}`" class="question-item" :class="{active:index === selectedIndex}" type="button" @click="selectQuestion(index)">
-                        <span class="question-number">{{ index + 1 }}</span><span><strong>{{ question.content || 'Untitled question' }}</strong><small>{{ typeLabel(question.type) }}</small></span>
+                        <span class="question-number">{{ index + 1 }}</span><span><strong>{{ question.content || 'Untitled question' }}</strong><small>Single choice · {{ question.optionsLayout }}</small></span>
                     </button>
                 </div>
 
@@ -37,9 +37,9 @@
             <section id="builder-editor" class="editor-canvas" ref="editorPanel" tabindex="0" aria-label="<?= esc(lang('EduTest.builder.workspace.editor'), 'attr') ?>">
                 <div class="builder-notices mb-3">
                     
-                    <p v-if="(quiz.status === 'draft' || quiz.hasUnpublishedChanges) && !publishReady" id="publish-readiness" class="alert alert-warning pt-1 pb-1 pl-2" role="status">{{ publishReadinessMessage }}</p>
-                    
-                    <div v-if="quiz.hasPublished" class="alert alert-info builder-banner"><?= esc(lang('EduTest.builder.publishedWorkingCopyNotice')) ?></div>
+                    <p v-if="!publishReady" id="publish-readiness" class="alert alert-warning pt-1 pb-1 pl-2" role="status">{{ publishReadinessMessage }}</p>
+
+                    <div v-if="quiz.status === 'published'" class="alert alert-info builder-banner">Saved changes apply to students who start after the save. Existing attempts keep their own snapshot.</div>
 
                     <div v-if="quiz.mediaLimits.serverBytes < quiz.mediaLimits.audioBytes" class="alert alert-warning builder-banner">The current PHP upload limit is {{ formatBytes(quiz.mediaLimits.serverBytes) }}. Raise <code>upload_max_filesize</code> and <code>post_max_size</code> above 20 MiB to accept the full supported audio size.</div>
 
@@ -63,8 +63,7 @@
                     <template v-if="selectedQuestion">
                         <h1>{{ selectedQuestion.content || 'Untitled question' }}</h1>
                         <media-preview :media="selectedQuestion.media"></media-preview>
-                        <div v-if="selectedQuestion.type === 'short_text'" class="preview-text-answer">Student types an answer here</div>
-                        <div v-else class="preview-options"><div v-for="(option,index) in selectedQuestion.options" :key="option.id || index"><span>{{ optionLetter(index) }})</span><strong>{{ option.content || 'Untitled answer' }}</strong><media-preview :media="option.media"></media-preview></div></div>
+                        <div class="preview-options" :class="{'preview-options-grid': selectedQuestion.optionsLayout === 'grid'}"><div v-for="(option,index) in selectedQuestion.options" :key="option.id || index"><span>{{ optionLetter(index) }})</span><strong>{{ option.content || 'Untitled answer' }}</strong><media-preview :media="option.media"></media-preview></div></div>
                     </template>
                     <div v-else class="empty-state"><h2>Add a question to preview the quiz</h2></div>
                 </section>
@@ -89,13 +88,6 @@
                     
                     </div>
                     <div class="question-editor">
-
-                        <div class="mb-4" style="max-width:300px">
-                            <label class="form-field">
-                                <select class="form-select" :value="selectedQuestion.type" @change="changeQuestionType($event.target.value)"><option value="single_choice">Single choice</option><option value="multi_select">Multi-select</option><option value="short_text">Short text</option>
-                            </select>
-                        </label>
-                        </div>
                         
                         <div class="editor">
                             
@@ -122,23 +114,14 @@
                             </div>
                         </div>
 
-                        <div v-if="selectedQuestion.type === 'short_text'" class="answer-editor">
-                            <div class="section-label">
-                                <h5>Accepted answers</h5>
-                            </div>
-                            <div v-for="(answer,index) in selectedQuestion.textAnswers" :key="index" class="text-answer-row">
-                                <input class="form-control" v-model="selectedQuestion.textAnswers[index]" maxlength="500">
-                                <button class="btn btn-plain btn-icon" type="button" @click="selectedQuestion.textAnswers.splice(index,1)" aria-label="Remove accepted answer">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x preview-icon"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                                </button>
-                            </div>
-                            <button style="max-width:464px" class="btn w-full btn-neutral" type="button" @click="selectedQuestion.textAnswers.push('')">＋ Add correct answer</button>
-                        </div>
-                        <div v-else class="answer-editor mb-5">
+                        <div class="answer-editor mb-5">
 
                             <div class="section-label">
                                 <h5>Answer choices</h5>
-                                <small>{{ selectedQuestion.type === 'multi_select' ? 'Select every correct choice.' : 'Select exactly one correct choice.' }}</small>
+                                <div>
+                                    <select style="opacity:0.7" v-model="selectedQuestion.optionsLayout"><option value="list">List view</option><option value="grid">Grid view</option>
+                                    </select>
+                                </div>
                             </div>
 
                             <div v-for="(option,index) in selectedQuestion.options" :key="option.id || `option-${index}`" class="answer-row">
@@ -161,7 +144,7 @@
                                 </div>
                                 <media-preview :media="option.media"></media-preview>
                                 
-                                <label class="form-check answer-correct-row"><input :type="selectedQuestion.type === 'single_choice' ? 'radio' : 'checkbox'" :name="`correct-answer-${selectedIndex}`" :checked="option.isCorrect" @change="setCorrect(index,$event.target.checked)"><span>Mark as correct</span></label>
+                                <label class="form-check answer-correct-row"><input type="radio" :name="`correct-answer-${selectedIndex}`" :checked="option.isCorrect" @change="setCorrect(index,$event.target.checked)"><span>Mark as correct</span></label>
                             </div>
                             <button class="btn btn-neutral w-full" type="button" @click="addOption">
                                 ＋ Add answer variant
@@ -187,39 +170,29 @@
                             <label class="form-field"><span class="form-label">Description</span><textarea placeholder="About quiz" class="form-control" v-model="quiz.description" rows="3"></textarea>
                             </label>
                             
-                            <label class="form-field"><span class="form-label">Mode</span>
-                                <select class="form-control" :value="quiz.mode" @change="changeMode($event)"><option value="assessment">Assessment</option><option value="practice">Practice</option>
-                                </select>
-                            </label>
-                            
                             <label class="form-check check-row mt-3"><input type="checkbox" v-model="quiz.listed"><span><strong>Show on my page</strong></span></label></div>
                     </details>
 
                     <details>
-                        <summary>Schedule & timing</summary>
+                        <summary>Timer & admission</summary>
                         <div class="setting-group">
-                            <label class="form-field"><span class="form-label">Opens ({{ quiz.timezone }})</span><input class="form-control" type="datetime-local" v-model="quiz.opensAtLocal"></label><label class="form-field"><span class="form-label">Closes ({{ quiz.timezone }})</span><input class="form-control" type="datetime-local" v-model="quiz.closesAtLocal"></label><label class="form-field"><span class="form-label">Total timer (minutes)</span><input class="form-control" type="number" min="0.5" max="1440" step="0.5" v-model="quiz.timeLimitMinutes" placeholder="No timer"></label>
-                        </div>
-                    </details>
-                    <details v-if="quiz.mode === 'assessment'">
-                        <summary>Admission</summary>
-                        <div class="setting-group">
-                            <label class="form-field"><span class="form-label">New passcode</span><input class="form-control" type="password" v-model="passcodeValue" @input="quiz.passcode.action='set'" autocomplete="new-password" placeholder="Leave unchanged"></label><button v-if="quiz.passcode.configured" class="btn btn-link btn-sm align-start" type="button" @click="clearPasscode">Clear current passcode</button><label class="form-field"><span class="form-label">Email</span><select class="form-control" v-model="quiz.emailMode"><option value="hidden">Hidden</option><option value="optional">Optional</option><option value="required">Required</option></select></label><label class="form-field"><span class="form-label">Phone</span><select class="form-control" v-model="quiz.phoneMode"><option value="hidden">Hidden</option><option value="optional">Optional</option><option value="required">Required</option></select>
-                            </label>
+                            <label class="form-field"><span class="form-label">Total timer (seconds)</span><input class="form-control" type="number" min="30" max="7200" step="30" v-model.number="quiz.timeLimitSec"></label>
+                            <small>30 seconds to 120 minutes, in 30-second steps. Default: 7200 seconds.</small>
+                            <label class="form-check check-row"><input type="checkbox" v-model="quiz.askEmail"><span><strong>Ask for email</strong><small>The field remains optional for students.</small></span></label>
+                            <label class="form-check check-row"><input type="checkbox" v-model="quiz.askPhone"><span><strong>Ask for phone</strong><small>The field remains optional for students.</small></span></label>
                         </div>
                     </details>
                     <details>
-                        <summary>Behavior &amp; monitoring</summary>
+                        <summary>Question selection</summary>
                         <div class="setting-group">
+                            <label class="form-field"><span class="form-label">Questions per attempt</span><input class="form-control" type="number" min="1" step="1" v-model.number="quiz.drawCount" placeholder="All questions"></label>
+                            <small>Leave empty to use the entire question pool.</small>
                             
                             <label class="form-check check-row"><input type="checkbox" v-model="quiz.shuffleQuestions"><span><strong>Shuffle questions</strong>
                             <small>Randomize order for each start.</small></span></label>
                             
                             <label class="form-check check-row"><input type="checkbox" v-model="quiz.shuffleOptions"><span><strong>Shuffle choices</strong><small>Randomize choice order.</small></span></label>
                             
-                            <label v-if="quiz.mode === 'assessment'" class="form-check check-row"><input type="checkbox" v-model="quiz.cheatCheck"><span><strong>Integrity monitoring</strong><small><?= esc(lang('EduTest.builder.integrityHelp')) ?></small></span>
-                            </label>
-
                         </div>
                     </details>
 
@@ -244,7 +217,7 @@
                         </div>
                     </details>
                     
-                    <details open v-if="quiz.status !== 'draft'">
+                    <details open v-if="quiz.status === 'published'">
                         <summary>Sharing</summary>
                         <div class="setting-group">
                             <label class="form-field"><span class="form-label">Stable share link</span><input class="form-control" :value="quiz.shareUrl" readonly></label><button class="btn btn-default" type="button" @click="copyShare">Copy link</button>

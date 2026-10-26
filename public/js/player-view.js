@@ -16,16 +16,6 @@ function optionalText(root, name, value) {
 }
 
 export function createPlayerView(t) {
-  function fullscreen(active, onEnable) {
-    const fragment = cloneTemplate('fullscreen');
-    const control = action(fragment, 'fullscreen');
-    control.textContent = t('enableFullscreen');
-    control.hidden = active;
-    control.addEventListener('click', onEnable);
-    text(fragment, 'status', t(active ? 'fullscreenActive' : 'fullscreenRecommended'));
-    return fragment;
-  }
-
   function timer(deadline) {
     const fragment = cloneTemplate('timer');
     fragment.firstElementChild.dataset.deadline = String(deadline.at);
@@ -33,12 +23,12 @@ export function createPlayerView(t) {
     return fragment;
   }
 
-  function choice(option, type, selected, onChange, media) {
+  function choice(option, selected, onChange, media) {
     const fragment = cloneTemplate('choice');
     const label = slot(fragment, 'choice');
     const input = action(fragment, 'select');
     label.classList.toggle('is-selected', selected);
-    input.type = type === 'single_choice' ? 'radio' : 'checkbox';
+    input.type = 'radio';
     input.value = option.code;
     input.checked = selected;
     input.setAttribute('aria-label', `${option.letter}) ${option.content || t('mediaImage')}`);
@@ -55,7 +45,6 @@ export function createPlayerView(t) {
     optionalText(fragment, 'identity', model.identity);
     const timers = slot(fragment, 'timers');
     for (const deadline of model.deadlines) timers.append(timer(deadline));
-    if (model.monitored) timers.append(fullscreen(model.fullscreen, callbacks.onFullscreen));
     const progress = slot(fragment, 'progress');
     progress.max = model.total;
     progress.value = model.confirmedCount;
@@ -64,37 +53,24 @@ export function createPlayerView(t) {
     insert(fragment, 'media', callbacks.media(`q:${model.question.id}`, model.question.media));
 
     const answers = slot(fragment, 'answers');
+    answers.classList.toggle('player-answers-grid', model.question.optionsLayout === 'grid');
     const submit = action(fragment, 'submit');
     answers.disabled = model.locked;
     text(fragment, 'hint', t(model.hint));
     submit.textContent = t('submit');
     submit.disabled = !callbacks.valid();
     const options = document.createDocumentFragment();
-    if (model.question.type === 'short_text') {
-      const field = cloneTemplate('text-answer');
-      const input = action(field, 'type');
-      input.value = model.item.textAnswer;
-      input.setAttribute('aria-label', t('textHint'));
-      input.setAttribute('placeholder', 'Type here');
-      input.setAttribute('autofocus', true);
-      input.addEventListener('input', () => {
-        if (!callbacks.onEdit({textAnswer: input.value})) return;
-        submit.disabled = !callbacks.valid();
+    const onChange = () => {
+      const selected = answers.querySelector('[data-action="select"]:checked')?.value ?? null;
+      if (!callbacks.onEdit(selected)) return;
+      answers.querySelectorAll('[data-slot="choice"]').forEach(label => {
+        label.classList.toggle('is-selected', action(label, 'select').checked);
       });
-      options.append(field);
-    } else {
-      const onChange = () => {
-        const selected = [...answers.querySelectorAll('[data-action="select"]:checked')].map(input => input.value);
-        if (!callbacks.onEdit({answerCodes: selected})) return;
-        answers.querySelectorAll('[data-slot="choice"]').forEach(label => {
-          label.classList.toggle('is-selected', action(label, 'select').checked);
-        });
-        submit.disabled = !callbacks.valid();
-      };
-      for (const option of model.options) {
-        options.append(choice(option, model.question.type, model.item.answerCodes.includes(option.code), onChange,
-          () => callbacks.media(`o:${option.id}`, option.media)));
-      }
+      submit.disabled = !callbacks.valid();
+    };
+    for (const option of model.options) {
+      options.append(choice(option, model.item.answerCodes.includes(option.code), onChange,
+        () => callbacks.media(`o:${option.id}`, option.media)));
     }
     insert(fragment, 'options', options);
     action(fragment, 'answer').addEventListener('submit', event => {
