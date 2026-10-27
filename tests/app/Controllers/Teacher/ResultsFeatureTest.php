@@ -53,38 +53,29 @@ final class ResultsFeatureTest extends PlayerTestCase
 
         $report = $this->withSession($session)->get('/results/quizzes/' . $quiz['publicId']);
         $report->assertOK();
-        $report->assertSee('immutable snapshot');
+        $report->assertSee('Capital cities');
         $report->assertSee('Review');
+        $report->assertDontSee('Back to responses');
         $report->assertDontSee('Paper revision');
+        $report->assertDontSee('Export filtered CSV');
+        $report->assertDontSee('Completed or provisionally expired');
+        $body = $report->response()->getBody();
+        foreach (['name="q"', 'name="minScore"', 'name="dateRange"'] as $control) {
+            self::assertStringContainsString($control, $body);
+        }
+        foreach (['name="status"', 'name="dateFrom"', 'name="dateTo"', 'name="maxScore"', 'name="sort"'] as $removed) {
+            self::assertStringNotContainsString($removed, $body);
+        }
+        foreach (['Last 24 hours', 'Yesterday', 'Last 7 days', 'Last 30 days', 'All time'] as $dateOption) {
+            $report->assertSee($dateOption);
+        }
         self::assertStringContainsString('private', $report->response()->getHeaderLine('Cache-Control'));
 
         $review = $this->withSession($session)->get('/results/attempts/' . $attempt['attemptId']);
         $review->assertOK();
         $review->assertSee('Capital of France?');
         $review->assertSee('Correct');
-    }
-
-    public function testCsvProtectsFormulaCellsAndExcludesConnectionDetails(): void
-    {
-        [$quiz, $attempt] = $this->completedAttempt();
-        $this->db->table('attempts')->where('public_id', $attempt['attemptId'])->update([
-            'name' => '=SUM(1,1)',
-            'phone' => '+998900000000',
-            'ip' => '203.0.113.50',
-            'agent' => 'Sensitive Browser Agent',
-        ]);
-
-        $result = $this->withSession([AuthService::SESSION_KEY => $quiz['owner']])
-            ->get('/results/quizzes/' . $quiz['publicId'] . '/export.csv');
-        $result->assertOK();
-        $result->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
-        $body = $result->response()->getBody();
-        self::assertStringStartsWith("\xEF\xBB\xBF", $body);
-        self::assertStringContainsString("'=SUM(1,1)", $body);
-        self::assertStringContainsString("'+998900000000", $body);
-        self::assertStringNotContainsString('203.0.113.50', $body);
-        self::assertStringNotContainsString('Sensitive Browser Agent', $body);
-        self::assertStringNotContainsString('token_hash', $body);
+        $review->assertSee('Back to responses');
     }
 
     public function testNonOwnedAndMalformedQuizIdsShareTheNotFoundBoundary(): void

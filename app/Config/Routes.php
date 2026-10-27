@@ -29,7 +29,6 @@ $routes->group('', ['namespace' => 'App\Controllers\Teacher', 'filter' => 'auth'
     $routes->get('quizzes/trash', 'QuizController::trash', ['as' => 'quizzes-trash']);
     $routes->get('quizzes/(:segment)/edit', 'QuizController::edit/$1', ['as' => 'quiz-edit']);
     $routes->get('results', 'ResultsController::index', ['as' => 'results']);
-    $routes->get('results/quizzes/(:segment)/export.csv', 'ResultsController::export/$1', ['as' => 'quiz-results-export']);
     $routes->get('results/quizzes/(:segment)', 'ResultsController::quiz/$1', ['as' => 'quiz-results']);
     $routes->get('results/attempts/(:segment)', 'ResultsController::attempt/$1', ['as' => 'attempt-result']);
 });

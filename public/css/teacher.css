@@ -2840,14 +2840,6 @@ input[type="file"] { height: auto; padding: 8px; }
   gap: var(--space-5);
 }
 
-.results-workspace .metrics {
-  margin: 0;
-}
-
-.results-metrics-five {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-}
-
 .results-toolbar {
   display: grid;
   align-items: end;
@@ -3059,7 +3051,7 @@ input[type="file"] { height: auto; padding: 8px; }
   display: grid;
   align-items: end;
   padding: var(--space-4);
-  grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(140px, 1fr));
+  grid-template-columns: minmax(260px, 2fr) minmax(150px, 0.7fr) minmax(170px, 0.8fr) auto;
   gap: var(--space-3);
 }
 
@@ -3422,18 +3414,6 @@ input[type="file"] { height: auto; padding: 8px; }
 }
 
 @media (max-width: 1180px) {
-  .results-metrics-five {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .attempt-filters {
-    grid-template-columns: repeat(3, minmax(150px, 1fr));
-  }
-
-  .attempt-search {
-    grid-column: span 2;
-  }
-
   .result-definition-grid,
   .policy-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3444,6 +3424,18 @@ input[type="file"] { height: auto; padding: 8px; }
 
   .results-toolbar {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .attempt-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .attempt-search {
+    grid-column: auto;
+  }
+
+  .attempt-filter-submit {
+    width: 100%;
   }
 
   .results-search {
@@ -3472,7 +3464,6 @@ input[type="file"] { height: auto; padding: 8px; }
 @media (max-width: 600px) {
 
   .results-toolbar,
-  .attempt-filters,
   .sensitive-detail dl,
   .result-definition-grid,
   .policy-grid,
@@ -3480,21 +3471,8 @@ input[type="file"] { height: auto; padding: 8px; }
     grid-template-columns: 1fr;
   }
 
-  .attempt-search {
-    grid-column: auto;
-  }
-
-  .results-filter-submit,
-  .attempt-filter-submit {
+  .results-filter-submit {
     width: 100%;
-  }
-
-  .results-metrics-five {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .results-metrics-five .metric:last-child {
-    grid-column: 1 / -1;
   }
 
   .panel-heading {

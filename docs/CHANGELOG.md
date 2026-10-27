@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Simplified quiz results (2026-10-27)
+
+- Removed filtered CSV export, its route/controller/service logic, and the results-header action.
+- Removed the per-quiz finalized/in-progress/average metric cards and their aggregate query.
+- Reduced attempt filters to student search, minimum score, and timezone-aware date presets, with fixed newest-first ordering and a single desktop row.
+
 ### Attempt-owned snapshot refactor (2026-10-26)
 
 - Reduced the product to Assessment-only, single-choice quizzes with one correct option, list/grid choice layouts, a required 30–7,200 second timer, optional per-attempt random draw, and independent question/option shuffling.

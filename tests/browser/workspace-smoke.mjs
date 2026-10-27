@@ -23,9 +23,8 @@ const library = {rows:[{publicId,title:quiz.title,status:'published',deleted:fal
   assessmentSubmissions:3,updatedAt:'26 Oct 2026, 12:00',editUrl:`/quizzes/${publicId}/edit`,resultsUrl:quiz.resultsUrl}],
   filters:{status:'',sort:'updated_desc',page:1},pagination:{page:1,pageSize:20,total:1,pageCount:1}};
 const report = {quiz:{publicId,title:quiz.title,builderUrl:`/quizzes/${publicId}/edit`,restoreUrl:'/dashboard?status=trash',status:'published'},
-  metrics:{finalizedAttempts:3,inProgressAttempts:1,averagePercent:'75.00'},attempts:[],
-  filters:{query:'',status:'all',dateFrom:null,dateTo:null,minScore:null,maxScore:null,sort:'newest',page:1},
-  pagination:{page:1,pageSize:25,total:0,pageCount:1},exportUrl:`/results/quizzes/${publicId}/export.csv`};
+  attempts:[],filters:{query:'Ali',dateRange:'last_7_days',dateFromUtc:null,dateToUtc:null,minScore:50,page:1},
+  pagination:{page:1,pageSize:25,total:26,pageCount:2}};
 let origin;
 
 function render(page, data) {
@@ -92,10 +91,17 @@ try {
   assert.equal(await browser.evaluate(`document.querySelector('#builder-settings').textContent.includes('7200 seconds')`), true);
 
   await browser.navigate(`${origin}/results/quizzes/${publicId}`);
-  await browser.until(() => browser.evaluate(`document.body.textContent.includes('immutable snapshot')`), 'snapshot report');
+  await browser.until(() => browser.evaluate(`document.body.textContent.includes('Attempts (26)')`), 'attempt report');
   assert.equal(await browser.evaluate(`document.body.textContent.includes('Paper revision')`), false);
   assert.equal(await browser.evaluate(`document.body.textContent.includes('Integrity timeline')`), false);
-  assert.equal(await browser.evaluate(`document.body.textContent.includes('Completed or provisionally expired')`), true);
+  assert.equal(await browser.evaluate(`document.body.textContent.includes('Completed or provisionally expired')`), false);
+  assert.equal(await browser.evaluate(`document.body.textContent.includes('Export filtered CSV')`), false);
+  assert.deepEqual(await browser.evaluate(`[...document.querySelectorAll('.attempt-filters [name]')].map(control => control.name)`),
+    ['q','minScore','dateRange']);
+  assert.deepEqual(await browser.evaluate(`[...document.querySelector('select[name="dateRange"]').options].map(option => option.textContent.trim())`),
+    ['Last 24 hours','Yesterday','Last 7 days','Last 30 days','All time']);
+  assert.deepEqual(await browser.evaluate(`Object.fromEntries(new URL(document.querySelector('.pagination a[href*="page=2"]').href).searchParams)`),
+    {q:'Ali',minScore:'50',dateRange:'last_7_days',page:'2'});
   assert.deepEqual(browser.errors, []);
   console.log('Teacher assessment-only workspace browser behavior passed.');
 } finally {

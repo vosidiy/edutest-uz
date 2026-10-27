@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Exceptions\ReportingException;
-use App\Services\Player\ScoringService;
 use App\Services\Player\PlayerRuntime;
 use CodeIgniter\Database\BaseBuilder;
 use CodeIgniter\Database\BaseConnection;
@@ -16,7 +15,6 @@ use DateTimeZone;
 final class TeacherResultsService
 {
     private const PAGE_SIZE = 25;
-    private const EXPORT_BATCH_SIZE = 500;
     private readonly BaseConnection $db;
 
     public function __construct(
@@ -77,7 +75,7 @@ final class TeacherResultsService
         $total = $this->attemptBuilder((int) $quiz['id'], $filters)->countAllResults();
         $pageCount = max(1, (int) ceil($total / self::PAGE_SIZE));
         $filters['page'] = min($filters['page'], $pageCount);
-        $rows = $this->selectRows($this->attemptBuilder((int) $quiz['id'], $filters), $filters['sort'])
+        $rows = $this->selectRows($this->attemptBuilder((int) $quiz['id'], $filters))
             ->limit(self::PAGE_SIZE, ($filters['page'] - 1) * self::PAGE_SIZE)
             ->get()->getResultArray();
 
@@ -96,18 +94,6 @@ final class TeacherResultsService
             $attempts[] = $this->attemptRow($row, count($answers), $correct, $timezone);
         }
 
-        $metrics = $this->db->table('attempts')
-            ->select("SUM(CASE WHEN status IN ('completed','abandoned') THEN 1 ELSE 0 END) AS finalized_count", false)
-            ->select("SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress_count", false)
-            ->select("AVG(CASE WHEN status IN ('completed','abandoned') THEN percent ELSE NULL END) AS average_percent", false)
-            ->where('quiz_id', $quiz['id'])->get()->getRowArray() ?? [];
-
-        $query = http_build_query(array_filter([
-            'q' => $filters['query'], 'status' => $filters['status'], 'dateFrom' => $filters['dateFrom'],
-            'dateTo' => $filters['dateTo'], 'minScore' => $filters['minScore'], 'maxScore' => $filters['maxScore'],
-            'sort' => $filters['sort'],
-        ], static fn ($value): bool => $value !== null && $value !== '' && $value !== 'all'));
-
         return [
             'quiz' => [
                 'publicId'  => (string) $quiz['public_id'],
@@ -116,15 +102,9 @@ final class TeacherResultsService
                 'restoreUrl'=> site_url('dashboard?status=trash'),
                 'status'    => $quiz['deleted_at'] === null ? (string) $quiz['status'] : 'deleted',
             ],
-            'metrics' => [
-                'finalizedAttempts' => (int) ($metrics['finalized_count'] ?? 0),
-                'inProgressAttempts'=> (int) ($metrics['in_progress_count'] ?? 0),
-                'averagePercent'    => $this->decimalOrNull($metrics['average_percent'] ?? null),
-            ],
             'attempts'   => $attempts,
             'filters'    => $filters,
             'pagination' => ['page' => $filters['page'], 'pageSize' => self::PAGE_SIZE, 'total' => $total, 'pageCount' => $pageCount],
-            'exportUrl'  => site_url('results/quizzes/' . $quiz['public_id'] . '/export.csv') . ($query === '' ? '' : '?' . $query),
         ];
     }
 
@@ -228,84 +208,21 @@ final class TeacherResultsService
         ];
     }
 
-    /** @return array<string, mixed> */
-    public function export(int $userId, string $quizPublicId, array $input, string $timezone): array
-    {
-        $quiz = $this->ownedQuiz($userId, $quizPublicId);
-        ($this->player ?? service('player'))->assessment->resolveQuizOverdue((int) $quiz['id']);
-        $filters = $this->normalizeFilters($input, $timezone);
-        return [
-            'quiz' => ['publicId' => (string) $quiz['public_id'], 'title' => (string) $quiz['title']],
-            'filters' => $filters,
-            'rows' => $this->exportRows((int) $quiz['id'], $filters, $timezone),
-        ];
-    }
-
-    public function protectCsvCell(mixed $value): string
-    {
-        $value = (string) $value;
-        return preg_match('/^[=+\-@]/u', $value) === 1 ? "'" . $value : $value;
-    }
-
-    private function exportRows(int $quizId, array $filters, string $timezone): iterable
-    {
-        $offset = 0;
-        do {
-            $rows = $this->selectRows($this->attemptBuilder($quizId, $filters), $filters['sort'])
-                ->limit(self::EXPORT_BATCH_SIZE, $offset)->get()->getResultArray();
-            foreach ($rows as $row) {
-                $duration = $this->durationSeconds($row['started_at'], $row['finished_at'] ?? $row['last_saved_at']);
-                yield [
-                    'attemptPublicId' => (string) $row['public_id'],
-                    'name'            => (string) $row['name'],
-                    'email'           => $this->nullableString($row['email']) ?? '',
-                    'phone'           => $this->nullableString($row['phone']) ?? '',
-                    'status'          => (string) $row['status'],
-                    'finishReason'    => $this->nullableString($row['ended_reason']) ?? '',
-                    'score'           => $this->decimalOrNull($row['score']) ?? '',
-                    'maxScore'        => (string) (int) $row['max_score'],
-                    'percentage'      => $this->decimalOrNull($row['percent']) ?? '',
-                    'startedAt'       => $this->localIso($row['started_at'], $timezone) ?? '',
-                    'submittedAt'     => $this->localIso($row['finished_at'], $timezone) ?? '',
-                    'durationSeconds' => $duration === null ? '' : (string) $duration,
-                    'lateSync'        => (bool) $row['late_sync'] ? 'yes' : 'no',
-                ];
-            }
-            $offset += count($rows);
-        } while (count($rows) === self::EXPORT_BATCH_SIZE);
-    }
-
     private function attemptBuilder(int $quizId, array $filters): BaseBuilder
     {
         $builder = $this->db->table('attempts a')->where('a.quiz_id', $quizId);
-        match ($filters['status']) {
-            'finalized'   => $builder->whereIn('a.status', ['completed', 'abandoned']),
-            'in_progress' => $builder->where('a.status', 'in_progress'),
-            'completed'   => $builder->where('a.status', 'completed'),
-            'abandoned'   => $builder->where('a.status', 'abandoned'),
-            default       => null,
-        };
         if ($filters['query'] !== '') {
             $builder->groupStart()->like('a.name', $filters['query'])->orLike('a.email', $filters['query'])->orLike('a.phone', $filters['query'])->groupEnd();
         }
         if ($filters['dateFromUtc'] !== null) $builder->where('a.started_at >=', $filters['dateFromUtc']);
         if ($filters['dateToUtc'] !== null) $builder->where('a.started_at <', $filters['dateToUtc']);
         if ($filters['minScore'] !== null) $builder->where('a.percent >=', $filters['minScore']);
-        if ($filters['maxScore'] !== null) $builder->where('a.percent <=', $filters['maxScore']);
         return $builder;
     }
 
-    private function selectRows(BaseBuilder $builder, string $sort): BaseBuilder
+    private function selectRows(BaseBuilder $builder): BaseBuilder
     {
-        $builder->select('a.*');
-        match ($sort) {
-            'oldest'     => $builder->orderBy('a.started_at', 'ASC')->orderBy('a.id', 'ASC'),
-            'score_desc' => $builder->orderBy('a.percent', 'DESC')->orderBy('a.started_at', 'DESC'),
-            'score_asc'  => $builder->orderBy('a.percent', 'ASC')->orderBy('a.started_at', 'DESC'),
-            'name_asc'   => $builder->orderBy('a.name', 'ASC')->orderBy('a.started_at', 'DESC'),
-            default      => $builder->orderBy('a.started_at', 'DESC')->orderBy('a.id', 'DESC'),
-        };
-        return $builder;
+        return $builder->select('a.*')->orderBy('a.started_at', 'DESC')->orderBy('a.id', 'DESC');
     }
 
     /** @return array<string, mixed> */
@@ -337,20 +254,17 @@ final class TeacherResultsService
     private function normalizeFilters(array $input, string $timezone): array
     {
         $string = static fn (string $key): string => is_scalar($input[$key] ?? null) ? trim((string) $input[$key]) : '';
-        $status = $string('status');
-        $sort = $string('sort');
-        $dateFrom = $this->validDate($string('dateFrom'));
-        $dateTo = $this->validDate($string('dateTo'));
+        $dateRange = $string('dateRange');
+        if (! in_array($dateRange, ['last_24_hours', 'yesterday', 'last_7_days', 'last_30_days', 'all'], true)) {
+            $dateRange = 'all';
+        }
+        [$dateFromUtc, $dateToUtc] = $this->dateRangeBounds($dateRange, $timezone);
         return [
             'query'       => mb_substr($string('q'), 0, 200),
-            'status'      => in_array($status, ['all', 'finalized', 'in_progress', 'completed', 'abandoned'], true) ? $status : 'all',
-            'dateFrom'    => $dateFrom,
-            'dateTo'      => $dateTo,
-            'dateFromUtc' => $dateFrom === null ? null : $this->dateBoundary($dateFrom, $timezone, false),
-            'dateToUtc'   => $dateTo === null ? null : $this->dateBoundary($dateTo, $timezone, true),
+            'dateRange'   => $dateRange,
+            'dateFromUtc' => $dateFromUtc,
+            'dateToUtc'   => $dateToUtc,
             'minScore'    => $this->scoreFilter($input['minScore'] ?? null),
-            'maxScore'    => $this->scoreFilter($input['maxScore'] ?? null),
-            'sort'        => in_array($sort, ['newest', 'oldest', 'score_desc', 'score_asc', 'name_asc'], true) ? $sort : 'newest',
             'page'        => max(1, (int) (is_scalar($input['page'] ?? null) ? $input['page'] : 1)),
         ];
     }
@@ -415,11 +329,6 @@ final class TeacherResultsService
         return ['display' => $local->format('d M Y, H:i:s'), 'iso' => $local->format(DATE_ATOM)];
     }
 
-    private function localIso(mixed $value, string $timezone): ?string
-    {
-        return $this->localDate($value, $timezone)['iso'] ?? null;
-    }
-
     private function nullableString(mixed $value): ?string
     {
         return $value === null || trim((string) $value) === '' ? null : (string) $value;
@@ -430,18 +339,27 @@ final class TeacherResultsService
         return $value === null || $value === '' ? null : number_format((float) $value, 2, '.', '');
     }
 
-    private function validDate(string $value): ?string
+    /** @return array{0:?string,1:?string} */
+    private function dateRangeBounds(string $range, string $timezone): array
     {
-        if ($value === '') return null;
-        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
-        return $date !== false && $date->format('Y-m-d') === $value ? $value : null;
-    }
+        if ($range === 'all') return [null, null];
 
-    private function dateBoundary(string $date, string $timezone, bool $nextDay): string
-    {
-        $value = new DateTimeImmutable($date . ' 00:00:00', new DateTimeZone($timezone));
-        if ($nextDay) $value = $value->modify('+1 day');
-        return $value->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s.u');
+        $utc = new DateTimeZone('UTC');
+        $now = new DateTimeImmutable('now', $utc);
+        if ($range === 'yesterday') {
+            $today = $now->setTimezone(new DateTimeZone($timezone))->setTime(0, 0);
+            return [
+                $today->modify('-1 day')->setTimezone($utc)->format('Y-m-d H:i:s.u'),
+                $today->setTimezone($utc)->format('Y-m-d H:i:s.u'),
+            ];
+        }
+
+        $hours = match ($range) {
+            'last_7_days'  => 7 * 24,
+            'last_30_days' => 30 * 24,
+            default        => 24,
+        };
+        return [$now->modify('-' . $hours . ' hours')->format('Y-m-d H:i:s.u'), $now->format('Y-m-d H:i:s.u')];
     }
 
     private function scoreFilter(mixed $value): ?float

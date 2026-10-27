@@ -45,7 +45,7 @@ Each Assessment attempt is the equivalent of one printed paper. Its `snapshot` c
 - Lifecycle is `draft → published`, with `published → draft` unpublish.
 - A published save must remain fully publishable and affects only future starts.
 - Soft deletion keeps bearer-authorized attempts and historical reports available.
-- Reports and CSV exports decode each attempt's snapshot and answers, showing correct, wrong, and skipped questions.
+- Reports decode each attempt's snapshot and answers, showing correct, wrong, and skipped questions.
 - The builder exposes draw count, list/grid layout, timer, shuffle, contact, feedback, and result-visibility settings only.
 
 ## Privacy and security
@@ -62,7 +62,7 @@ Each Assessment attempt is the equivalent of one printed paper. Its `snapshot` c
 2. Single-choice builder and publish/unpublish lifecycle.
 3. Attempt snapshot creation and idempotent admission.
 4. Offline-capable player with versioned progress and final synchronization.
-5. Snapshot-backed reports, CSV, and media renewal.
+5. Snapshot-backed reports and media renewal.
 6. Focused PHP/JavaScript/browser behavior verification and deployment documentation.
 
 Future improvements may add better offline installation, richer analytics, accessibility refinements, and additional question types only after the reduced MVP is stable.

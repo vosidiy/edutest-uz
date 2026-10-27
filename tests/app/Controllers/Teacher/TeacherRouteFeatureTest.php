@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\App\Controllers\Teacher;
 
+use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\FeatureTestTrait;
 
@@ -25,8 +26,17 @@ final class TeacherRouteFeatureTest extends CIUnitTestCase
         $this->get('/quizzes/0123456789abcdef0123456789abcdef/edit')->assertRedirectTo(site_url('login'));
         $this->get('/results')->assertRedirectTo(site_url('login'));
         $this->get('/results/quizzes/0123456789abcdef0123456789abcdef')->assertRedirectTo(site_url('login'));
-        $this->get('/results/quizzes/0123456789abcdef0123456789abcdef/export.csv')->assertRedirectTo(site_url('login'));
         $this->get('/results/attempts/0123456789abcdef0123456789abcdef')->assertRedirectTo(site_url('login'));
+    }
+
+    public function testRemovedResultsExportRouteDoesNotResolve(): void
+    {
+        try {
+            $this->get('/results/quizzes/0123456789abcdef0123456789abcdef/export.csv');
+            self::fail('The removed results export route must not resolve.');
+        } catch (PageNotFoundException $exception) {
+            self::assertSame(404, $exception->getCode());
+        }
     }
 
     public function testAuthoringApiReturnsJsonAuthenticationError(): void

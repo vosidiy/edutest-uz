@@ -7,6 +7,8 @@ namespace Tests\App\Services;
 use App\Exceptions\ReportingException;
 use App\Services\AttemptSnapshotService;
 use App\Services\TeacherResultsService;
+use DateTimeImmutable;
+use DateTimeZone;
 use Tests\Support\PlayerTestCase;
 
 final class TeacherResultsServiceTest extends PlayerTestCase
@@ -36,8 +38,7 @@ final class TeacherResultsServiceTest extends PlayerTestCase
         ]);
 
         $report = $this->results->quiz($quiz['owner'], $quiz['publicId'], [], 'UTC');
-        self::assertSame(2, $report['metrics']['finalizedAttempts']);
-        self::assertSame(1, $report['metrics']['inProgressAttempts']);
+        self::assertArrayNotHasKey('metrics', $report);
         self::assertCount(3, $report['attempts']);
         $byStatus = array_column($report['attempts'], null, 'status');
         self::assertSame(2, $byStatus['completed']['responsesReceived']);
@@ -46,20 +47,69 @@ final class TeacherResultsServiceTest extends PlayerTestCase
         self::assertSame(0, $byStatus['abandoned']['responsesReceived']);
     }
 
-    public function testStatusFiltersAndCsvProtectFormulaCells(): void
+    public function testFiltersSearchMinimumScoreAndRollingDateWhileKeepingNewestOrder(): void
     {
         $quiz = $this->quiz();
-        $attempt = $this->startQuiz($quiz);
-        $this->complete($attempt);
-        $this->db->table('attempts')->where('public_id', $attempt['attemptId'])->update(['name' => '=Formula']);
+        $recent = $this->startQuiz($quiz);
+        $this->complete($recent);
+        $old = $this->startQuiz($quiz);
+        $this->complete($old);
+        $ungraded = $this->startQuiz($quiz);
+        $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        $this->db->table('attempts')->where('public_id', $recent['attemptId'])->update([
+            'name' => 'Alice Recent', 'started_at' => $now->modify('-1 hour')->format('Y-m-d H:i:s.u'),
+        ]);
+        $this->db->table('attempts')->where('public_id', $old['attemptId'])->update([
+            'name' => 'Alice Old', 'started_at' => $now->modify('-3 days')->format('Y-m-d H:i:s.u'),
+        ]);
+        $this->db->table('attempts')->where('public_id', $ungraded['attemptId'])->update([
+            'name' => 'Alice Ungraded', 'started_at' => $now->modify('-30 minutes')->format('Y-m-d H:i:s.u'),
+        ]);
 
-        $report = $this->results->quiz($quiz['owner'], $quiz['publicId'], ['status' => 'completed'], 'UTC');
+        $report = $this->results->quiz($quiz['owner'], $quiz['publicId'], [
+            'q' => 'Alice', 'minScore' => '90', 'dateRange' => 'last_24_hours',
+        ], 'UTC');
         self::assertCount(1, $report['attempts']);
-        $rows = iterator_to_array($this->results->export($quiz['owner'], $quiz['publicId'], ['status' => 'completed'], 'UTC')['rows']);
-        self::assertSame('=Formula', $rows[0]['name']);
-        self::assertSame("'=Formula", $this->results->protectCsvCell($rows[0]['name']));
-        self::assertArrayNotHasKey('ip', $rows[0]);
-        self::assertArrayNotHasKey('agent', $rows[0]);
+        self::assertSame('Alice Recent', $report['attempts'][0]['name']);
+
+        $all = $this->results->quiz($quiz['owner'], $quiz['publicId'], ['dateRange' => 'invalid', 'sort' => 'oldest', 'status' => 'completed'], 'UTC');
+        self::assertSame('all', $all['filters']['dateRange']);
+        self::assertSame(['query', 'dateRange', 'dateFromUtc', 'dateToUtc', 'minScore', 'page'], array_keys($all['filters']));
+        self::assertSame('Alice Ungraded', $all['attempts'][0]['name']);
+        self::assertCount(3, $all['attempts']);
+    }
+
+    public function testDateRangePresetsUseRollingPeriodsAndTeacherLocalYesterday(): void
+    {
+        $quiz = $this->quiz();
+        $timezone = new DateTimeZone('Asia/Tashkent');
+        $utc = new DateTimeZone('UTC');
+        $now = new DateTimeImmutable('now', $utc);
+        $todayLocal = $now->setTimezone($timezone)->setTime(0, 0);
+        $dates = [
+            'Recent'    => $now->modify('-1 hour'),
+            'Yesterday' => $todayLocal->modify('-1 day')->setTimezone($utc),
+            'Week'      => $now->modify('-6 days'),
+            'Month'     => $now->modify('-29 days'),
+            'Old'       => $now->modify('-31 days'),
+        ];
+        foreach ($dates as $name => $startedAt) {
+            $attempt = $this->startQuiz($quiz);
+            $this->complete($attempt);
+            $this->db->table('attempts')->where('public_id', $attempt['attemptId'])->update([
+                'name' => $name, 'started_at' => $startedAt->format('Y-m-d H:i:s.u'),
+            ]);
+        }
+
+        $names = fn (string $range): array => array_column(
+            $this->results->quiz($quiz['owner'], $quiz['publicId'], ['dateRange' => $range], 'Asia/Tashkent')['attempts'],
+            'name',
+        );
+        self::assertSame(['Recent'], $names('last_24_hours'));
+        self::assertSame(['Yesterday'], $names('yesterday'));
+        self::assertSame(['Recent', 'Yesterday', 'Week'], $names('last_7_days'));
+        self::assertSame(['Recent', 'Yesterday', 'Week', 'Month'], $names('last_30_days'));
+        self::assertSame(['Recent', 'Yesterday', 'Week', 'Month', 'Old'], $names('all'));
     }
 
     public function testAttemptReviewKeepsTheImmutableSnapshotAfterLiveEdits(): void

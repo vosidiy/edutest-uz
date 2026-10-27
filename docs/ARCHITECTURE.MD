@@ -131,7 +131,9 @@ Once loaded, the run works through connection loss and browser restarts. Progres
 
 Publish is `draft → published`; unpublish is `published → draft`. A published save updates the authoring pool for future starts but does not touch existing attempt snapshots. Soft delete preserves the underlying status and does not revoke an existing attempt bearer credential.
 
-Teacher list/detail/CSV reporting reads summary columns plus `snapshot` and `answers`. Detail reconstructs presented question/option order, selected/correct answers, explanation, and media entirely from the attempt. In-progress reports can show only checkpoints already received; unsynchronized browser work is unknowable.
+Teacher list/detail reporting reads summary columns plus `snapshot` and `answers`. Detail reconstructs presented question/option order, selected/correct answers, explanation, and media entirely from the attempt. In-progress reports can show only checkpoints already received; unsynchronized browser work is unknowable.
+
+The per-quiz attempt list is always newest first and supports only student search, minimum score, and a start-date preset. Date presets are rolling 24-hour, 7-day, and 30-day periods, the previous calendar day in the teacher's timezone, or all time.
 
 ## Security boundaries
 

@@ -50,13 +50,11 @@
         <?php endif ?>
         <a class="active" href="<?= esc(site_url('results/quizzes/' . $report['quiz']['publicId']), 'attr') ?>" aria-current="page"><?= esc(lang('EduTest.builder.navigation.responses')) ?></a>
     </nav>
-    <div class="builder-actions">
-        <?php if (isset($report['exportUrl'])) : ?>
-            <a class="btn btn-outline" href="<?= esc($report['exportUrl'], 'attr') ?>">↓ <?= esc(lang('Results.exportCsv')) ?></a>
-        <?php else : ?>
+    <?php if (isset($report['quiz']['url'])) : ?>
+        <div class="builder-actions">
             <a class="btn btn-default" href="<?= esc($report['quiz']['url'], 'attr') ?>">← <?= esc(lang('Workspace.backResponses')) ?></a>
-        <?php endif ?>
-    </div>
+        </div>
+    <?php endif ?>
 </header>
 <?php if ($report['quiz']['builderUrl'] === null) : ?>
     <div id="builder-unavailable" class="alert alert-warning workspace-restore-notice"><?= esc(lang('Workspace.builderUnavailable')) ?> <a href="<?= esc($report['quiz']['restoreUrl'], 'attr') ?>"><?= esc(lang('Workspace.restoreQuiz')) ?></a></div>
