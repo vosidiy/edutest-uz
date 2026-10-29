@@ -228,8 +228,6 @@
     const publicId = row?.dataset.quizId;
     if (!publicId) return;
     const confirmation = {
-      publish: 'Publish this quiz and activate its share page?',
-      unpublish: 'Unpublish this quiz for new starts?',
       trash: 'Move this quiz to trash?',
       restore: 'Restore this quiz from trash?',
       duplicate: 'Create an independent draft copy of this quiz?'

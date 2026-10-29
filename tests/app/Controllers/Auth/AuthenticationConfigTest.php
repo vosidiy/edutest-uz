@@ -11,12 +11,18 @@ use App\Controllers\Teacher\AccountController;
 use App\Filters\AuthFilter;
 use App\Services\AuthService;
 use CodeIgniter\Test\CIUnitTestCase;
+use Config\App;
 use Config\Filters;
 use Config\Services;
 use Config\Validation;
 
 final class AuthenticationConfigTest extends CIUnitTestCase
 {
+    public function testApplicationUsesTashkentTimezone(): void
+    {
+        $this->assertSame('Asia/Tashkent', (new App())->appTimezone);
+    }
+
     public function testAuthenticationIsProjectOwned(): void
     {
         $this->assertTrue(is_subclass_of(LoginController::class, BaseController::class));

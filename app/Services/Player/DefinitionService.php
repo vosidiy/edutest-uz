@@ -28,7 +28,6 @@ final class DefinitionService
             $options = is_array($question['options'] ?? null) ? $question['options'] : [];
             $codes = [];
             $valid = $valid
-                && trim((string) ($question['content'] ?? '')) !== ''
                 && in_array($question['optionsLayout'] ?? null, ['list', 'grid'], true)
                 && count($options) >= 2
                 && is_string($question['correctCode'] ?? null);

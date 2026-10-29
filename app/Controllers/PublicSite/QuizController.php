@@ -38,7 +38,7 @@ final class QuizController extends BaseController
     private function shell(string $shareToken, string $page): string
     {
         if (! QuizShareCode::isValid($shareToken)) throw PageNotFoundException::forPageNotFound();
-        // Existing bearer-authorized attempts remain available after unpublish or soft deletion.
+        // Existing bearer-authorized attempts remain available after a quiz returns to Draft or is soft-deleted.
         $this->privateResponse();
         return view('student/player', ['title' => lang('Player.ui.quizPlayer') . ' — EduTest', 'shareToken' => $shareToken, 'page' => $page]);
     }

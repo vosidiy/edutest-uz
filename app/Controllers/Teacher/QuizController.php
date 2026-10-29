@@ -13,12 +13,7 @@ final class QuizController extends BaseController
 {
     public function index(): RedirectResponse
     {
-        return $this->library('active');
-    }
-
-    public function trash(): RedirectResponse
-    {
-        return $this->library('trash');
+        return redirect()->to(site_url('dashboard'));
     }
 
     public function edit(string $publicId): string
@@ -40,10 +35,5 @@ final class QuizController extends BaseController
             'user'      => $user,
             'quiz'      => $quiz,
         ]);
-    }
-
-    private function library(string $view): RedirectResponse
-    {
-        return redirect()->to(service('teacherQueries')->legacyDashboardUrl($this->request->getGet(), $view));
     }
 }

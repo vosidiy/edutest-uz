@@ -19,9 +19,8 @@ function fixture() {
   app.$refs = {conflictDialog:{open:false,showModal(){this.open=true;},close(){this.open=false;}},
     detailsDialog:{showModal(){},close(){}},editTitle:{focus(){}},detailsTitle:{focus(){}}};
   Object.entries(component.methods).forEach(([name,fn])=>{app[name]=fn.bind(app);});
-  app.scheduleAutosave=()=>{};
   Object.entries(component.computed).forEach(([name,fn])=>Object.defineProperty(app,name,{get:()=>fn.call(app)}));
-  const quiz={publicId:'fixture',title:'Quiz',description:'',listed:false,status:'published',version:1,timeLimitSec:7200,
+  const quiz={publicId:'fixture',title:'Quiz',description:'',listed:false,status:'published',version:1,timeLimitSec:7200,timeLimitMinutes:120,
     askEmail:false,askPhone:false,drawCount:null,shuffleQuestions:false,shuffleOptions:false,feedback:'at_end',
     showScore:true,showAnswers:false,showExplain:false,cover:null,mediaLimits:{imageBytes:5242880,audioBytes:20971520},
     questions:[{id:'1',content:'Question',optionsLayout:'list',explanation:'',media:null,
@@ -98,7 +97,7 @@ test('validation and conflict preserve local changes; conflict button reopens wi
   setRequest(async(url,options)=>{assert.match(url,/overwrite=1/);return response(JSON.parse(options.body));});
   await app.overwriteConflict();assert.equal(app.saveState,'saved');
   app.quiz.title='';setRequest(async()=>{throw Object.assign(new Error('Title required'),{status:422,fields:{title:'Required'}});});
-  assert.equal(await app.save(true),false);assert.equal(app.saveState,'validation');assert.equal(app.quiz.title,'');
+  assert.equal(await app.save(true),false);assert.equal(app.saveState,'retry');assert.equal(app.quiz.title,'');
 });
 test('details cancel retains previous staged cover; URL cleanup never revokes a live preview',()=>{
   const {app,revoked}=fixture();
@@ -135,33 +134,49 @@ test('a queued close event cannot discard a newly reopened details dialog',()=>{
   assert.equal(app.detailsOpen,false);assert.equal(app.detailsCover,null);
 });
 
-test('publishing blocks overlapping writes and preserves edits made during its response',async()=>{
+test('manual save persists staged status and preserves edits made during its response',async()=>{
   const {app,setRequest}=fixture();const gate=deferred();
-  app.quiz.status='draft';
+  app.setActive(false);
   setRequest(()=>gate.promise);
-  const publishing=app.lifecycle('publish');
-  await Promise.resolve();await Promise.resolve();
-  assert.equal(app.mediaBusy,true);assert.equal(await app.save(true),false);
-  const server=clone(app.quiz);server.status='published';server.version++;
-  app.quiz.questions[0].content='Edited during publish';app.markDirty();
-  gate.resolve({data:{quiz:server}});await publishing;
-  assert.equal(app.quiz.status,'published');
-  assert.equal(app.quiz.questions[0].content,'Edited during publish');
-  assert.equal(app.saveState,'dirty');assert.equal(app.mediaBusy,false);
+  const saving=app.save(true);
+  assert.equal(app.saving,true);
+  const server=clone(app.quiz);server.version++;
+  app.quiz.questions[0].content='Edited during save';app.markDirty();
+  gate.resolve({data:{quiz:server}});assert.equal(await saving,false);
+  assert.equal(app.quiz.status,'draft');
+  assert.equal(app.quiz.questions[0].content,'Edited during save');
+  assert.equal(app.saveState,'dirty');assert.equal(app.saving,false);
 });
 
-test('publishing saves pending edits before changing lifecycle state',async()=>{
+test('media preparation saves pending edits before returning the persisted endpoint',async()=>{
   const {app,setRequest}=fixture();const calls=[];
-  app.quiz.title='Latest saved title';app.markDirty();
+  app.quiz.questions[0].id=null;
+  app.quiz.title='Latest saved title';
+  app.markDirty();
   setRequest(async(url,options)=>{
     calls.push({url,method:options.method});
-    if(options.method==='PUT')return response(JSON.parse(options.body));
-    assert.equal(app.quiz.title,'Latest saved title');
-    const server=clone(app.quiz);server.status='published';server.version++;
-    return {data:{quiz:server}};
+    return response(JSON.parse(options.body));
   });
-  await app.lifecycle('publish');
-  assert.deepEqual(calls.map(call=>call.method),['PUT','POST']);
-  assert.match(calls[1].url,/\/publish$/);
+  const endpoint=await app.prepareMedia(0,null);
+  assert.deepEqual(calls.map(call=>call.method),['PUT']);
+  assert.equal(endpoint,'/api/v1/quizzes/fixture/questions/100/media');
   assert.equal(app.hasChanges,false);
+});
+
+test('manual save fills blank choices and prevents removal below two',async()=>{
+  const {app,setRequest}=fixture();
+  app.quiz.questions[0].options[0].content='';
+  app.quiz.questions[0].options.splice(1,1);
+  app.quiz.questions[0].options[0].isCorrect=false;
+  app.markDirty();
+  setRequest(async(_url,options)=>response(JSON.parse(options.body)));
+  assert.equal(await app.save(true),true);
+  assert.deepEqual(app.quiz.questions[0].options.map(option=>option.content),['Option 1','Option 2']);
+  assert.deepEqual(app.quiz.questions[0].options.map(option=>option.isCorrect),[true,false]);
+  app.removeOption(0);
+  assert.equal(app.quiz.questions[0].options.length,2);
+  app.addOption();
+  app.setCorrect(2,true);
+  app.removeOption(2);
+  assert.deepEqual(app.quiz.questions[0].options.map(option=>option.isCorrect),[true,false]);
 });

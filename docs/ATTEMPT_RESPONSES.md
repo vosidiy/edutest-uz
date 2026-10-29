@@ -52,4 +52,4 @@ An identical Finish retry returns the stored official result. Changed terminal r
 
 An overdue in-progress attempt is lazily changed to `abandoned/expired` and graded from its latest checkpoint with the missing tail treated as skipped. This result is provisional.
 
-Teacher reports decode `snapshot` and `answers` together. This reproduces exact historical wording and presentation even when the live quiz is edited, unpublished, or soft-deleted. The attempt list can be narrowed by student search, minimum score, and a start-date preset. Browser-local unsynchronized answers cannot appear in reports until received.
+Teacher reports decode `snapshot` and `answers` together. This reproduces exact historical wording and presentation even when the live quiz is edited, unpublished, or soft-deleted. The attempt list contains finished attempts only and can be narrowed by student search, minimum score, and a `finished_at` preset. Yesterday means the complete previous Asia/Tashkent calendar day; rolling presets use exact elapsed periods. Browser-local unsynchronized answers cannot appear in reports until received.

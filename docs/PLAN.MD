@@ -4,14 +4,14 @@
 
 123test is a simple teacher-owned assessment product. The MVP supports one quiz mode and one question type: Assessment quizzes made from single-choice questions with exactly one correct option.
 
-The teacher creates a quiz, optionally limits the random draw, chooses question/option shuffling, publishes one stable nine-digit share link, and reviews individual results. Published edits are live for the next student start. They never change an attempt that has already started.
+The teacher creates a quiz, optionally limits the random draw, chooses question/option shuffling, saves it as Active on one stable nine-digit share link, and reviews individual results. Active edits are live for the next student start. They never change an attempt that has already started.
 
 ## MVP defaults and limits
 
 - Name is required at admission.
 - Email and phone are optional fields and are shown only when enabled by the teacher.
-- Every quiz has a timer. The default and maximum are 7,200 seconds; valid values are 30–7,200 seconds in 30-second steps.
-- Every question has at least two options and exactly one correct option.
+- Every quiz has a timer. The builder accepts whole minutes from 1–120 and defaults to 120; runtime snapshots and countdowns continue to use seconds.
+- Question text may be blank. Every question has at least two options and exactly one correct option. Save fills blank or missing choices as `Option 1`, `Option 2`, and so on, and repairs the correct choice to the first option when needed.
 - Question layout is `list` or `grid`.
 - `draw_count = NULL` serves the whole pool. A positive draw count randomly samples that many questions for each attempt.
 - Question and option shuffling are independent.
@@ -42,11 +42,12 @@ Each Assessment attempt is the equivalent of one printed paper. Its `snapshot` c
 
 ## Teacher flow
 
-- Lifecycle is `draft → published`, with `published → draft` unpublish.
-- A published save must remain fully publishable and affects only future starts.
+- The settings switch stages Draft or Active (`draft` or `published` in storage). One manual **Save quiz** persists content and status atomically; there are no separate Publish/Unpublish actions and no timed autosave.
+- An Active save requires at least one question and affects only future starts. A Draft may have no questions. Moving back to Draft preserves the original publication timestamp.
 - Soft deletion keeps bearer-authorized attempts and historical reports available.
 - Reports decode each attempt's snapshot and answers, showing correct, wrong, and skipped questions.
-- The builder exposes draw count, list/grid layout, timer, shuffle, contact, feedback, and result-visibility settings only.
+- The builder exposes draw count, list/grid layout, whole-minute timer, shuffle, contact, feedback, and result-visibility settings only. A draw count larger than the current pool is stored as the whole-pool setting.
+- Question-media actions first save pending quiz edits when server IDs are needed.
 
 ## Privacy and security
 
@@ -59,7 +60,7 @@ Each Assessment attempt is the equivalent of one printed paper. Its `snapshot` c
 ## Delivery milestones
 
 1. Canonical schema and destructive development reset.
-2. Single-choice builder and publish/unpublish lifecycle.
+2. Single-choice builder with atomic manual Save and Draft/Active lifecycle.
 3. Attempt snapshot creation and idempotent admission.
 4. Offline-capable player with versioned progress and final synchronization.
 5. Snapshot-backed reports and media renewal.

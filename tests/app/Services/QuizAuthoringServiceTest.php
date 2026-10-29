@@ -15,6 +15,7 @@ final class QuizAuthoringServiceTest extends PlayerTestCase
         $document = $quiz['document'];
         self::assertSame('published', $document['status']);
         self::assertSame(7200, $document['timeLimitSec']);
+        self::assertSame(120, $document['timeLimitMinutes']);
         self::assertFalse($document['askEmail']);
         self::assertFalse($document['askPhone']);
         self::assertNull($document['drawCount']);
@@ -23,40 +24,111 @@ final class QuizAuthoringServiceTest extends PlayerTestCase
         self::assertArrayNotHasKey('revision', $document);
     }
 
-    public function testTimerValidationCoversThirtyToSevenThousandTwoHundredSeconds(): void
+    public function testTimerValidationUsesOneToOneHundredTwentyWholeMinutes(): void
     {
         $quiz = $this->quiz(count: 1);
-        $this->authoring->transition($quiz['owner'], $quiz['publicId'], 'unpublish');
-        foreach ([0, 29, 31, 7230] as $invalid) {
+        foreach ([0, -1, 1.5, '1.5', 121] as $invalid) {
             $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
-            $document['timeLimitSec'] = $invalid;
+            $document['timeLimitMinutes'] = $invalid;
             $this->expectAuthoringError('validation_failed', fn () => $this->authoring->save($quiz['owner'], $quiz['publicId'], $document));
         }
-        foreach ([30, 60, 7170, 7200] as $valid) {
+        foreach ([1, 60, 119, 120] as $valid) {
             $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
-            $document['timeLimitSec'] = $valid;
-            self::assertSame($valid, $this->authoring->save($quiz['owner'], $quiz['publicId'], $document)['timeLimitSec']);
+            $document['timeLimitMinutes'] = $valid;
+            $saved = $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
+            self::assertSame($valid, $saved['timeLimitMinutes']);
+            self::assertSame($valid * 60, $saved['timeLimitSec']);
         }
     }
 
-    public function testPublishUnpublishAndPublishedSaveSafety(): void
+    public function testStatusChangesAreAtomicWithManualSave(): void
     {
-        $quiz = $this->quiz(count: 2);
-        self::assertSame('draft', $this->authoring->transition($quiz['owner'], $quiz['publicId'], 'unpublish')['quiz']['status']);
-        self::assertSame('published', $this->authoring->transition($quiz['owner'], $quiz['publicId'], 'publish')['quiz']['status']);
-
+        $quiz = $this->quiz(count: 1);
         $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
-        $document['questions'][0]['options'][1]['isCorrect'] = false;
-        $this->expectAuthoringError('not_publishable', fn () => $this->authoring->save($quiz['owner'], $quiz['publicId'], $document));
-        self::assertTrue($this->authoring->document($quiz['owner'], $quiz['publicId'])['questions'][0]['options'][1]['isCorrect']);
+        $firstPublishedAt = $document['publishedAt'];
+        $document['status'] = 'draft';
+        $document['title'] = 'Saved as draft';
+        $draft = $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
+        self::assertSame('draft', $draft['status']);
+        self::assertSame('Saved as draft', $draft['title']);
+        self::assertSame($firstPublishedAt, $draft['publishedAt']);
+
+        $draft['status'] = 'published';
+        $active = $this->authoring->save($quiz['owner'], $quiz['publicId'], $draft);
+        self::assertSame('published', $active['status']);
+        self::assertNotNull($active['publishedAt']);
     }
 
-    public function testDrawCountCannotExceedPublishedQuestionPool(): void
+    public function testActiveSaveWithNoQuestionsRollsBackAllChanges(): void
+    {
+        $quiz = $this->quiz(count: 1);
+        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        $document['status'] = 'draft';
+        $draft = $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
+
+        $draft['status'] = 'published';
+        $draft['title'] = 'Must not persist';
+        $draft['questions'] = [];
+        try {
+            $this->authoring->save($quiz['owner'], $quiz['publicId'], $draft);
+            self::fail('An Active quiz must contain a question.');
+        } catch (AuthoringException $error) {
+            self::assertSame('not_publishable', $error->errorCode);
+            self::assertSame('Add at least one question before making this quiz Active.', $error->getMessage());
+        }
+
+        $stored = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        self::assertSame('Capital cities', $stored['title']);
+        self::assertSame('draft', $stored['status']);
+        self::assertCount(1, $stored['questions']);
+
+        $stored['questions'] = [];
+        self::assertSame([], $this->authoring->save($quiz['owner'], $quiz['publicId'], $stored)['questions']);
+    }
+
+    public function testBlankQuestionAndChoicesAreNormalizedAndRunnable(): void
+    {
+        $quiz = $this->quiz(count: 1);
+        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        $document['questions'][0]['content'] = '';
+        $document['questions'][0]['options'] = [[
+            'id' => $document['questions'][0]['options'][0]['id'],
+            'content' => '   ',
+            'isCorrect' => false,
+        ]];
+
+        $saved = $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
+        self::assertSame('', $saved['questions'][0]['content']);
+        self::assertSame(['Option 1', 'Option 2'], array_column($saved['questions'][0]['options'], 'content'));
+        self::assertSame([true, false], array_column($saved['questions'][0]['options'], 'isCorrect'));
+
+        $saved['questions'][0]['options'][] = ['id' => null, 'content' => 'Third', 'isCorrect' => true];
+        $saved['questions'][0]['options'][1]['isCorrect'] = true;
+        $repaired = $this->authoring->save($quiz['owner'], $quiz['publicId'], $saved);
+        self::assertSame([true, false, false], array_column($repaired['questions'][0]['options'], 'isCorrect'));
+
+        $attempt = $this->startQuiz($quiz);
+        self::assertSame('', $attempt['quiz']['questions'][0]['content']);
+        self::assertSame(['Option 1', 'Option 2', 'Third'], array_column($attempt['quiz']['questions'][0]['options'], 'content'));
+    }
+
+    public function testDrawCountAboveQuestionPoolUsesWholePool(): void
     {
         $quiz = $this->quiz(count: 2);
         $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
         $document['drawCount'] = 3;
-        $this->expectAuthoringError('not_publishable', fn () => $this->authoring->save($quiz['owner'], $quiz['publicId'], $document));
+        self::assertNull($this->authoring->save($quiz['owner'], $quiz['publicId'], $document)['drawCount']);
+    }
+
+    public function testMissingChoicesArePaddedWithAValidDefaultAnswer(): void
+    {
+        $quiz = $this->quiz(count: 1);
+        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        unset($document['questions'][0]['options']);
+
+        $saved = $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
+        self::assertSame(['Option 1', 'Option 2'], array_column($saved['questions'][0]['options'], 'content'));
+        self::assertSame([true, false], array_column($saved['questions'][0]['options'], 'isCorrect'));
     }
 
     public function testListAndGridLayoutsAndOptimisticLockingPersist(): void

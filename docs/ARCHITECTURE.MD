@@ -8,6 +8,8 @@
 
 Controllers parse HTTP input and return responses. Services own validation, transactions, scoring, and state changes. Models provide narrow persistence. Explicit routes are used with automatic routing disabled.
 
+The CodeIgniter application timezone is Asia/Tashkent, which supplies calendar boundaries such as Yesterday. Persisted application timestamps remain UTC and are explicitly converted for display and local-calendar filtering.
+
 ## Data model
 
 `docs/schema.sql` is the complete fresh-install source of truth. The project does not use migrations.
@@ -16,11 +18,11 @@ Controllers parse HTTP input and return responses. Services own validation, tran
 
 Stores the teacher-owned live definition and its lifecycle. `version` is the optimistic-lock value. `public_id` is the reporting/builder identifier; the nine-digit `share_token` locates the public quiz. Status is only `draft` or `published`; `deleted_at` provides trash/restore without erasing reports.
 
-Every quiz has a 30–7,200 second timer in 30-second steps. `draw_count` is null for the entire pool or a positive subset size. Published saves are allowed only when the resulting quiz is publishable, and are visible to future starts immediately.
+The builder accepts whole-minute timers from 1–120 and converts them to the existing `time_limit_sec` runtime value. `draw_count` is null for the entire pool or a positive subset size; saving a value larger than the pool normalizes it to null. Active saves require at least one question and are visible to future starts immediately.
 
 ### `questions` and `question_options`
 
-These tables are the mutable authoring pool. Questions are single-choice only and store `options_layout` as `list` or `grid`. Services enforce non-empty question content, at least two usable options, and exactly one correct option. Option codes are stable opaque browser answer values.
+These tables are the mutable authoring pool. Questions are single-choice only and store `options_layout` as `list` or `grid`. Question text may be blank. On Save, services pad missing choices to two, replace blank choice text with `Option N`, and enforce exactly one correct option by retaining the first marked choice or selecting the first option. Option codes are stable opaque browser answer values.
 
 Question and option rows are not historical records. Existing attempts remain reproducible because the exact content and order are copied into their snapshots.
 
@@ -121,6 +123,8 @@ Player API:
 - `GET /api/v1/player/assessments/{attemptId}/results`
 - `POST /api/v1/player/assessments/{attemptId}/media`
 
+Teacher authoring uses `PUT /api/v1/quizzes/{publicId}` as the only content/status save endpoint. Its document includes storage status `draft|published` and `timeLimitMinutes`; the service converts minutes to seconds and commits content, status, version, and publication timestamp in one transaction. The builder has no timer-driven autosave and no Publish/Unpublish endpoints. Its Active/Draft switch changes only local state until **Save quiz** is clicked. Media actions perform a prerequisite Save when pending rows need server IDs. Optimistic conflict reload/overwrite, pending-cover handling, in-flight edit merging, and unsaved-navigation protection remain in force.
+
 The local format is version 5. It stores the snapshot projection, credential, fixed deadline, confirmed answers, answer/server versions, current draft, and pending progress/final outbox flags. Web Locks prevent two tabs for the same share token from advancing the same local run. Confirmed answers cannot be revisited.
 
 The countdown derives from `expiresAt`, not decrement persistence, so closing/backgrounding cannot reset it. It renders total minutes and seconds (`120:00`). At zero the player freezes input, adds the unanswered tail, shows local results, and queues Finish with reason `expired`.
@@ -129,11 +133,13 @@ Once loaded, the run works through connection loss and browser restarts. Progres
 
 ## Lifecycle and reporting
 
-Publish is `draft → published`; unpublish is `published → draft`. A published save updates the authoring pool for future starts but does not touch existing attempt snapshots. Soft delete preserves the underlying status and does not revoke an existing attempt bearer credential.
+The teacher-facing lifecycle is Draft/Active while storage remains `draft|published`. Saving Draft→Active sets `published_at`; later Active saves preserve it, and saving Active→Draft also preserves it. The same manual Save updates the authoring pool for future starts but does not touch existing attempt snapshots. Soft delete preserves the underlying status and does not revoke an existing attempt bearer credential.
 
 Teacher list/detail reporting reads summary columns plus `snapshot` and `answers`. Detail reconstructs presented question/option order, selected/correct answers, explanation, and media entirely from the attempt. In-progress reports can show only checkpoints already received; unsynchronized browser work is unknowable.
 
-The per-quiz attempt list is always newest first and supports only student search, minimum score, and a start-date preset. Date presets are rolling 24-hour, 7-day, and 30-day periods, the previous calendar day in the teacher's timezone, or all time.
+The dashboard lists only non-deleted quizzes, ordered by most recently updated, with pagination but no status or sort filters. Soft-deleted quizzes remain absent from the dashboard while their historical reports remain owner-accessible.
+
+The per-quiz attempt list contains only attempts with an authoritative `finished_at`, ordered by newest completion first. It supports student search, minimum score, and a completion-date preset. Date presets use `finished_at`: exact rolling 24-hour, 7-day, and 30-day periods; the previous complete calendar day in Asia/Tashkent converted to UTC boundaries; or all completed attempts.
 
 ## Security boundaries
 

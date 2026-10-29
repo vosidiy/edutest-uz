@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Manual quiz builder and Active switch (2026-10-29)
+
+- Replaced timed autosave and separate Publish/Unpublish actions with one optimistic, atomic **Save quiz** operation for content and staged Draft/Active status.
+- Added the accessible settings switch, removed publication-readiness and question-field warning UI, and retained global operational errors, conflict recovery, pending covers, in-flight edit merging, and unsaved-navigation protection.
+- Changed builder timer input to whole minutes from 1–120 while preserving second-based runtime snapshots and countdowns.
+- Allowed blank question text, defaulted/padded blank answer choices, repaired the single correct choice, prevented removal below two choices, and normalized excessive draw counts to the whole pool.
+- Removed Publish/Unpublish routes and dashboard actions. Media changes still save pending quiz edits first when server IDs are required.
+
+### Simplified dashboard and completion-date reports (2026-10-28)
+
+- Removed dashboard status/sort controls and query handling; the paginated library now shows only non-deleted quizzes in most-recently-updated order.
+- Removed the legacy trash page and filter-aware redirects. Historical reports for deleted quizzes remain owner-accessible without exposing Restore controls in the dashboard.
+- Changed every results date preset to require and filter by authoritative completion time, with Yesterday using complete Asia/Tashkent calendar-day boundaries converted to UTC.
+- Set the application timezone to Asia/Tashkent and made report calendar boundaries use that central configuration while preserving UTC timestamp storage.
+
 ### Simplified quiz results (2026-10-27)
 
 - Removed filtered CSV export, its route/controller/service logic, and the results-header action.

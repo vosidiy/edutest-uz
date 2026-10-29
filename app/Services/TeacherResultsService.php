@@ -71,7 +71,7 @@ final class TeacherResultsService
     {
         $quiz = $this->ownedQuiz($userId, $quizPublicId);
         ($this->player ?? service('player'))->assessment->resolveQuizOverdue((int) $quiz['id']);
-        $filters = $this->normalizeFilters($input, $timezone);
+        $filters = $this->normalizeFilters($input);
         $total = $this->attemptBuilder((int) $quiz['id'], $filters)->countAllResults();
         $pageCount = max(1, (int) ceil($total / self::PAGE_SIZE));
         $filters['page'] = min($filters['page'], $pageCount);
@@ -99,7 +99,6 @@ final class TeacherResultsService
                 'publicId'  => (string) $quiz['public_id'],
                 'title'     => trim((string) $quiz['title']) === '' ? lang('Results.untitledQuiz') : (string) $quiz['title'],
                 'builderUrl'=> $quiz['deleted_at'] === null ? site_url('quizzes/' . $quiz['public_id'] . '/edit') : null,
-                'restoreUrl'=> site_url('dashboard?status=trash'),
                 'status'    => $quiz['deleted_at'] === null ? (string) $quiz['status'] : 'deleted',
             ],
             'attempts'   => $attempts,
@@ -188,7 +187,6 @@ final class TeacherResultsService
                 'publicId'  => (string) $row['quiz_public_id'],
                 'title'     => (string) $row['quiz_title'],
                 'builderUrl'=> $row['quiz_deleted_at'] === null ? site_url('quizzes/' . $row['quiz_public_id'] . '/edit') : null,
-                'restoreUrl'=> site_url('dashboard?status=trash'),
                 'status'    => $row['quiz_deleted_at'] === null ? (string) $row['quiz_status'] : 'deleted',
                 'url'       => site_url('results/quizzes/' . $row['quiz_public_id']),
             ],
@@ -210,19 +208,21 @@ final class TeacherResultsService
 
     private function attemptBuilder(int $quizId, array $filters): BaseBuilder
     {
-        $builder = $this->db->table('attempts a')->where('a.quiz_id', $quizId);
+        $builder = $this->db->table('attempts a')
+            ->where('a.quiz_id', $quizId)
+            ->where('a.finished_at IS NOT NULL', null, false);
         if ($filters['query'] !== '') {
             $builder->groupStart()->like('a.name', $filters['query'])->orLike('a.email', $filters['query'])->orLike('a.phone', $filters['query'])->groupEnd();
         }
-        if ($filters['dateFromUtc'] !== null) $builder->where('a.started_at >=', $filters['dateFromUtc']);
-        if ($filters['dateToUtc'] !== null) $builder->where('a.started_at <', $filters['dateToUtc']);
+        if ($filters['dateFromUtc'] !== null) $builder->where('a.finished_at >=', $filters['dateFromUtc']);
+        if ($filters['dateToUtc'] !== null) $builder->where('a.finished_at <', $filters['dateToUtc']);
         if ($filters['minScore'] !== null) $builder->where('a.percent >=', $filters['minScore']);
         return $builder;
     }
 
     private function selectRows(BaseBuilder $builder): BaseBuilder
     {
-        return $builder->select('a.*')->orderBy('a.started_at', 'DESC')->orderBy('a.id', 'DESC');
+        return $builder->select('a.*')->orderBy('a.finished_at', 'DESC')->orderBy('a.id', 'DESC');
     }
 
     /** @return array<string, mixed> */
@@ -251,14 +251,14 @@ final class TeacherResultsService
     }
 
     /** @return array<string, mixed> */
-    private function normalizeFilters(array $input, string $timezone): array
+    private function normalizeFilters(array $input): array
     {
         $string = static fn (string $key): string => is_scalar($input[$key] ?? null) ? trim((string) $input[$key]) : '';
         $dateRange = $string('dateRange');
         if (! in_array($dateRange, ['last_24_hours', 'yesterday', 'last_7_days', 'last_30_days', 'all'], true)) {
             $dateRange = 'all';
         }
-        [$dateFromUtc, $dateToUtc] = $this->dateRangeBounds($dateRange, $timezone);
+        [$dateFromUtc, $dateToUtc] = $this->dateRangeBounds($dateRange);
         return [
             'query'       => mb_substr($string('q'), 0, 200),
             'dateRange'   => $dateRange,
@@ -340,20 +340,21 @@ final class TeacherResultsService
     }
 
     /** @return array{0:?string,1:?string} */
-    private function dateRangeBounds(string $range, string $timezone): array
+    private function dateRangeBounds(string $range): array
     {
         if ($range === 'all') return [null, null];
 
         $utc = new DateTimeZone('UTC');
-        $now = new DateTimeImmutable('now', $utc);
+        $now = new DateTimeImmutable('now', new DateTimeZone(app_timezone()));
         if ($range === 'yesterday') {
-            $today = $now->setTimezone(new DateTimeZone($timezone))->setTime(0, 0);
+            $today = $now->setTime(0, 0);
             return [
                 $today->modify('-1 day')->setTimezone($utc)->format('Y-m-d H:i:s.u'),
                 $today->setTimezone($utc)->format('Y-m-d H:i:s.u'),
             ];
         }
 
+        $now = $now->setTimezone($utc);
         $hours = match ($range) {
             'last_7_days'  => 7 * 24,
             'last_30_days' => 30 * 24,

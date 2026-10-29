@@ -39,6 +39,28 @@ final class TeacherRouteFeatureTest extends CIUnitTestCase
         }
     }
 
+    public function testRemovedQuizTrashRouteDoesNotResolve(): void
+    {
+        try {
+            $this->get('/quizzes/trash');
+            self::fail('The removed quiz trash route must not resolve.');
+        } catch (PageNotFoundException $exception) {
+            self::assertSame(404, $exception->getCode());
+        }
+    }
+
+    public function testRemovedPublishAndUnpublishApiRoutesDoNotResolve(): void
+    {
+        foreach (['publish', 'unpublish'] as $action) {
+            try {
+                $this->post('/api/v1/quizzes/0123456789abcdef0123456789abcdef/' . $action);
+                self::fail('The removed ' . $action . ' route must not resolve.');
+            } catch (PageNotFoundException $exception) {
+                self::assertSame(404, $exception->getCode());
+            }
+        }
+    }
+
     public function testAuthoringApiReturnsJsonAuthenticationError(): void
     {
         $response = $this->get('/api/v1/quizzes/0123456789abcdef0123456789abcdef');

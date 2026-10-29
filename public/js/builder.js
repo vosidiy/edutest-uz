@@ -4,31 +4,43 @@
   const BuilderRules = Object.freeze({
     editable(quiz) {
       if (!quiz) return '';
-      const fields = ['title', 'description', 'listed', 'timeLimitSec', 'askEmail', 'askPhone', 'drawCount',
+      const fields = ['title', 'description', 'status', 'listed', 'timeLimitMinutes', 'askEmail', 'askPhone', 'drawCount',
         'shuffleQuestions', 'shuffleOptions', 'feedback', 'showScore', 'showAnswers', 'showExplain'];
       const value = Object.fromEntries(fields.map(key => [key, quiz[key]]));
       value.questions = (quiz.questions || []).map(q => ({id:q.id, content:q.content, optionsLayout:q.optionsLayout,
         explanation:q.explanation, options:q.options.map(o => ({id:o.id, content:o.content, isCorrect:o.isCorrect}))}));
       return JSON.stringify(value);
     },
-    shouldAutosave(quiz) { return ['draft', 'published'].includes(quiz?.status); },
-    publicationIssues(quiz, messages = {}) {
-      const message = (key, number = null) => String(messages[key] || key).replace('{number}', String(number ?? ''));
-      const issues = [];
-      if (!quiz || String(quiz.title || '').trim() === '') issues.push(message('title'));
-      const questions = Array.isArray(quiz?.questions) ? quiz.questions : [];
-      if (questions.length === 0) issues.push(message('questions'));
-      questions.forEach((question, index) => {
-        const number = index + 1;
-        if (String(question?.content || '').trim() === '') issues.push(message('questionText', number));
-        const options = Array.isArray(question?.options) ? question.options : [];
-        if (options.length < 2) issues.push(message('twoChoices', number));
-        if (options.some(option => String(option?.content || '').trim() === '' && !option?.media)) issues.push(message('emptyChoice', number));
-        const correct = options.filter(option => option?.isCorrect).length;
-        if (correct !== 1) issues.push(message('singleCorrect', number));
-      });
-      if (quiz?.drawCount !== null && quiz?.drawCount !== '' && Number(quiz.drawCount) > questions.length) issues.push(message('drawCount'));
-      return issues;
+    repairQuestions(quiz) {
+      let changed = false;
+      for (const question of quiz?.questions || []) {
+        if (!Array.isArray(question.options)) {
+          question.options = [];
+          changed = true;
+        }
+        while (question.options.length < 2) {
+          question.options.push({id:null, content:'', isCorrect:false, media:null});
+          changed = true;
+        }
+        let correctFound = false;
+        question.options.forEach((option, index) => {
+          if (String(option.content || '').trim() === '') {
+            option.content = 'Option ' + (index + 1);
+            changed = true;
+          }
+          if (option.isCorrect && !correctFound) {
+            correctFound = true;
+          } else if (option.isCorrect) {
+            option.isCorrect = false;
+            changed = true;
+          }
+        });
+        if (!correctFound) {
+          question.options[0].isCorrect = true;
+          changed = true;
+        }
+      }
+      return changed;
     }
   });
   window.EduTestBuilderRules = BuilderRules;
@@ -58,13 +70,11 @@
         loading: true,
         fatalError: '',
         globalError: '',
-        fieldErrors: {},
         selectedIndex: 0,
         preview: false,
         saving: false,
         saveState: 'saved',
         lastSavedAt: null,
-        autosaveTimer: null,
         hydrating: true,
         savedFingerprint: '',
         savePromise: null,
@@ -78,8 +88,7 @@
         detailsError: '',
         coverUrls: new Set(),
         workspaceMessages: JSON.parse(root.dataset.workspaceMessages || '{}'),
-        conflictVersion: null,
-        publicationMessages: JSON.parse(root.dataset.publicationMessages || '{}')
+        conflictVersion: null
       };
     },
     computed: {
@@ -90,14 +99,10 @@
         return this.detailsCover?.url || this.quiz?.cover?.url || null;
       },
       selectedQuestion() { return this.quiz?.questions?.[this.selectedIndex] || null; },
-      publicationIssues() { return BuilderRules.publicationIssues(this.quiz, this.publicationMessages); },
-      publishReady() { return this.publicationIssues.length === 0; },
-      publishReadinessMessage() { return this.publicationIssues[0] || ''; },
       saveLabel() {
         if (this.saving || this.mediaBusy) return this.workspaceMessages.saving;
         if (this.saveState === 'dirty') return 'Unsaved changes';
         if (this.saveState === 'retry') return 'Save failed — retry';
-        if (this.saveState === 'validation') return 'Fix validation errors';
         if (this.saveState === 'conflict') return 'Newer changes found';
         if (this.lastSavedAt) return `Saved ${new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(this.lastSavedAt)}`;
         return this.quiz?.status === 'draft' ? 'Draft loaded' : 'Quiz loaded';
@@ -115,7 +120,6 @@
     },
     beforeUnmount() {
       window.removeEventListener('beforeunload', this.beforeUnload);
-      clearTimeout(this.autosaveTimer);
       for (const url of this.coverUrls) URL.revokeObjectURL(url);
     },
     methods: {
@@ -129,7 +133,6 @@
           this.applyServerQuiz(response.data.quiz);
           this.saveState = 'saved';
           this.conflictVersion = null;
-          this.fieldErrors = {};
           this.globalError = '';
         } catch (error) {
           this.fatalError = error.message;
@@ -139,24 +142,16 @@
         }
       },
       applyServerQuiz(quiz) {
-        clearTimeout(this.autosaveTimer);
         this.hydrating = true;
         this.quiz = quiz;
         this.savedFingerprint = BuilderRules.editable(quiz);
         this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, quiz.questions.length - 1));
         this.$nextTick(() => { this.hydrating = false; });
       },
-      scheduleAutosave() {
-        clearTimeout(this.autosaveTimer);
-        if (!this.saving && !this.mediaBusy && this.hasChanges && this.saveState === 'dirty' && BuilderRules.shouldAutosave(this.quiz)) {
-          this.autosaveTimer = setTimeout(() => this.save(false), 1000);
-        }
-      },
       markDirty() {
         if (this.saveState === 'conflict') return;
         if (!this.saving) this.saveState = this.hasChanges ? 'dirty' : 'saved';
         this.globalError = '';
-        this.scheduleAutosave();
       },
       async acceptSaved(server, sent, references, sentPasscode) {
         // Keep the same reactive row objects: a new ID must follow its row even if reordered/deleted during the request.
@@ -194,16 +189,16 @@
           if (manual) this.openConflict();
           return Promise.resolve(false);
         }
-        if (!this.quiz || (!this.hasChanges && !overwrite)) return Promise.resolve(true);
+        if (!this.quiz) return Promise.resolve(false);
+        if (BuilderRules.repairQuestions(this.quiz)) this.markDirty();
+        if (!this.hasChanges && !overwrite) return Promise.resolve(true);
         this.savePromise = this.performSave(overwrite).finally(() => { this.savePromise = null; });
         return this.savePromise;
       },
       async performSave(overwrite) {
-        clearTimeout(this.autosaveTimer);
         this.saving = true;
         this.saveState = 'saving';
         this.globalError = '';
-        this.fieldErrors = {};
         const sent = JSON.parse(JSON.stringify(this.quiz));
         const references = this.quiz.questions.map(question => ({question, options:[...question.options]}));
         const cover = this.pendingCover;
@@ -242,7 +237,6 @@
           return false;
         } finally {
           this.saving = false;
-          this.scheduleAutosave();
         }
       },
       handleSaveError(error) {
@@ -252,8 +246,7 @@
           this.conflictVersion = Number(error.fields?.version || 0);
           this.openConflict();
         } else {
-          this.fieldErrors = error.fields || {};
-          this.saveState = error.status === 422 ? 'validation' : 'retry';
+          this.saveState = 'retry';
         }
       },
       openConflict() {
@@ -354,12 +347,15 @@
         this.markDirty();
         this.closeDetails();
       },
+      setActive(active) {
+        this.quiz.status = active ? 'published' : 'draft';
+        this.markDirty();
+      },
       typeLabel() { return 'Single choice'; },
       formatBytes(bytes) {
         if (!Number.isFinite(Number(bytes))) return 'unlimited';
         return `${Math.floor(Number(bytes) / 1048576)} MiB`;
       },
-      fieldError(path) { return this.fieldErrors?.[path] || ''; },
       optionLetter(index) {
         let value = index + 1;
         let label = '';
@@ -391,9 +387,15 @@
       },
       addOption() { this.selectedQuestion.options.push({ id: null, content: '', isCorrect: false, media: null }); },
       removeOption(index) {
+        if (this.selectedQuestion.options.length <= 2) return;
         const option = this.selectedQuestion.options[index];
         if (option?.media && !window.confirm('Delete this answer and its attached media?')) return;
         this.selectedQuestion.options.splice(index, 1);
+        if (option?.isCorrect && this.selectedQuestion.options.length > 0) {
+          this.selectedQuestion.options.forEach((remaining, remainingIndex) => {
+            remaining.isCorrect = remainingIndex === 0;
+          });
+        }
       },
       setCorrect(index, checked) {
         if (!checked) return;
@@ -464,7 +466,6 @@
         this.globalError = '';
         if (this.mediaBusy) return;
         this.mediaBusy = true;
-        clearTimeout(this.autosaveTimer);
         const target = this.targetAt(questionIndex, optionIndex);
         try {
           const response = await EduTestApi.request(endpoint, options);
@@ -475,34 +476,7 @@
         } catch (error) {
           this.handleSaveError(error);
         }
-        finally { this.mediaBusy = false; this.scheduleAutosave(); }
-      },
-      async lifecycle(action) {
-        if (this.mediaBusy || this.saving) return;
-        if (action === 'publish' && !this.publishReady) {
-          this.globalError = this.publishReadinessMessage;
-          this.saveState = 'validation';
-          return;
-        }
-        if (!await this.save(true)) return;
-        if (!window.confirm(action === 'publish' ? 'Publish this quiz for future starts?' : `${action} this quiz?`)) return;
-        const sent = JSON.parse(JSON.stringify(this.quiz));
-        const references = this.quiz.questions.map(question => ({question, options:[...question.options]}));
-        this.mediaBusy = true;
-        clearTimeout(this.autosaveTimer);
-        try {
-          const response = await EduTestApi.request(`/api/v1/quizzes/${this.publicId}/${action}`, { method: 'POST', body: '{}' });
-          await this.acceptSaved(response.data.quiz, sent, references);
-          this.saveState = this.hasChanges ? 'dirty' : 'saved';
-          EduTestApi.toast(action === 'publish' ? 'Quiz published.' : 'Quiz updated.');
-        } catch (error) {
-          this.fieldErrors = error.fields || {};
-          this.globalError = error.message;
-          this.saveState = error.status === 422 ? 'validation' : 'retry';
-        } finally {
-          this.mediaBusy = false;
-          this.scheduleAutosave();
-        }
+        finally { this.mediaBusy = false; }
       },
       async copyShare() {
         try {

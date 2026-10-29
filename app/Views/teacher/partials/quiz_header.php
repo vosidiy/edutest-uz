@@ -20,9 +20,8 @@
         <a :href="quiz.resultsUrl"><?= esc(lang('EduTest.builder.navigation.responses')) ?></a>
     </nav>
     <div class="builder-actions">
-        <button v-if="quiz.status === 'draft'" class="btn btn-primary" type="button" @click="lifecycle('publish')" :disabled="saving || mediaBusy || !publishReady" :aria-describedby="!publishReady ? 'publish-readiness' : null" :title="publishReadinessMessage">Publish</button>
-        <button v-if="quiz.status === 'published'" class="btn btn-default" type="button" @click="lifecycle('unpublish')" :disabled="saving || mediaBusy">Unpublish</button>
         <button v-if="quiz.status === 'published'" class="btn btn-default" type="button" @click="copyShare">Copy link</button>
+        <button class="btn btn-primary" type="button" @click="save(true)" :disabled="saving || mediaBusy">Save quiz</button>
     </div>
 </header>
 
@@ -57,6 +56,6 @@
     <?php endif ?>
 </header>
 <?php if ($report['quiz']['builderUrl'] === null) : ?>
-    <div id="builder-unavailable" class="alert alert-warning workspace-restore-notice"><?= esc(lang('Workspace.builderUnavailable')) ?> <a href="<?= esc($report['quiz']['restoreUrl'], 'attr') ?>"><?= esc(lang('Workspace.restoreQuiz')) ?></a></div>
+    <div id="builder-unavailable" class="alert alert-warning workspace-restore-notice"><?= esc(lang('Workspace.builderUnavailable')) ?></div>
 <?php endif ?>
 <?php endif ?>

@@ -57,7 +57,7 @@ final class AdmissionService
         return $this->store->transaction(function () use ($claims, $input, $ip, $agent): array {
             $quiz = $this->store->lock('quizzes', (string) $claims['quizId']);
 
-            // A successful start replay wins over later quiz edits, unpublishing, or deletion.
+            // A successful start replay wins over later quiz edits, Draft status, or deletion.
             $existing = $this->store->db->table('attempts')
                 ->where('quiz_id', $quiz['id'])
                 ->where('start_key', $claims['startKey'])

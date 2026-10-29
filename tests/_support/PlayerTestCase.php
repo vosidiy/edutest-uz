@@ -88,8 +88,8 @@ abstract class PlayerTestCase extends CIUnitTestCase
                 'optionsLayout' => $i % 2 === 0 ? 'list' : 'grid', 'explanation' => 'Paris is the capital of France.',
                 'options' => [['id' => null, 'content' => 'Berlin', 'isCorrect' => false], ['id' => null, 'content' => 'Paris', 'isCorrect' => true]]];
         }
-        $this->authoring->save($owner, $created['publicId'], $doc);
-        $published = $this->authoring->transition($owner, $created['publicId'], 'publish')['quiz'];
+        $doc['status'] = 'published';
+        $published = $this->authoring->save($owner, $created['publicId'], $doc);
         return ['owner' => $owner, 'publicId' => $created['publicId'], 'share' => basename($published['shareUrl']), 'document' => $published];
     }
 

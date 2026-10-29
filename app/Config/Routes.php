@@ -26,7 +26,6 @@ $routes->group('', ['namespace' => 'App\Controllers\Teacher', 'filter' => 'auth'
     $routes->post('account/profile', 'AccountController::updateProfile', ['as' => 'account-profile']);
     $routes->post('account/password', 'AccountController::updatePassword', ['as' => 'account-password']);
     $routes->get('quizzes', 'QuizController::index', ['as' => 'quizzes']);
-    $routes->get('quizzes/trash', 'QuizController::trash', ['as' => 'quizzes-trash']);
     $routes->get('quizzes/(:segment)/edit', 'QuizController::edit/$1', ['as' => 'quiz-edit']);
     $routes->get('results', 'ResultsController::index', ['as' => 'results']);
     $routes->get('results/quizzes/(:segment)', 'ResultsController::quiz/$1', ['as' => 'quiz-results']);
@@ -38,7 +37,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api', 'filter' => 'aut
     $routes->post('quizzes', 'QuizController::create');
     $routes->get('quizzes/(:segment)', 'QuizController::show/$1');
     $routes->put('quizzes/(:segment)', 'QuizController::update/$1');
-    foreach (['publish', 'unpublish', 'trash', 'restore'] as $action) {
+    foreach (['trash', 'restore'] as $action) {
         $routes->post("quizzes/(:segment)/{$action}", "QuizController::transition/$1/{$action}");
     }
     $routes->post('quizzes/(:segment)/duplicate', 'QuizController::duplicate/$1');

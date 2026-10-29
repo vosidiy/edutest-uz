@@ -13,16 +13,16 @@ const publicId = 'a'.repeat(32);
 const user = {id:1,email:'teacher@example.test',display_name:'Teacher One',phone:null,bio:'',timezone:'Asia/Tashkent',public_page:false};
 const quiz = {publicId,shareUrl:'/q/123456789',resultsAvailable:true,resultsUrl:`/results/quizzes/${publicId}`,version:4,
   status:'published',deleted:false,listed:false,title:'Snapshot assessment',description:'Current authoring pool',cover:null,
-  timeLimitSec:7200,timeLimitMinutes:'120.0',askEmail:true,askPhone:false,feedback:'at_end',shuffleQuestions:true,
+  timeLimitSec:7200,timeLimitMinutes:120,askEmail:true,askPhone:false,feedback:'at_end',shuffleQuestions:true,
   shuffleOptions:false,drawCount:1,showScore:true,showAnswers:true,showExplain:true,publishedAt:new Date().toISOString(),
   updatedAt:new Date().toISOString(),mediaLimits:{imageBytes:5242880,audioBytes:20971520,serverBytes:20971520},questions:[{
     id:'1',position:1,content:'Which answer is correct?',optionsLayout:'grid',explanation:'A is correct.',media:null,
     options:[{id:'11',code:'code-a',position:1,content:'A',isCorrect:true,media:null},{id:'12',code:'code-b',position:2,content:'B',isCorrect:false,media:null}],
   }]};
-const library = {rows:[{publicId,title:quiz.title,status:'published',deleted:false,questionCount:1,cover:null,
+const library = {rows:[{publicId,title:quiz.title,status:'published',questionCount:1,cover:null,
   assessmentSubmissions:3,updatedAt:'26 Oct 2026, 12:00',editUrl:`/quizzes/${publicId}/edit`,resultsUrl:quiz.resultsUrl}],
-  filters:{status:'',sort:'updated_desc',page:1},pagination:{page:1,pageSize:20,total:1,pageCount:1}};
-const report = {quiz:{publicId,title:quiz.title,builderUrl:`/quizzes/${publicId}/edit`,restoreUrl:'/dashboard?status=trash',status:'published'},
+  filters:{page:1},pagination:{page:1,pageSize:20,total:1,pageCount:1}};
+const report = {quiz:{publicId,title:quiz.title,builderUrl:`/quizzes/${publicId}/edit`,status:'published'},
   attempts:[],filters:{query:'Ali',dateRange:'last_7_days',dateFromUtc:null,dateToUtc:null,minScore:50,page:1},
   pagination:{page:1,pageSize:25,total:26,pageCount:2}};
 let origin;
@@ -73,14 +73,19 @@ try {
   await browser.until(() => browser.evaluate(`!!document.querySelector('.quiz-card')`), 'dashboard card');
   assert.equal(await browser.evaluate(`document.querySelector('.quiz-card').textContent.includes('Assessment')`), true);
   assert.equal(await browser.evaluate(`document.body.textContent.includes('Practice')`), false);
-  assert.deepEqual(await browser.evaluate(`[...document.querySelector('select[name="status"]').options].map(option => option.value)`), ['', 'draft', 'published', 'trash']);
+  assert.equal(await browser.evaluate(`document.querySelector('.library-toolbar') === null`), true);
+  assert.equal(await browser.evaluate(`document.querySelector('[name="status"], [name="sort"]') === null`), true);
+  assert.equal(await browser.evaluate(`document.querySelector('[data-quiz-action="publish"], [data-quiz-action="unpublish"]') === null`), true);
   await browser.evaluate(`document.querySelector('[data-open-create]').click()`);
   await browser.until(() => browser.evaluate(`document.querySelector('#create-quiz-dialog').open`), 'create dialog');
   assert.equal(await browser.evaluate(`document.querySelector('#create-quiz-dialog').textContent.includes('Quiz mode')`), false);
 
   await browser.navigate(`${origin}/quizzes/${publicId}/edit`);
   await browser.until(() => browser.evaluate(`document.querySelector('#quiz-builder')?.hasAttribute('v-cloak') === false && document.body.textContent.includes('Which answer is correct?')`), 'builder hydration');
-  assert.equal(await browser.evaluate(`document.body.textContent.includes('Unpublish')`), true);
+  assert.equal(await browser.evaluate(`document.body.textContent.includes('Save quiz')`), true);
+  assert.equal(await browser.evaluate(`[...document.querySelectorAll('button')].some(button => ['Publish','Unpublish'].includes(button.textContent.trim()))`), false);
+  assert.equal(await browser.evaluate(`document.querySelector('.input-switch[role="switch"]').checked`), true);
+  assert.equal(await browser.evaluate(`document.querySelector('.label-switch').textContent.trim()`), 'Active');
   assert.equal(await browser.evaluate(`document.body.textContent.includes('Single choice · grid')`), true);
   for (const removed of ['Practice','Passcode','Integrity','Short text','Multiple choice']) {
     assert.equal(await browser.evaluate(`document.body.textContent.includes(${JSON.stringify(removed)})`), false, removed);
@@ -88,7 +93,11 @@ try {
   await browser.evaluate(`document.querySelector('[aria-controls="builder-settings"]').click()`);
   assert.equal(await browser.evaluate(`document.querySelector('.builder-layout').dataset.activePanel`), 'settings');
   assert.equal(await browser.evaluate(`document.querySelector('#builder-settings').textContent.includes('Questions per attempt')`), true);
-  assert.equal(await browser.evaluate(`document.querySelector('#builder-settings').textContent.includes('7200 seconds')`), true);
+  assert.equal(await browser.evaluate(`document.querySelector('#builder-settings').textContent.includes('Total timer (minutes)')`), true);
+  assert.equal(await browser.evaluate(`document.querySelector('#builder-settings input[type="number"][min="1"][max="120"][step="1"]').value`), '120');
+  assert.equal(await browser.evaluate(`document.querySelector('#builder-settings input[placeholder="All questions"]').max`), '1');
+  assert.equal(await browser.evaluate(`document.body.textContent.includes('Fix validation errors')`), false);
+  assert.equal(await browser.evaluate(`document.body.textContent.includes('Saved changes apply to students')`), false);
 
   await browser.navigate(`${origin}/results/quizzes/${publicId}`);
   await browser.until(() => browser.evaluate(`document.body.textContent.includes('Attempts (26)')`), 'attempt report');

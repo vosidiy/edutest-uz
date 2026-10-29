@@ -138,9 +138,6 @@ final class StudentPlayerTest extends PlayerTestCase
         $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
         $document['questions'] = [];
         $document['status'] = 'draft';
-        $this->authoring->transition($quiz['owner'], $quiz['publicId'], 'unpublish');
-        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
-        $document['questions'] = [];
         $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
 
         $report = (new TeacherResultsService($this->db, $this->media, new AttemptSnapshotService($this->db, $this->media), $this->player))

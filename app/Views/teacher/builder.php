@@ -5,7 +5,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
-<div id="quiz-builder" data-workspace-messages="<?= esc(json_encode(lang('EduTest.builder.workspace'), JSON_THROW_ON_ERROR), 'attr') ?>" data-public-id="<?= esc($quiz['publicId'], 'attr') ?>" data-publication-messages="<?= esc(json_encode(lang('EduTest.builder.publication'), JSON_THROW_ON_ERROR), 'attr') ?>" v-cloak>
+<div id="quiz-builder" data-workspace-messages="<?= esc(json_encode(lang('EduTest.builder.workspace'), JSON_THROW_ON_ERROR), 'attr') ?>" data-public-id="<?= esc($quiz['publicId'], 'attr') ?>" v-cloak>
     <div v-if="loading" class="builder-loading">Loading quiz builder…</div>
     <div v-else-if="fatalError" class="builder-fatal"><h1>Builder unavailable</h1><p>{{ fatalError }}</p><a class="btn btn-default" href="<?= site_url('dashboard') ?>"><?= esc(lang('Workspace.backDashboard')) ?></a></div>
     <template v-else>
@@ -36,11 +36,6 @@
 
             <section id="builder-editor" class="editor-canvas" ref="editorPanel" tabindex="0" aria-label="<?= esc(lang('EduTest.builder.workspace.editor'), 'attr') ?>">
                 <div class="builder-notices mb-3">
-                    
-                    <p v-if="!publishReady" id="publish-readiness" class="alert alert-warning pt-1 pb-1 pl-2" role="status">{{ publishReadinessMessage }}</p>
-
-                    <div v-if="quiz.status === 'published'" class="alert alert-info builder-banner">Saved changes apply to students who start after the save. Existing attempts keep their own snapshot.</div>
-
                     <div v-if="quiz.mediaLimits.serverBytes < quiz.mediaLimits.audioBytes" class="alert alert-warning builder-banner">The current PHP upload limit is {{ formatBytes(quiz.mediaLimits.serverBytes) }}. Raise <code>upload_max_filesize</code> and <code>post_max_size</code> above 20 MiB to accept the full supported audio size.</div>
 
                     <div v-if="globalError" class="alert alert-danger builder-banner" role="alert">{{ globalError }} <button class="btn btn-link btn-sm" v-if="saveState === 'retry'" @click="save(true)">Retry</button><button class="btn btn-link btn-sm" v-if="saveState === 'conflict'" @click="openConflict">Resolve conflict</button>
@@ -96,7 +91,6 @@
                                 
                                 <textarea placeholder="Type question text..." class="form-control" v-model="selectedQuestion.content" rows="2" maxlength="65535"></textarea>
                                 
-                                <small class="form-error" v-if="fieldError(`questions.${selectedIndex}.content`)">{{ fieldError(`questions.${selectedIndex}.content`) }}</small>
                             </label>
  
                         </div>
@@ -138,7 +132,7 @@
                                     
                                     <button v-if="option.media" class="btn btn-link" type="button" @click="removeMedia(selectedIndex,index)">Remove image</button>
                                     
-                                    <button class="btn btn-red-subtle btn-icon" type="button" @click="removeOption(index)" :aria-label="`Remove answer ${optionLetter(index)}`">
+                                    <button class="btn btn-red-subtle btn-icon" type="button" @click="removeOption(index)" :disabled="selectedQuestion.options.length <= 2" :aria-label="`Remove answer ${optionLetter(index)}`">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x preview-icon"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                                     </button>
                                 </div>
@@ -162,7 +156,14 @@
             </section>
 
             <aside id="builder-settings" class="settings-rail" aria-label="Quiz settings">
-                <div class="rail-heading"><strong class="rail-title">Quiz settings</strong><span class="badge status" :class="quiz.status">{{ quiz.status }}</span></div>
+                <div class="rail-heading">
+                    <strong class="rail-title">Quiz settings</strong>
+                    <label class="form-switch">
+                        <input class="input-switch" type="checkbox" role="switch" :checked="quiz.status === 'published'" @change="setActive($event.target.checked)">
+                        <span class="slider" aria-hidden="true"></span>
+                        <span class="label-switch">{{ quiz.status === 'published' ? 'Active' : 'Draft' }}</span>
+                    </label>
+                </div>
                 <div class="settings-content" ref="settingsPanel" tabindex="0" role="region" aria-label="<?= esc(lang('EduTest.builder.workspace.settings'), 'attr') ?>">
                     <details open>
                         <summary>Details</summary>
@@ -176,8 +177,8 @@
                     <details>
                         <summary>Timer & admission</summary>
                         <div class="setting-group">
-                            <label class="form-field"><span class="form-label">Total timer (seconds)</span><input class="form-control" type="number" min="30" max="7200" step="30" v-model.number="quiz.timeLimitSec"></label>
-                            <small>30 seconds to 120 minutes, in 30-second steps. Default: 7200 seconds.</small>
+                            <label class="form-field"><span class="form-label">Total timer (minutes)</span><input class="form-control" type="number" min="1" max="120" step="1" v-model.number="quiz.timeLimitMinutes"></label>
+                            <small>1 to 120 whole minutes. Default: 120 minutes.</small>
                             <label class="form-check check-row"><input type="checkbox" v-model="quiz.askEmail"><span><strong>Ask for email</strong><small>The field remains optional for students.</small></span></label>
                             <label class="form-check check-row"><input type="checkbox" v-model="quiz.askPhone"><span><strong>Ask for phone</strong><small>The field remains optional for students.</small></span></label>
                         </div>
@@ -185,7 +186,7 @@
                     <details>
                         <summary>Question selection</summary>
                         <div class="setting-group">
-                            <label class="form-field"><span class="form-label">Questions per attempt</span><input class="form-control" type="number" min="1" step="1" v-model.number="quiz.drawCount" placeholder="All questions"></label>
+                            <label class="form-field"><span class="form-label">Questions per attempt</span><input class="form-control" type="number" min="1" :max="quiz.questions.length || null" step="1" v-model.number="quiz.drawCount" placeholder="All questions"></label>
                             <small>Leave empty to use the entire question pool.</small>
                             
                             <label class="form-check check-row"><input type="checkbox" v-model="quiz.shuffleQuestions"><span><strong>Shuffle questions</strong>

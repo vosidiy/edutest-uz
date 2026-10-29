@@ -13,7 +13,7 @@ final class ResultsController extends BaseController
 {
     public function index(): RedirectResponse
     {
-        return redirect()->to(service('teacherQueries')->legacyDashboardUrl($this->request->getGet(), 'results'));
+        return redirect()->to(site_url('dashboard'));
     }
 
     public function quiz(string $quizPublicId): string

@@ -49,7 +49,7 @@ final class ResultsFeatureTest extends PlayerTestCase
         $session = [AuthService::SESSION_KEY => $quiz['owner']];
 
         $overview = $this->withSession($session)->get('/results');
-        $overview->assertRedirectTo(service('teacherQueries')->legacyDashboardUrl([], 'results'));
+        $overview->assertRedirectTo(site_url('dashboard'));
 
         $report = $this->withSession($session)->get('/results/quizzes/' . $quiz['publicId']);
         $report->assertOK();
@@ -90,6 +90,20 @@ final class ResultsFeatureTest extends PlayerTestCase
                 self::assertSame(404, $exception->getCode());
             }
         }
+    }
+
+    public function testDeletedQuizKeepsHistoricalReportWithoutRestoreControl(): void
+    {
+        [$quiz] = $this->completedAttempt();
+        $this->authoring->transition($quiz['owner'], $quiz['publicId'], 'trash');
+
+        $response = $this->withSession([AuthService::SESSION_KEY => $quiz['owner']])
+            ->get('/results/quizzes/' . $quiz['publicId']);
+
+        $response->assertOK();
+        $response->assertSee('historical responses remain available');
+        $response->assertDontSee('dashboard?status=trash');
+        $response->assertDontSee('Manage quiz on dashboard');
     }
 
     /** @return array{0:array<string,mixed>,1:array<string,mixed>} */

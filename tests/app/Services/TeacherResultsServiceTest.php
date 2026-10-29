@@ -39,11 +39,10 @@ final class TeacherResultsServiceTest extends PlayerTestCase
 
         $report = $this->results->quiz($quiz['owner'], $quiz['publicId'], [], 'UTC');
         self::assertArrayNotHasKey('metrics', $report);
-        self::assertCount(3, $report['attempts']);
+        self::assertCount(2, $report['attempts']);
         $byStatus = array_column($report['attempts'], null, 'status');
         self::assertSame(2, $byStatus['completed']['responsesReceived']);
         self::assertSame(2, $byStatus['completed']['correctReceived']);
-        self::assertSame(0, $byStatus['in_progress']['responsesReceived']);
         self::assertSame(0, $byStatus['abandoned']['responsesReceived']);
     }
 
@@ -57,10 +56,14 @@ final class TeacherResultsServiceTest extends PlayerTestCase
         $ungraded = $this->startQuiz($quiz);
         $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
         $this->db->table('attempts')->where('public_id', $recent['attemptId'])->update([
-            'name' => 'Alice Recent', 'started_at' => $now->modify('-1 hour')->format('Y-m-d H:i:s.u'),
+            'name' => 'Alice Recent',
+            'started_at' => $now->modify('-2 hours')->format('Y-m-d H:i:s.u'),
+            'finished_at' => $now->modify('-1 hour')->format('Y-m-d H:i:s.u'),
         ]);
         $this->db->table('attempts')->where('public_id', $old['attemptId'])->update([
-            'name' => 'Alice Old', 'started_at' => $now->modify('-3 days')->format('Y-m-d H:i:s.u'),
+            'name' => 'Alice Old',
+            'started_at' => $now->modify('-3 days -1 hour')->format('Y-m-d H:i:s.u'),
+            'finished_at' => $now->modify('-3 days')->format('Y-m-d H:i:s.u'),
         ]);
         $this->db->table('attempts')->where('public_id', $ungraded['attemptId'])->update([
             'name' => 'Alice Ungraded', 'started_at' => $now->modify('-30 minutes')->format('Y-m-d H:i:s.u'),
@@ -75,11 +78,10 @@ final class TeacherResultsServiceTest extends PlayerTestCase
         $all = $this->results->quiz($quiz['owner'], $quiz['publicId'], ['dateRange' => 'invalid', 'sort' => 'oldest', 'status' => 'completed'], 'UTC');
         self::assertSame('all', $all['filters']['dateRange']);
         self::assertSame(['query', 'dateRange', 'dateFromUtc', 'dateToUtc', 'minScore', 'page'], array_keys($all['filters']));
-        self::assertSame('Alice Ungraded', $all['attempts'][0]['name']);
-        self::assertCount(3, $all['attempts']);
+        self::assertSame(['Alice Recent', 'Alice Old'], array_column($all['attempts'], 'name'));
     }
 
-    public function testDateRangePresetsUseRollingPeriodsAndTeacherLocalYesterday(): void
+    public function testDateRangePresetsUseRollingPeriodsAndTashkentYesterday(): void
     {
         $quiz = $this->quiz();
         $timezone = new DateTimeZone('Asia/Tashkent');
@@ -88,7 +90,7 @@ final class TeacherResultsServiceTest extends PlayerTestCase
         $todayLocal = $now->setTimezone($timezone)->setTime(0, 0);
         $dates = [
             'Recent'    => $now->modify('-1 hour'),
-            'Yesterday' => $todayLocal->modify('-1 day')->setTimezone($utc),
+            'Yesterday' => $todayLocal->modify('-1 day')->setTime(12, 0)->setTimezone($utc),
             'Week'      => $now->modify('-6 days'),
             'Month'     => $now->modify('-29 days'),
             'Old'       => $now->modify('-31 days'),
@@ -97,7 +99,9 @@ final class TeacherResultsServiceTest extends PlayerTestCase
             $attempt = $this->startQuiz($quiz);
             $this->complete($attempt);
             $this->db->table('attempts')->where('public_id', $attempt['attemptId'])->update([
-                'name' => $name, 'started_at' => $startedAt->format('Y-m-d H:i:s.u'),
+                'name' => $name,
+                'started_at' => $startedAt->modify('-1 minute')->format('Y-m-d H:i:s.u'),
+                'finished_at' => $startedAt->format('Y-m-d H:i:s.u'),
             ]);
         }
 
@@ -110,6 +114,41 @@ final class TeacherResultsServiceTest extends PlayerTestCase
         self::assertSame(['Recent', 'Yesterday', 'Week'], $names('last_7_days'));
         self::assertSame(['Recent', 'Yesterday', 'Week', 'Month'], $names('last_30_days'));
         self::assertSame(['Recent', 'Yesterday', 'Week', 'Month', 'Old'], $names('all'));
+    }
+
+    public function testYesterdayUsesInclusiveExclusiveTashkentCompletionBoundaries(): void
+    {
+        $quiz = $this->quiz();
+        $utc = new DateTimeZone('UTC');
+        $todayLocal = (new DateTimeImmutable('now', $utc))
+            ->setTimezone(new DateTimeZone('Asia/Tashkent'))
+            ->setTime(0, 0);
+        $yesterdayStart = $todayLocal->modify('-1 day')->setTimezone($utc);
+        $todayStart = $todayLocal->setTimezone($utc);
+        $dates = [
+            'At lower bound' => $yesterdayStart,
+            'At upper edge'  => $todayStart->modify('-1 microsecond'),
+            'Before range'   => $yesterdayStart->modify('-1 microsecond'),
+            'At upper bound' => $todayStart,
+        ];
+        foreach ($dates as $name => $finishedAt) {
+            $attempt = $this->startQuiz($quiz);
+            $this->complete($attempt);
+            $this->db->table('attempts')->where('public_id', $attempt['attemptId'])->update([
+                'name' => $name,
+                'started_at' => $finishedAt->modify('-1 minute')->format('Y-m-d H:i:s.u'),
+                'finished_at' => $finishedAt->format('Y-m-d H:i:s.u'),
+            ]);
+        }
+
+        $attempts = $this->results->quiz(
+            $quiz['owner'],
+            $quiz['publicId'],
+            ['dateRange' => 'yesterday'],
+            'Asia/Tashkent',
+        )['attempts'];
+
+        self::assertSame(['At upper edge', 'At lower bound'], array_column($attempts, 'name'));
     }
 
     public function testAttemptReviewKeepsTheImmutableSnapshotAfterLiveEdits(): void

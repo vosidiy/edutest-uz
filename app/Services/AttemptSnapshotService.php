@@ -51,7 +51,7 @@ final class AttemptSnapshotService
                 ];
             }
 
-            if (trim((string) $question['content']) === '' || count($options) < 2 || $correctCode === null) {
+            if (count($options) < 2 || $correctCode === null) {
                 throw new PlayerException('invalid_quiz', 409);
             }
 

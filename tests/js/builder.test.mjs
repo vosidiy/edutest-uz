@@ -3,27 +3,27 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const source = fs.readFileSync(new URL('../../public/js/builder.js', import.meta.url), 'utf8');
+assert.doesNotMatch(source, /autosave|scheduleAutosave|shouldAutosave/i);
 const window = {};
 vm.runInNewContext(source, {window, document: {querySelector: () => null}});
 
 const rules = window.EduTestBuilderRules;
 assert.ok(rules, 'Builder rules should be available before the Vue application mounts.');
-assert.equal(rules.shouldAutosave({status: 'draft'}), true);
-assert.equal(rules.shouldAutosave({status: 'published'}), true);
-assert.equal(rules.shouldAutosave({status: 'archived'}), false);
 
-const complete = {
-  status: 'draft', title: 'Complete quiz', questions: [{
-    content: 'Question?', optionsLayout: 'list',
-    options: [{content: 'A', isCorrect: true, media: null}, {content: 'B', isCorrect: false, media: null}]
+const quiz = {
+  status: 'published', title: 'Complete quiz', timeLimitMinutes:120, questions: [{
+    content: '', optionsLayout: 'list',
+    options: [{content: '', isCorrect: false, media: null}]
   }]
 };
-assert.deepEqual([...rules.publicationIssues(complete)], []);
-assert.ok(rules.publicationIssues({...complete, title: ''}).length > 0);
-assert.ok(rules.publicationIssues({...complete, questions: []}).length > 0);
-assert.ok(rules.publicationIssues({...complete, questions: [{...complete.questions[0], content: ''}]}).length > 0);
-assert.ok(rules.publicationIssues({...complete, drawCount: 2}).length > 0);
-assert.ok(rules.publicationIssues({...complete, questions: [{...complete.questions[0], options: [{content:'A', isCorrect:true}]}]}).length > 0);
-assert.ok(rules.publicationIssues({...complete, questions: [{...complete.questions[0], options: [{content:'A', isCorrect:true}, {content:'B', isCorrect:true}]}]}).length > 0);
+assert.equal(rules.repairQuestions(quiz), true);
+assert.deepEqual(quiz.questions[0].options.map(option => option.content), ['Option 1', 'Option 2']);
+assert.deepEqual(quiz.questions[0].options.map(option => option.isCorrect), [true, false]);
+assert.equal(rules.repairQuestions(quiz), false);
 
-console.log('Builder autosave and publication-readiness tests passed.');
+const active = JSON.parse(rules.editable(quiz));
+assert.equal(active.status, 'published');
+assert.equal(active.timeLimitMinutes, 120);
+assert.equal('timeLimitSec' in active, false);
+
+console.log('Builder manual-save normalization rules passed.');

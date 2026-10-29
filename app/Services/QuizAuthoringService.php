@@ -107,12 +107,13 @@ final class QuizAuthoringService
                 ]);
             }
 
-            $document = $this->normalize($payload, $quiz);
+            $document = $this->normalize($payload);
 
             $now = $this->now();
-            $this->db->table('quizzes')->where('id', $quiz['id'])->update([
+            $changes = [
                 'title'             => $document['title'],
                 'description'       => $document['description'],
+                'status'            => $document['status'],
                 'listed'            => (int) $document['listed'],
                 'time_limit_sec'    => $document['timeLimitSec'],
                 'ask_email'         => (int) $document['askEmail'],
@@ -126,9 +127,13 @@ final class QuizAuthoringService
                 'show_explain'      => (int) $document['showExplain'],
                 'version'           => (int) $quiz['version'] + 1,
                 'updated_at'        => $now,
-            ]);
+            ];
+            if ($quiz['status'] === 'draft' && $document['status'] === 'published') {
+                $changes['published_at'] = $now;
+            }
+            $this->db->table('quizzes')->where('id', $quiz['id'])->update($changes);
             $orphanedMedia = $this->syncQuestions((int) $quiz['id'], $document['questions'], $now);
-            if ($quiz['status'] === 'published') {
+            if ($document['status'] === 'published') {
                 $updatedQuiz = $this->db->table('quizzes')->where('id', $quiz['id'])->get()->getRowArray();
                 if ($updatedQuiz === null) {
                     throw new AuthoringException('save_failed', 'The quiz could not be saved.', 500);
@@ -154,7 +159,7 @@ final class QuizAuthoringService
     /** @return array<string, mixed> */
     public function transition(int $userId, string $publicId, string $action): array
     {
-        if (! in_array($action, ['publish', 'unpublish', 'trash', 'restore'], true)) {
+        if (! in_array($action, ['trash', 'restore'], true)) {
             throw new AuthoringException('invalid_transition', 'That quiz action is not available.', 409);
         }
 
@@ -163,22 +168,11 @@ final class QuizAuthoringService
             $quiz = $this->ownedQuiz($userId, $publicId, true, true);
             $changes = ['version' => (int) $quiz['version'] + 1, 'updated_at' => $this->now()];
 
-            if ($action === 'publish') {
-                if ($quiz['deleted_at'] !== null || $quiz['status'] !== 'draft') {
-                    $this->invalidTransition('Only a draft quiz can be published.');
-                }
-                $this->assertPublishableDocument($this->serializeDocument($quiz));
-                $changes += ['status' => 'published', 'published_at' => $this->now()];
-            } elseif ($action === 'unpublish') {
-                if ($quiz['deleted_at'] !== null || $quiz['status'] !== 'published') {
-                    $this->invalidTransition('Only a published quiz can be unpublished.');
-                }
-                $changes['status'] = 'draft';
-            } elseif ($action === 'trash') {
+            if ($action === 'trash') {
                 if ($quiz['deleted_at'] !== null) {
                     $this->invalidTransition('This quiz is already in the trash.');
                 }
-                // Keep status intact so restoring does not silently publish or unpublish.
+                // Keep status intact so restoring does not silently change Active/Draft state.
                 $changes['deleted_at'] = $this->now();
             } else {
                 if ($quiz['deleted_at'] === null) {
@@ -317,21 +311,25 @@ final class QuizAuthoringService
     }
 
     /** @return array<string, mixed> */
-    private function normalize(array $payload, array $quiz): array
+    private function normalize(array $payload): array
     {
         $fields = [];
         $title = $this->text($payload, 'title', 200, $fields);
         $description = $this->text($payload, 'description', 65535, $fields, true);
-        $seconds = $payload['timeLimitSec'] ?? null;
-        if (! is_int($seconds)) {
-            $minutes = $payload['timeLimitMinutes'] ?? null;
-            if (is_int($minutes) || is_float($minutes) || (is_string($minutes) && is_numeric($minutes))) {
-                $seconds = (int) round(((float) $minutes) * 60);
-            }
+        $status = is_string($payload['status'] ?? null) ? $payload['status'] : '';
+        if (! in_array($status, ['draft', 'published'], true)) {
+            $fields['status'] = 'Choose Draft or Active.';
         }
-        if (! is_int($seconds) || $seconds < 30 || $seconds > 7200 || $seconds % 30 !== 0) {
-            $fields['timeLimitSec'] = 'Choose a timer from 30 seconds to 120 minutes in 30-second steps.';
+
+        $minutes = $payload['timeLimitMinutes'] ?? null;
+        if ((is_int($minutes) && $minutes >= 1 && $minutes <= 120)
+            || (is_string($minutes) && ctype_digit($minutes) && (int) $minutes >= 1 && (int) $minutes <= 120)) {
+            $minutes = (int) $minutes;
+        } else {
+            $fields['timeLimitMinutes'] = 'Choose a whole-minute timer from 1 to 120 minutes.';
+            $minutes = 0;
         }
+        $seconds = $minutes * 60;
 
         $feedback = is_string($payload['feedback'] ?? null) ? $payload['feedback'] : '';
         if (! in_array($feedback, ['at_end', 'after_each'], true)) {
@@ -349,17 +347,21 @@ final class QuizAuthoringService
             $drawCount = null;
         } elseif ((is_int($drawCount) || (is_string($drawCount) && ctype_digit($drawCount))) && (int) $drawCount > 0 && (int) $drawCount <= 65535) {
             $drawCount = (int) $drawCount;
+            if ($drawCount > count($questions)) {
+                $drawCount = null;
+            }
         } else {
             $fields['drawCount'] = 'Use a positive whole number or leave draw count empty.';
         }
 
         if ($fields !== []) {
-            throw new AuthoringException('validation_failed', 'Check the highlighted quiz fields.', 422, $fields);
+            throw new AuthoringException('validation_failed', 'Check the quiz details and try again.', 422, $fields);
         }
 
         return [
             'title'             => $title,
             'description'       => $description,
+            'status'            => $status,
             'listed'            => $this->bool($payload['listed'] ?? false),
             'timeLimitSec'      => $seconds,
             'askEmail'          => $this->bool($payload['askEmail'] ?? false),
@@ -396,7 +398,7 @@ final class QuizAuthoringService
             $layout = is_string($question['optionsLayout'] ?? null) ? $question['optionsLayout'] : 'list';
             if (! in_array($layout, ['list', 'grid'], true)) $fields[$prefix . '.optionsLayout'] = 'Choose list or grid.';
 
-            $optionsInput = $question['options'] ?? null;
+            $optionsInput = $question['options'] ?? [];
             $options = [];
             if (! is_array($optionsInput) || ! array_is_list($optionsInput) || count($optionsInput) > 100) {
                 $fields[$prefix . '.options'] = 'Answers must be a list of at most 100 items.';
@@ -407,12 +409,35 @@ final class QuizAuthoringService
                         continue;
                     }
                     $optionContent = is_string($option['content'] ?? null) ? trim($option['content']) : '';
+                    if ($optionContent === '') {
+                        $optionContent = 'Option ' . ($optionIndex + 1);
+                    }
                     if (mb_strlen($optionContent) > 65535) $fields[$prefix . '.options.' . $optionIndex] = 'Answer text is too long.';
                     $options[] = [
                         'id'        => $this->nullableId($option['id'] ?? null, $prefix . '.options.' . $optionIndex . '.id', $fields),
                         'content'   => $optionContent,
                         'isCorrect' => $this->bool($option['isCorrect'] ?? false),
                     ];
+                }
+                while (count($options) < 2) {
+                    $optionIndex = count($options);
+                    $options[] = [
+                        'id'        => null,
+                        'content'   => 'Option ' . ($optionIndex + 1),
+                        'isCorrect' => false,
+                    ];
+                }
+                $correctFound = false;
+                foreach ($options as &$option) {
+                    if ($option['isCorrect'] && ! $correctFound) {
+                        $correctFound = true;
+                    } else {
+                        $option['isCorrect'] = false;
+                    }
+                }
+                unset($option);
+                if (! $correctFound) {
+                    $options[0]['isCorrect'] = true;
                 }
             }
             $questions[] = [
@@ -583,7 +608,7 @@ final class QuizAuthoringService
             'description'        => (string) $quiz['description'],
             'cover'              => ($this->media ?? service('media'))->descriptor($quiz['cover_src'] === null ? null : 'image', $quiz['cover_src'], 'cover', (int) $quiz['id']),
             'timeLimitSec'       => (int) $quiz['time_limit_sec'],
-            'timeLimitMinutes'   => number_format(((int) $quiz['time_limit_sec']) / 60, 1, '.', ''),
+            'timeLimitMinutes'   => max(1, (int) ceil(((int) $quiz['time_limit_sec']) / 60)),
             'askEmail'           => (bool) $quiz['ask_email'],
             'askPhone'           => (bool) $quiz['ask_phone'],
             'feedback'           => (string) $quiz['feedback'],
@@ -607,18 +632,14 @@ final class QuizAuthoringService
     private function assertPublishableDocument(array $document): void
     {
         $fields = [];
-        if (trim((string) $document['title']) === '') $fields['title'] = 'Add a quiz title before publishing.';
-        if ($document['questions'] === []) $fields['questions'] = 'Add at least one question before publishing.';
-        if ($document['drawCount'] !== null && $document['drawCount'] > count($document['questions'])) {
-            $fields['drawCount'] = 'Draw count cannot exceed the question pool.';
-        }
+        if (trim((string) $document['title']) === '') $fields['title'] = 'Add a quiz title before making this quiz Active.';
+        if ($document['questions'] === []) $fields['questions'] = 'Add at least one question before making this quiz Active.';
         foreach ($document['questions'] as $index => $question) {
             $prefix = 'questions.' . $index;
-            if (trim((string) $question['content']) === '') $fields[$prefix . '.content'] = 'Add the question text.';
             if (count($question['options']) < 2) $fields[$prefix . '.options'] = 'Add at least two answers.';
             foreach ($question['options'] as $optionIndex => $option) {
-                if (trim((string) $option['content']) === '' && ($option['media'] ?? null) === null) {
-                    $fields[$prefix . '.options.' . $optionIndex] = 'Each answer needs text or media.';
+                if (trim((string) $option['content']) === '') {
+                    $fields[$prefix . '.options.' . $optionIndex] = 'Each answer needs text.';
                 }
             }
             if (count(array_filter($question['options'], static fn (array $option): bool => (bool) $option['isCorrect'])) !== 1) {
@@ -626,7 +647,7 @@ final class QuizAuthoringService
             }
         }
         if ($fields !== []) {
-            throw new AuthoringException('not_publishable', 'Complete the highlighted fields before publishing.', 422, $fields);
+            throw new AuthoringException('not_publishable', (string) reset($fields), 422, $fields);
         }
     }
 

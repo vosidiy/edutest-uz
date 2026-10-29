@@ -9,6 +9,7 @@ use App\Services\AttemptSnapshotService;
 use App\Services\AuthService;
 use App\Services\TeacherQueryService;
 use App\Services\TeacherResultsService;
+use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\Test\FeatureTestTrait;
 use Config\Services;
 use Tests\Support\PlayerTestCase;
@@ -65,20 +66,26 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         self::assertArrayNotHasKey('practiceStarts', $row);
     }
 
-    public function testFiltersOnlyAcceptDraftPublishedAndTrash(): void
+    public function testLibraryIgnoresOldFiltersHidesDeletedAndUsesNewestUpdateOrder(): void
     {
         $quiz = $this->quiz();
         $draft = $this->authoring->create($quiz['owner'], 'Draft quiz');
         $trash = $this->authoring->create($quiz['owner'], 'Trash quiz');
         $this->authoring->transition($quiz['owner'], $trash['publicId'], 'trash');
+        $this->db->table('quizzes')->where('public_id', $quiz['publicId'])->update([
+            'title' => 'Older published quiz', 'updated_at' => '2026-10-26 00:00:00.000000',
+        ]);
+        $this->db->table('quizzes')->where('public_id', $draft['publicId'])->update([
+            'title' => 'Newest draft quiz', 'updated_at' => '2026-10-27 00:00:00.000000',
+        ]);
 
-        self::assertSame(2, $this->queries->library($quiz['owner'])['pagination']['total']);
-        self::assertSame(1, $this->queries->library($quiz['owner'], ['status' => 'published'])['pagination']['total']);
-        self::assertSame(1, $this->queries->library($quiz['owner'], ['status' => 'draft'])['pagination']['total']);
-        self::assertSame(1, $this->queries->library($quiz['owner'], ['status' => 'trash'])['pagination']['total']);
-        self::assertSame(['status', 'sort', 'page'], array_keys($this->queries->normalizeFilters(['mode' => 'practice', 'status' => 'archived'])));
-        self::assertSame('', $this->queries->normalizeFilters(['status' => 'archived'])['status']);
-        self::assertNotEmpty($draft['publicId']);
+        $library = $this->queries->library($quiz['owner'], [
+            'status' => 'trash', 'sort' => 'title_asc', 'page' => '1',
+        ]);
+        self::assertSame(2, $library['pagination']['total']);
+        self::assertSame(['page' => 1], $library['filters']);
+        self::assertSame(['Newest draft quiz', 'Older published quiz'], array_column($library['rows'], 'title'));
+        self::assertNotContains('Trash quiz', array_column($library['rows'], 'title'));
     }
 
     public function testDashboardAndLegacyRoutesAreOwnerScoped(): void
@@ -94,23 +101,43 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $response->assertSee('class="card quiz-card"');
         $response->assertDontSee('Other private quiz');
         $response->assertDontSee('Practice');
+        $response->assertDontSee('class="library-toolbar"');
+        self::assertStringNotContainsString('data-quiz-action="publish"', $response->getBody());
+        self::assertStringNotContainsString('data-quiz-action="unpublish"', $response->getBody());
+        foreach (['name="status"', 'name="sort"', 'Sort order', 'All statuses'] as $removed) {
+            $response->assertDontSee($removed);
+        }
         self::assertStringContainsString('no-store', $response->response()->getHeaderLine('Cache-Control'));
 
-        $this->withSession($session)->get('/quizzes')->assertRedirectTo($this->queries->legacyDashboardUrl([], 'active'));
-        $this->withSession($session)->get('/quizzes/trash')->assertRedirectTo($this->queries->legacyDashboardUrl([], 'trash'));
+        $this->withSession($session)->get('/quizzes?status=trash&sort=title_asc')->assertRedirectTo(site_url('dashboard'));
+        try {
+            $this->withSession($session)->get('/quizzes/trash');
+            self::fail('The removed trash route must not resolve.');
+        } catch (PageNotFoundException $exception) {
+            self::assertSame(404, $exception->getCode());
+        }
     }
 
-    public function testBuilderShowsPublishOrUnpublishWithoutLegacyControls(): void
+    public function testBuilderShowsManualSaveAndStatusSwitchWithoutLegacyControls(): void
     {
         $quiz = $this->quiz();
         $response = $this->withSession([AuthService::SESSION_KEY => $quiz['owner']])
             ->get('/quizzes/' . $quiz['publicId'] . '/edit');
 
         $response->assertOK();
-        $response->assertSee('Unpublish');
+        $response->assertSee('Save quiz');
+        self::assertStringContainsString('role="switch"', $response->getBody());
+        $response->assertSee('Active');
+        $response->assertSee('Draft');
+        $response->assertSee('Total timer (minutes)');
         $response->assertSee('Questions per attempt');
         $response->assertSee('List');
         $response->assertSee('Grid');
+        self::assertStringNotContainsString('>Publish</button>', $response->getBody());
+        self::assertStringNotContainsString('>Unpublish</button>', $response->getBody());
+        $response->assertDontSee('Fix validation errors');
+        $response->assertDontSee('Saved changes apply to students');
+        $response->assertDontSee('data-publication-messages');
         $response->assertDontSee('Practice');
         $response->assertDontSee('Passcode');
         $response->assertDontSee('Short text');

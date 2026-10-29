@@ -421,18 +421,13 @@ final class MediaService
             $table = match ($target) { 'question' => 'questions', 'cover' => 'quizzes', default => 'question_options' };
             if ($this->db->table($table)->where('id', $targetId)->countAllResults() !== 1) throw new AuthoringException('media_not_found', 'Media target not found.', 404);
             $change = $target === 'cover' ? ['cover_src' => $src] : ['media_type' => $type, 'media_src' => $src];
-            $this->db->table($table)->where('id', $targetId)->update($change + ['updated_at' => $this->now()]);
-            if ($quiz['status'] === 'published' && $target === 'option' && $src === null) {
-                $option = $this->db->table('question_options')->select('content')->where('id', $targetId)->get()->getRowArray();
-                if ($option === null || trim((string) $option['content']) === '') {
-                    throw new AuthoringException(
-                        'not_publishable',
-                        'A published answer must keep text or an image.',
-                        422,
-                        ['media' => 'Add answer text before removing its image.'],
-                    );
+            if ($target === 'option' && $src === null) {
+                $option = $this->db->table('question_options')->select('content, pos')->where('id', $targetId)->get()->getRowArray();
+                if ($option !== null && trim((string) $option['content']) === '') {
+                    $change['content'] = 'Option ' . (int) $option['pos'];
                 }
             }
+            $this->db->table($table)->where('id', $targetId)->update($change + ['updated_at' => $this->now()]);
             $this->db->table('quizzes')->where('id', $record['quiz_id'])->update([
                 'version'    => $version + 1,
                 'updated_at' => $this->now(),
