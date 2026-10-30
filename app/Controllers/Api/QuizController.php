@@ -33,8 +33,7 @@ final class QuizController extends ApiController
     {
         return $this->runApi(function () use ($publicId): array {
             $data = $this->jsonObject();
-            $overwrite = $this->request->getGet('overwrite') === '1';
-            return ['quiz' => service('quizAuthoring')->save($this->userId(), $publicId, $data, $overwrite)];
+            return ['quiz' => service('quizAuthoring')->save($this->userId(), $publicId, $data)];
         });
     }
 

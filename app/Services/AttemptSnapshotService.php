@@ -47,7 +47,7 @@ final class AttemptSnapshotService
                     'id'      => (string) $option['id'],
                     'code'    => (string) $option['code'],
                     'content' => (string) $option['content'],
-                    'media'   => $this->storedMedia($option['media_type'], $option['media_src']),
+                    'media'   => $this->storedMedia($option['media_type'], $option['media_src'], ['image']),
                 ];
             }
 
@@ -70,7 +70,7 @@ final class AttemptSnapshotService
                 'position'      => (int) $question['pos'],
                 'content'       => (string) $question['content'],
                 'optionsLayout' => (string) $question['options_layout'],
-                'media'         => $this->storedMedia($question['media_type'], $question['media_src']),
+                'media'         => $this->storedMedia($question['media_type'], $question['media_src'], ['image', 'audio']),
                 'explanation'   => (string) ($question['explanation'] ?? ''),
                 'correctCode'   => $correctCode,
                 'options'       => $options,
@@ -114,7 +114,7 @@ final class AttemptSnapshotService
                 'showAnswers'  => (bool) $quiz['show_answers'],
                 'showExplain'  => (bool) $quiz['show_explain'],
             ],
-            'cover'     => $this->storedMedia($quiz['cover_src'] === null ? null : 'image', $quiz['cover_src']),
+            'cover'     => $this->storedMedia($quiz['cover_src'] === null ? null : 'image', $quiz['cover_src'], ['image']),
             'questions' => array_values($questions),
         ];
     }
@@ -138,12 +138,12 @@ final class AttemptSnapshotService
     public function studentDocument(array $attempt): array
     {
         $document = $this->decode($attempt['snapshot']);
-        $document['cover'] = $this->attemptMedia($attempt, $document['cover'] ?? null);
+        $document['cover'] = $this->attemptMedia($attempt, $document['cover'] ?? null, ['image']);
 
         foreach ($document['questions'] as &$question) {
-            $question['media'] = $this->attemptMedia($attempt, $question['media'] ?? null);
+            $question['media'] = $this->attemptMedia($attempt, $question['media'] ?? null, ['image', 'audio']);
             foreach ($question['options'] as &$option) {
-                $option['media'] = $this->attemptMedia($attempt, $option['media'] ?? null);
+                $option['media'] = $this->attemptMedia($attempt, $option['media'] ?? null, ['image']);
             }
             unset($option);
 
@@ -175,9 +175,9 @@ final class AttemptSnapshotService
     }
 
     /** @return array{key:string,type:string,src:string}|null */
-    private function storedMedia(mixed $type, mixed $src): ?array
+    private function storedMedia(mixed $type, mixed $src, array $allowedTypes): ?array
     {
-        if (! is_string($type) || ! is_string($src) || $src === '') {
+        if (! is_string($type) || ! in_array($type, $allowedTypes, true) || ! is_string($src) || $src === '') {
             return null;
         }
 
@@ -185,7 +185,7 @@ final class AttemptSnapshotService
     }
 
     /** @return array<string, string>|null */
-    private function attemptMedia(array $attempt, mixed $stored): ?array
+    private function attemptMedia(array $attempt, mixed $stored, array $allowedTypes): ?array
     {
         if (! is_array($stored)
             || ! is_string($stored['key'] ?? null)
@@ -199,6 +199,7 @@ final class AttemptSnapshotService
             $stored['src'],
             (string) $attempt['public_id'],
             $stored['key'],
+            $allowedTypes,
         );
     }
 

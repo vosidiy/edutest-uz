@@ -40,11 +40,9 @@ final class QuizAuthoringService
         $defaults = [
             'user_id'           => $userId,
             'status'            => 'draft',
-            'listed'            => 0,
             'title'             => $title,
             'description'       => '',
             'cover_src'         => null,
-            'version'           => 1,
             'time_limit_sec'    => 7200,
             'ask_email'         => 0,
             'ask_phone'         => 0,
@@ -95,18 +93,12 @@ final class QuizAuthoringService
     }
 
     /** @return array<string, mixed> */
-    public function save(int $userId, string $publicId, array $payload, bool $overwrite = false): array
+    public function save(int $userId, string $publicId, array $payload): array
     {
         $orphanedMedia = [];
         $this->db->transBegin();
         try {
             $quiz = $this->ownedQuiz($userId, $publicId, false, true);
-            if (! $overwrite && (! is_int($payload['version'] ?? null) || $payload['version'] !== (int) $quiz['version'])) {
-                throw new AuthoringException('version_conflict', 'This quiz was changed in another tab.', 409, [
-                    'version' => (string) $quiz['version'],
-                ]);
-            }
-
             $document = $this->normalize($payload);
 
             $now = $this->now();
@@ -114,7 +106,6 @@ final class QuizAuthoringService
                 'title'             => $document['title'],
                 'description'       => $document['description'],
                 'status'            => $document['status'],
-                'listed'            => (int) $document['listed'],
                 'time_limit_sec'    => $document['timeLimitSec'],
                 'ask_email'         => (int) $document['askEmail'],
                 'ask_phone'         => (int) $document['askPhone'],
@@ -125,7 +116,6 @@ final class QuizAuthoringService
                 'show_score'        => (int) $document['showScore'],
                 'show_answers'      => (int) $document['showAnswers'],
                 'show_explain'      => (int) $document['showExplain'],
-                'version'           => (int) $quiz['version'] + 1,
                 'updated_at'        => $now,
             ];
             if ($quiz['status'] === 'draft' && $document['status'] === 'published') {
@@ -166,7 +156,7 @@ final class QuizAuthoringService
         $this->db->transBegin();
         try {
             $quiz = $this->ownedQuiz($userId, $publicId, true, true);
-            $changes = ['version' => (int) $quiz['version'] + 1, 'updated_at' => $this->now()];
+            $changes = ['updated_at' => $this->now()];
 
             if ($action === 'trash') {
                 if ($quiz['deleted_at'] !== null) {
@@ -362,7 +352,6 @@ final class QuizAuthoringService
             'title'             => $title,
             'description'       => $description,
             'status'            => $status,
-            'listed'            => $this->bool($payload['listed'] ?? false),
             'timeLimitSec'      => $seconds,
             'askEmail'          => $this->bool($payload['askEmail'] ?? false),
             'askPhone'          => $this->bool($payload['askPhone'] ?? false),
@@ -498,9 +487,9 @@ final class QuizAuthoringService
 
         foreach ($existing as $id => $row) {
             if (isset($kept[(int) $id])) continue;
-            if ($row['media_src'] !== null && $row['media_type'] !== 'video') $orphaned[] = (string) $row['media_src'];
+            if ($row['media_src'] !== null && in_array($row['media_type'], ['image', 'audio'], true)) $orphaned[] = (string) $row['media_src'];
             foreach ($this->db->table('question_options')->where('question_id', $id)->get()->getResultArray() as $option) {
-                if ($option['media_src'] !== null && $option['media_type'] !== 'video') $orphaned[] = (string) $option['media_src'];
+                if ($option['media_src'] !== null && $option['media_type'] === 'image') $orphaned[] = (string) $option['media_src'];
             }
             $this->db->table('question_options')->where('question_id', $id)->delete();
             $this->db->table('questions')->where('id', $id)->delete();
@@ -538,7 +527,7 @@ final class QuizAuthoringService
         }
         foreach ($existing as $id => $row) {
             if (isset($kept[(int) $id])) continue;
-            if ($row['media_src'] !== null && $row['media_type'] !== 'video') $orphaned[] = (string) $row['media_src'];
+            if ($row['media_src'] !== null && $row['media_type'] === 'image') $orphaned[] = (string) $row['media_src'];
             $this->db->table('question_options')->where('id', $id)->delete();
         }
 
@@ -600,10 +589,8 @@ final class QuizAuthoringService
             'shareUrl'           => site_url('q/' . $quiz['share_token']),
             'resultsAvailable'   => $history,
             'resultsUrl'         => $history ? site_url('results/quizzes/' . $quiz['public_id']) : null,
-            'version'            => (int) $quiz['version'],
             'status'             => (string) $quiz['status'],
             'deleted'            => $quiz['deleted_at'] !== null,
-            'listed'             => (bool) $quiz['listed'],
             'title'              => (string) $quiz['title'],
             'description'        => (string) $quiz['description'],
             'cover'              => ($this->media ?? service('media'))->descriptor($quiz['cover_src'] === null ? null : 'image', $quiz['cover_src'], 'cover', (int) $quiz['id']),
@@ -695,7 +682,7 @@ final class QuizAuthoringService
     private function copyMedia(?string $type, ?string $src, int $userId, int $quizId, array &$copied): ?string
     {
         $target = ($this->media ?? service('media'))->copyStoredReference($type, $src, $userId, $quizId);
-        if ($target !== null && $target !== $src && $type !== 'video') $copied[] = $target;
+        if ($target !== null && $target !== $src) $copied[] = $target;
         return $target;
     }
 

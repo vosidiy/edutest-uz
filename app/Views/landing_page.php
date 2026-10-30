@@ -143,7 +143,7 @@ $placeholderImage = base_url('images/landing/placeholder.jpg');
                     <h2 id="build-title">Savollarni tayyorlang</h2>
                     <ul class="workflow-list">
                         <li><span aria-hidden="true">❓</span><p>Savollar va javob variantlarini yozing. Togri javoblarni belgilang va tushuntirish qoshing.</p></li>
-                        <li><span aria-hidden="true">🖼️</span><p>Savollarga rasm yoki audio qoshing. Video uchun YouTube havolasidan foydalaning.</p></li>
+                        <li><span aria-hidden="true">🖼️</span><p>Savollarga rasm yoki audio qoshing.</p></li>
                         <li><span aria-hidden="true">🪄</span><p>AI (Suniy Intelekt)  yordamida istalgan mavzu bo'yicha test savollari yarating</p></li>
                     </ul>
                     <a class="button button-primary button-large" href="<?= esc($accountUrl, 'attr') ?>"><?= esc($accountLabel) ?></a>
@@ -224,7 +224,7 @@ $placeholderImage = base_url('images/landing/placeholder.jpg');
                 <div class="compact-icon" aria-hidden="true">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image preview-icon"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
                 </div>
-                <div><h3>Rasm va audio savol</h3><p>Savollarga rasm, audio va video fayllar qoshing. Masalan Youtube link</p></div>
+                <div><h3>Rasm va audio savol</h3><p>Savollarga rasm yoki audio fayllar qoshing.</p></div>
             </article>
             <article class="compact-card" style="background:#fadfff">
                 <div class="compact-icon" aria-hidden="true">

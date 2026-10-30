@@ -52,6 +52,7 @@ final class StudentPlayerFeatureTest extends PlayerTestCase
         $this->get('/api/v1/player/tickets/' . $quiz['share'])->assertStatus(403);
         $ticket = $this->withHeaders(['X-EduTest-Player' => '1'])->get('/api/v1/player/tickets/' . $quiz['share']);
         $ticket->assertOK();
+        $ticket->assertDontSee('quizVersion');
         $this->withHeaders(['X-EduTest-Player' => '1', 'Authorization' => 'Bearer ' . str_repeat('0', 64)])
             ->get('/api/v1/player/assessments/' . str_repeat('a', 32))->assertStatus(401);
     }

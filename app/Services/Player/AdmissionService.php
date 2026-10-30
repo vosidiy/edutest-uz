@@ -34,14 +34,12 @@ final class AdmissionService
         }
 
         $claims = [
-            'quizId'      => (string) $quiz['id'],
-            'quizVersion' => (int) $quiz['version'],
-            'startKey'    => bin2hex(random_bytes(16)),
+            'quizId'   => (string) $quiz['id'],
+            'startKey' => bin2hex(random_bytes(16)),
         ];
 
         return [
-            'ticket'      => $this->credentials->sign('admission', $claims, 900),
-            'quizVersion' => (int) $quiz['version'],
+            'ticket' => $this->credentials->sign('admission', $claims, 900),
         ];
     }
 
@@ -69,10 +67,6 @@ final class AdmissionService
             if ($quiz['deleted_at'] !== null || $quiz['status'] !== 'published') {
                 throw new PlayerException('quiz_unpublished', 409);
             }
-            if ((int) $quiz['version'] !== (int) $claims['quizVersion']) {
-                throw new PlayerException('quiz_changed', 409);
-            }
-
             $identity = $this->identity($input, $quiz);
             $snapshot = $this->snapshots->capture($quiz);
             $this->definitions->assertReady($snapshot);
@@ -161,10 +155,8 @@ final class AdmissionService
 
     private function assertClaims(array $claims): void
     {
-        if (count($claims) !== 3
+        if (count($claims) !== 2
             || ! ctype_digit((string) ($claims['quizId'] ?? ''))
-            || ! is_int($claims['quizVersion'] ?? null)
-            || $claims['quizVersion'] < 1
             || ! is_string($claims['startKey'] ?? null)
             || preg_match('/^[a-f0-9]{32}$/D', $claims['startKey']) !== 1) {
             throw new PlayerException('invalid_credential', 401);

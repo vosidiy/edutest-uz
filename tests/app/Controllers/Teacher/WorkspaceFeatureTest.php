@@ -28,6 +28,7 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $this->queries = new TeacherQueryService($this->db, $this->media);
         Services::injectMock('teacherQueries', $this->queries);
         Services::injectMock('quizAuthoring', $this->authoring);
+        Services::injectMock('media', $this->media);
         Services::injectMock('teacherResults', new TeacherResultsService(
             $this->db,
             $this->media,
@@ -39,7 +40,7 @@ final class WorkspaceFeatureTest extends PlayerTestCase
 
     protected function tearDown(): void
     {
-        foreach (['teacherQueries', 'quizAuthoring', 'teacherResults', 'auth'] as $name) {
+        foreach (['teacherQueries', 'quizAuthoring', 'media', 'teacherResults', 'auth'] as $name) {
             Services::resetSingle($name);
         }
         service('session')->destroy();
@@ -126,6 +127,7 @@ final class WorkspaceFeatureTest extends PlayerTestCase
 
         $response->assertOK();
         $response->assertSee('Save quiz');
+        $response->assertSee('data-save-quiz');
         self::assertStringContainsString('role="switch"', $response->getBody());
         $response->assertSee('Active');
         $response->assertSee('Draft');
@@ -136,10 +138,33 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         self::assertStringNotContainsString('>Publish</button>', $response->getBody());
         self::assertStringNotContainsString('>Unpublish</button>', $response->getBody());
         $response->assertDontSee('Fix validation errors');
+        $response->assertDontSee('Video URL');
+        $response->assertDontSee('supported video');
+        $response->assertDontSee('Show on my page');
+        $response->assertDontSee('Newer changes found');
         $response->assertDontSee('Saved changes apply to students');
         $response->assertDontSee('data-publication-messages');
         $response->assertDontSee('Practice');
         $response->assertDontSee('Passcode');
         $response->assertDontSee('Short text');
+    }
+
+    public function testQuestionMediaEndpointRejectsLegacyVideoJson(): void
+    {
+        $quiz = $this->quiz(count: 1);
+        $questionId = $quiz['document']['questions'][0]['id'];
+        $csrf = service('security')->generateHash();
+        $response = $this->withSession([
+            AuthService::SESSION_KEY => $quiz['owner'],
+            'csrf_test_name' => $csrf,
+        ])
+            ->withHeaders(['X-CSRF-TOKEN' => $csrf])
+            ->withBodyFormat('json')
+            ->post('/api/v1/quizzes/' . $quiz['publicId'] . '/questions/' . $questionId . '/media', [
+                'videoUrl' => 'https://example.test/legacy.mp4',
+            ]);
+
+        $response->assertStatus(422);
+        $response->assertSee('invalid_upload');
     }
 }

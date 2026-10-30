@@ -12,7 +12,7 @@ Name is required. Email and phone are optional and are rendered only when their 
 
 ## Start
 
-The browser first requests a short-lived admission ticket. The ticket binds `quizId`, `quizVersion`, and a random `startKey`. Start is idempotent: a retry with the same successful ticket returns the attempt stored for `(quiz_id,start_key)` before checking whether the live quiz changed.
+The browser first requests a short-lived admission ticket. The ticket binds `quizId` and a random `startKey`. Start is idempotent: a retry with the same successful ticket returns the attempt stored for `(quiz_id,start_key)`. A first Start uses the latest published quiz definition, even if the teacher edited it after issuing the ticket.
 
 For a new start, the server locks the current published quiz, validates it, applies draw/question/option shuffling, inserts the attempt-owned snapshot, and returns its student projection with the attempt bearer credential and fixed `expiresAt`.
 
@@ -64,3 +64,5 @@ Visibility is captured in the attempt snapshot:
 The assessment stores disclosed identity, IP, browser agent, snapshot, checkpoints, result, and timing. The introduction explains this collection. Player endpoints are CSRF-exempt because they do not use teacher sessions; they require the player request boundary and bearer credential as applicable.
 
 Media renewal is attempt-bound. The server resolves the requested key only inside that attempt's stored snapshot and issues a new signed URL. Editing or deleting the live quiz does not change the media references an existing attempt is authorized to request.
+
+Question media projections support signed images and audio; option and cover projections support signed images. Historical video references remain untouched inside immutable snapshots but are not projected or rendered.

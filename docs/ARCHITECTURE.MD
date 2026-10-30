@@ -16,13 +16,15 @@ The CodeIgniter application timezone is Asia/Tashkent, which supplies calendar b
 
 ### `quizzes`
 
-Stores the teacher-owned live definition and its lifecycle. `version` is the optimistic-lock value. `public_id` is the reporting/builder identifier; the nine-digit `share_token` locates the public quiz. Status is only `draft` or `published`; `deleted_at` provides trash/restore without erasing reports.
+Stores the teacher-owned live definition and its lifecycle. `public_id` is the reporting/builder identifier; the nine-digit `share_token` locates the public quiz. Status is only `draft` or `published`; `deleted_at` provides trash/restore without erasing reports. There is no per-quiz listing flag or optimistic-lock counter: teacher writes are last-write-wins and `updated_at` is informational.
 
 The builder accepts whole-minute timers from 1–120 and converts them to the existing `time_limit_sec` runtime value. `draw_count` is null for the entire pool or a positive subset size; saving a value larger than the pool normalizes it to null. Active saves require at least one question and are visible to future starts immediately.
 
 ### `questions` and `question_options`
 
 These tables are the mutable authoring pool. Questions are single-choice only and store `options_layout` as `list` or `grid`. Question text may be blank. On Save, services pad missing choices to two, replace blank choice text with `Option N`, and enforce exactly one correct option by retaining the first marked choice or selecting the first option. Option codes are stable opaque browser answer values.
+
+Question media is restricted to private images or audio; answer options and covers are image-only. The media API accepts multipart file uploads and does not accept video URLs. Video descriptors from old attempt snapshots are ignored rather than rendered, while the snapshots themselves remain immutable.
 
 Question and option rows are not historical records. Existing attempts remain reproducible because the exact content and order are copied into their snapshots.
 
@@ -44,7 +46,7 @@ There are no `quiz_papers`, `attempt_answers`, `practice_keys`, or `cheat_events
 
 ## Attempt snapshot
 
-Start runs in a transaction while holding the quiz row lock. It first looks up `(quiz_id,start_key)` so a successful retry returns the original attempt even when the live quiz changed afterward. A new start then verifies that the ticket's quiz ID/version still matches a published quiz, validates authoring invariants, captures the snapshot, and inserts the attempt.
+Start runs in a transaction while holding the quiz row lock. Admission tickets bind only the quiz ID and a random start key. The service first looks up `(quiz_id,start_key)` so a successful retry returns the original attempt even when the live quiz changed afterward. A new start verifies that the current quiz is still published and not deleted, validates its latest authoring state, captures that definition, and inserts the attempt.
 
 The snapshot schema is:
 
@@ -82,7 +84,7 @@ The snapshot schema is:
 
 The service samples a random `draw_count` subset. When question shuffling is disabled, that selected subset is returned to authored order. When enabled, the sampled/shuffled order is kept. Options are shuffled independently. The JSON is never rewritten after insertion.
 
-Private media is stored as `{key,type,src}`. `src` is never returned to the browser. Student projections and report views resolve the snapshot reference and generate a signed media URL. Old files are deleted only when absent from live rows and a bounded attempt-snapshot scan can prove it is safe; an incomplete bounded scan fails closed.
+Private image/audio media is stored as `{key,type,src}`. `src` is never returned to the browser. Student projections and report views resolve supported snapshot references and generate signed media URLs. Old files are deleted only when absent from live rows and a bounded attempt-snapshot scan can prove it is safe; an incomplete bounded scan fails closed.
 
 ## Answer documents and grading
 
@@ -123,7 +125,7 @@ Player API:
 - `GET /api/v1/player/assessments/{attemptId}/results`
 - `POST /api/v1/player/assessments/{attemptId}/media`
 
-Teacher authoring uses `PUT /api/v1/quizzes/{publicId}` as the only content/status save endpoint. Its document includes storage status `draft|published` and `timeLimitMinutes`; the service converts minutes to seconds and commits content, status, version, and publication timestamp in one transaction. The builder has no timer-driven autosave and no Publish/Unpublish endpoints. Its Active/Draft switch changes only local state until **Save quiz** is clicked. Media actions perform a prerequisite Save when pending rows need server IDs. Optimistic conflict reload/overwrite, pending-cover handling, in-flight edit merging, and unsaved-navigation protection remain in force.
+Teacher authoring uses `PUT /api/v1/quizzes/{publicId}` as the only content/status save endpoint. Its document includes storage status `draft|published` and `timeLimitMinutes`; the service converts minutes to seconds and commits content, status, publication timestamp, and a refreshed `updated_at` in one transaction. Every explicit **Save quiz** or **Saved** click performs this write. The builder has no autosave, Publish/Unpublish endpoints, version field, conflict/overwrite flow, or public-listing checkbox. Concurrent teacher writes are last-write-wins. Media actions save pending edits only when server IDs are needed; media requests carry no expected version and return refreshed `updatedAt`. Pending-cover handling, in-flight edit merging, retry states, and unsaved-navigation protection remain in force.
 
 The local format is version 5. It stores the snapshot projection, credential, fixed deadline, confirmed answers, answer/server versions, current draft, and pending progress/final outbox flags. Web Locks prevent two tabs for the same share token from advancing the same local run. Confirmed answers cannot be revisited.
 

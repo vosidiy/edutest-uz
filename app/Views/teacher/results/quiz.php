@@ -4,9 +4,8 @@
 <?= $this->include('teacher/partials/quiz_header') ?>
 
 <div class="container">
-    <header class="card mt-5 mb-3 p-4 page-header">
+    <header class="mt-6 mb-4">
         <h3 class="mb-2"><?= esc($report['quiz']['title']) ?></h3>
-        <p><span class="badge mr-2 status <?= esc($report['quiz']['status'], 'attr') ?>"><?= esc(ucfirst($report['quiz']['status'])) ?></span></p>
     </header>
 
     <form class="card attempt-filters" method="get">

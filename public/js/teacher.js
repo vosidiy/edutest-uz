@@ -153,7 +153,7 @@
     // A lost upload response may still have attached the image on the server.
     const endpoint = `/api/v1/quizzes/${createdDraft.publicId}`;
     const loaded = await request(endpoint);
-    if (loaded.data.quiz.cover) await request(`${endpoint}/cover?version=${loaded.data.quiz.version}`, {method: 'DELETE', body: '{}'});
+    if (loaded.data.quiz.cover) await request(`${endpoint}/cover`, {method: 'DELETE', body: '{}'});
     coverAttempted = false;
   }
   createForm?.querySelector('[data-continue-create]').addEventListener('click', async () => {
@@ -181,9 +181,8 @@
       if (selectedCover) {
         updateCreateControls(createText.uploading);
         const endpoint = `/api/v1/quizzes/${createdDraft.publicId}`;
-        const loaded = await request(endpoint);
         const media = new FormData();
-        media.append('media', selectedCover); media.append('version', String(loaded.data.quiz.version));
+        media.append('media', selectedCover);
         coverAttempted = true;
         await request(`${endpoint}/cover`, {method: 'POST', body: media});
       } else await removeUnconfirmedCover();

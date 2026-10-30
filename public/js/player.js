@@ -161,7 +161,7 @@ async function start(event) {
     persist();
     await activate(false);
   } catch (error) {
-    if (['quiz_changed', 'credential_expired', 'invalid_credential'].includes(error.code)) write(admissionKey, null);
+    if (['credential_expired', 'invalid_credential'].includes(error.code)) write(admissionKey, null);
     lastError = error.message;
     for (const input of form.querySelectorAll('[aria-invalid]')) input.removeAttribute('aria-invalid');
     for (const field of Object.keys(error.fields || {})) form.elements.namedItem(field)?.setAttribute('aria-invalid', 'true');
@@ -347,14 +347,8 @@ function tick() {
 }
 
 function renderMedia(key, descriptor) {
-  if (!descriptor) return null;
-  const url = descriptor.embedUrl || descriptor.url;
-  let kind = descriptor.type;
-  if (kind === 'video') {
-    try { kind = new URL(url).pathname.toLowerCase().endsWith('.mp4') ? 'video' : 'embed'; }
-    catch (_) { kind = 'embed'; }
-  }
-  const wrapper = view.media(kind, key, url, element => view.mediaError(element, () => refreshMedia().then(render)));
+  if (!descriptor || !['image','audio'].includes(descriptor.type) || !descriptor.url) return null;
+  const wrapper = view.media(descriptor.type, key, descriptor.url, element => view.mediaError(element, () => refreshMedia().then(render)));
   return wrapper;
 }
 

@@ -124,12 +124,6 @@
 <template id="player-audio-template">
     <audio controls preload="metadata"></audio>
 </template>
-<template id="player-video-template">
-    <video controls preload="metadata"></video>
-</template>
-<template id="player-embed-template">
-    <iframe loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="fullscreen; picture-in-picture" allowfullscreen></iframe>
-</template>
 <template id="player-media-error-template">
     <p class="player-help" data-slot="message"></p>
     <button type="button" class="btn btn-default btn-sm" data-action="retry-media"></button>

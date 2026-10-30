@@ -139,7 +139,7 @@ final class TeacherResultsService
                     'content'  => (string) $option['content'],
                     'selected' => $selectedCode !== null && hash_equals((string) $option['code'], (string) $selectedCode),
                     'correct'  => hash_equals((string) $question['correctCode'], (string) $option['code']),
-                    'media'    => $this->attemptMedia($row, $option['media'] ?? null),
+                    'media'    => $this->attemptMedia($row, $option['media'] ?? null, ['image']),
                 ];
             }
             $confirmed = array_key_exists($index, $answers);
@@ -156,7 +156,7 @@ final class TeacherResultsService
                 'clientAnsweredAt'=> $this->localDate($answer['answeredAt'], $timezone),
                 'correctAnswer'   => (string) $question['correctCode'],
                 'options'         => $options,
-                'media'           => $this->attemptMedia($row, $question['media'] ?? null),
+                'media'           => $this->attemptMedia($row, $question['media'] ?? null, ['image', 'audio']),
             ];
         }
 
@@ -292,10 +292,16 @@ final class TeacherResultsService
         return is_array($answers) && array_is_list($answers) ? $answers : [];
     }
 
-    private function attemptMedia(array $attempt, mixed $stored): ?array
+    private function attemptMedia(array $attempt, mixed $stored, array $allowedTypes): ?array
     {
         if (! is_array($stored) || ! is_string($stored['type'] ?? null) || ! is_string($stored['src'] ?? null) || ! is_string($stored['key'] ?? null)) return null;
-        return ($this->media ?? service('media'))->attemptDescriptor($stored['type'], $stored['src'], (string) $attempt['public_id'], $stored['key']);
+        return ($this->media ?? service('media'))->attemptDescriptor(
+            $stored['type'],
+            $stored['src'],
+            (string) $attempt['public_id'],
+            $stored['key'],
+            $allowedTypes,
+        );
     }
 
     private function optionLabel(int $index): string

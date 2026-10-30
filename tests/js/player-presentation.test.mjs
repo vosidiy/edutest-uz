@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {completionEmoji, resultCounts} from '../../public/js/player-presentation.js';
+
+const playerSource = fs.readFileSync(new URL('../../public/js/player.js', import.meta.url), 'utf8');
+const viewSource = fs.readFileSync(new URL('../../public/js/player-view.js', import.meta.url), 'utf8');
+const templates = fs.readFileSync(new URL('../../app/Views/student/partials/player_templates.php', import.meta.url), 'utf8');
+
+test('player media supports image and audio without video or embed renderers', () => {
+  assert.match(playerSource, /\['image','audio'\]/);
+  assert.doesNotMatch(playerSource + viewSource + templates, /embedUrl|player-video-template|player-embed-template|mediaVideo/);
+  assert.doesNotMatch(templates, /<video|<iframe/i);
+});
 
 test('completion emoji follows every score boundary, including decimals', () => {
   const cases = [

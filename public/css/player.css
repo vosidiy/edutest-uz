@@ -84,14 +84,13 @@ b, strong { font-weight: 650; }
 small { font-size: var(--font-size-sm); }
 a { color: var(--text-color-primary); text-decoration: none; }
 a:hover { text-decoration: underline; }
-img, svg, video { max-width: 100%; vertical-align: middle; }
+img, svg { max-width: 100%; vertical-align: middle; }
 img { object-fit: cover; }
 button, input { margin: 0; color: inherit; font: inherit; line-height: inherit; }
 button, [type="button"], [type="submit"] { cursor: pointer; }
 button:disabled, input:disabled { cursor: not-allowed; }
 fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 legend { width: 100%; padding: 0; }
-iframe { border: 0; }
 summary { cursor: pointer; user-select: none; }
 [hidden] { display: none !important; }
 :where(button, a, input, summary, [tabindex]):focus-visible {
@@ -311,9 +310,8 @@ summary { cursor: pointer; user-select: none; }
 .player-feedback h3 { font-size: 1rem; margin: 0 0 8px; }
 .player-feedback p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .player-media { margin-top: 16px; max-width: 100%; }
-.player-media img, .player-media video { display: block; max-width: 100%; max-height: 420px; border-radius: var(--border-radius-md); }
+.player-media img { display: block; max-width: 100%; max-height: 420px; border-radius: var(--border-radius-md); }
 .player-media audio { width: 100%; }
-.player-media iframe { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: var(--border-radius-md); }
 .player-media .btn { margin-top: 8px; }
 .player-sync-status { min-height: 26px; padding: 16px 0; font-size: .9rem; color: var(--neutral-600); display: flex; align-items: center; gap: 12px; }
 .player-sync-status .btn { min-height: 36px; }

@@ -21,7 +21,7 @@
     </nav>
     <div class="builder-actions">
         <button v-if="quiz.status === 'published'" class="btn btn-default" type="button" @click="copyShare">Copy link</button>
-        <button class="btn btn-primary" type="button" @click="save(true)" :disabled="saving || mediaBusy">Save quiz</button>
+        <button class="btn" :class="hasChanges ? 'btn-primary' : 'btn-default'" type="button" data-save-quiz @click="save(true)" :disabled="saving || mediaBusy">{{ hasChanges ? 'Save quiz' : 'Saved' }}</button>
     </div>
 </header>
 
@@ -51,7 +51,7 @@
     </nav>
     <?php if (isset($report['quiz']['url'])) : ?>
         <div class="builder-actions">
-            <a class="btn btn-default" href="<?= esc($report['quiz']['url'], 'attr') ?>">← <?= esc(lang('Workspace.backResponses')) ?></a>
+           
         </div>
     <?php endif ?>
 </header>

@@ -38,7 +38,7 @@
                 <div class="builder-notices mb-3">
                     <div v-if="quiz.mediaLimits.serverBytes < quiz.mediaLimits.audioBytes" class="alert alert-warning builder-banner">The current PHP upload limit is {{ formatBytes(quiz.mediaLimits.serverBytes) }}. Raise <code>upload_max_filesize</code> and <code>post_max_size</code> above 20 MiB to accept the full supported audio size.</div>
 
-                    <div v-if="globalError" class="alert alert-danger builder-banner" role="alert">{{ globalError }} <button class="btn btn-link btn-sm" v-if="saveState === 'retry'" @click="save(true)">Retry</button><button class="btn btn-link btn-sm" v-if="saveState === 'conflict'" @click="openConflict">Resolve conflict</button>
+                    <div v-if="globalError" class="alert alert-danger builder-banner" role="alert">{{ globalError }} <button class="btn btn-link btn-sm" v-if="saveState === 'retry'" @click="save()">Retry</button>
                     </div>
                 </div>
                 <section v-if="preview" class="card preview-paper">
@@ -99,11 +99,11 @@
                             <media-preview :media="selectedQuestion.media"></media-preview>
                             <div class="d-flex">
                                 <div class="media-actions">
-                                    <button class="btn btn-default" type="button" @click="chooseFile(selectedIndex,null)"> <svg class="mr-1" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image preview-icon"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> <span>Add image</span></button><button class="btn btn-default" type="button" @click="addVideo(selectedIndex,null)">Video URL</button><button v-if="selectedQuestion.media" class="btn btn-red-subtle" type="button" @click="removeMedia(selectedIndex,null)">Remove</button>
+                                    <button class="btn btn-default" type="button" @click="chooseFile(selectedIndex,null)"> <svg class="mr-1" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image preview-icon"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> <span>Add media</span></button><button v-if="selectedQuestion.media" class="btn btn-red-subtle" type="button" @click="removeMedia(selectedIndex,null)">Remove</button>
                                 </div>
                                 <div class="ml-3">
                                     <p>Question media</p>
-                                    <small class="text-secondary">One image, audio file, or supported video.</small>
+                                    <small class="text-secondary">One image or audio file.</small>
                                 </div>
                             </div>
                         </div>
@@ -159,9 +159,9 @@
                 <div class="rail-heading">
                     <strong class="rail-title">Quiz settings</strong>
                     <label class="form-switch">
+                        <span class="label-switch">{{ quiz.status === 'published' ? 'Active' : 'Draft' }}</span>
                         <input class="input-switch" type="checkbox" role="switch" :checked="quiz.status === 'published'" @change="setActive($event.target.checked)">
                         <span class="slider" aria-hidden="true"></span>
-                        <span class="label-switch">{{ quiz.status === 'published' ? 'Active' : 'Draft' }}</span>
                     </label>
                 </div>
                 <div class="settings-content" ref="settingsPanel" tabindex="0" role="region" aria-label="<?= esc(lang('EduTest.builder.workspace.settings'), 'attr') ?>">
@@ -171,7 +171,7 @@
                             <label class="form-field"><span class="form-label">Description</span><textarea placeholder="About quiz" class="form-control" v-model="quiz.description" rows="3"></textarea>
                             </label>
                             
-                            <label class="form-check check-row mt-3"><input type="checkbox" v-model="quiz.listed"><span><strong>Show on my page</strong></span></label></div>
+                        </div>
                     </details>
 
                     <details>
@@ -253,7 +253,6 @@
             </form>
         </dialog>
 
-        <dialog class="dialog app-dialog" ref="conflictDialog" aria-label="<?= esc(lang('EduTest.builder.workspace.resolveConflict'), 'attr') ?>"><div class="dialog-heading"><h2>Newer changes found</h2></div><p class="dialog-copy">This quiz changed in another tab. Reload its latest version, or overwrite it with this tab’s draft.</p><div class="dialog-actions"><button class="btn btn-default" @click="reloadConflict">Reload latest</button><button class="btn btn-primary" @click="overwriteConflict">Overwrite</button></div></dialog>
     </template>
 </div>
 <?= $this->endSection() ?>

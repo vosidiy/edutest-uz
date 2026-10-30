@@ -13,6 +13,7 @@ The teacher creates a quiz, optionally limits the random draw, chooses question/
 - Every quiz has a timer. The builder accepts whole minutes from 1–120 and defaults to 120; runtime snapshots and countdowns continue to use seconds.
 - Question text may be blank. Every question has at least two options and exactly one correct option. Save fills blank or missing choices as `Option 1`, `Option 2`, and so on, and repairs the correct choice to the first option when needed.
 - Question layout is `list` or `grid`.
+- Questions support private images or audio. Answer choices and quiz covers support private images only; video URLs and video playback are outside the MVP.
 - `draw_count = NULL` serves the whole pool. A positive draw count randomly samples that many questions for each attempt.
 - Question and option shuffling are independent.
 - Feedback is `at_end` or `after_each`.
@@ -43,11 +44,13 @@ Each Assessment attempt is the equivalent of one printed paper. Its `snapshot` c
 ## Teacher flow
 
 - The settings switch stages Draft or Active (`draft` or `published` in storage). One manual **Save quiz** persists content and status atomically; there are no separate Publish/Unpublish actions and no timed autosave.
+- Every explicit Save writes the submitted document and refreshes `updated_at`, even when the builder is already clean. Concurrent teacher tabs use last-write-wins behavior.
 - An Active save requires at least one question and affects only future starts. A Draft may have no questions. Moving back to Draft preserves the original publication timestamp.
 - Soft deletion keeps bearer-authorized attempts and historical reports available.
 - Reports decode each attempt's snapshot and answers, showing correct, wrong, and skipped questions.
 - The builder exposes draw count, list/grid layout, whole-minute timer, shuffle, contact, feedback, and result-visibility settings only. A draw count larger than the current pool is stored as the whole-pool setting.
-- Question-media actions first save pending quiz edits when server IDs are needed.
+- Image/audio media actions first save pending quiz edits when server IDs are needed.
+- Quizzes have no separate public-listing flag. Any future teacher profile listing will derive visibility from published status.
 
 ## Privacy and security
 

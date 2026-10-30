@@ -1,6 +1,6 @@
 -- 123test canonical application schema
 -- Target: MySQL 8.4, InnoDB, utf8mb4
--- Last updated: 2026-10-26
+-- Last updated: 2026-10-31
 --
 -- Fresh-install use in phpMyAdmin:
 --   1. Select the intended empty database.
@@ -45,11 +45,9 @@ CREATE TABLE quizzes (
   public_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   share_token CHAR(9) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   status VARCHAR(10) COLLATE utf8mb4_bin NOT NULL DEFAULT 'draft',
-  listed TINYINT(1) NOT NULL DEFAULT 0,
   title VARCHAR(200) NOT NULL,
   description TEXT NOT NULL,
   cover_src VARCHAR(1000) NULL,
-  version INT UNSIGNED NOT NULL DEFAULT 1,
   time_limit_sec SMALLINT UNSIGNED NOT NULL DEFAULT 7200,
   ask_email TINYINT(1) NOT NULL DEFAULT 0,
   ask_phone TINYINT(1) NOT NULL DEFAULT 0,
@@ -68,10 +66,8 @@ CREATE TABLE quizzes (
   CONSTRAINT uq_quizzes_public_id UNIQUE (public_id),
   CONSTRAINT uq_quizzes_share_token UNIQUE (share_token),
   INDEX ix_quiz_user (user_id, status, deleted_at, updated_at),
-  INDEX ix_quiz_listed (user_id, listed, status, deleted_at, published_at),
   CONSTRAINT chk_quizzes_status CHECK (status IN ('draft', 'published')),
   CONSTRAINT chk_quizzes_feedback CHECK (feedback IN ('at_end', 'after_each')),
-  CONSTRAINT chk_quizzes_listed CHECK (listed IN (0, 1)),
   CONSTRAINT chk_quizzes_ask_email CHECK (ask_email IN (0, 1)),
   CONSTRAINT chk_quizzes_ask_phone CHECK (ask_phone IN (0, 1)),
   CONSTRAINT chk_quizzes_shuffle_questions CHECK (shuffle_questions IN (0, 1)),
@@ -104,7 +100,7 @@ CREATE TABLE questions (
   CONSTRAINT uq_questions_id_quiz UNIQUE (id, quiz_id),
   CONSTRAINT chk_questions_pos CHECK (pos > 0),
   CONSTRAINT chk_questions_options_layout CHECK (options_layout IN ('list', 'grid')),
-  CONSTRAINT chk_questions_media_type CHECK (media_type IS NULL OR media_type IN ('image', 'audio', 'video')),
+  CONSTRAINT chk_questions_media_type CHECK (media_type IS NULL OR media_type IN ('image', 'audio')),
   CONSTRAINT chk_questions_media_pair CHECK (
     (media_type IS NULL AND media_src IS NULL)
     OR (media_type IS NOT NULL AND media_src IS NOT NULL)

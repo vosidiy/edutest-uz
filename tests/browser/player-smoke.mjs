@@ -64,7 +64,7 @@ const server = http.createServer(async (request, response) => {
     const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {};
 
     if (url.pathname === `/api/v1/player/tickets/${shareToken}`) {
-      sendJson(response, {ticket:'fixture-ticket',quizVersion:1}); return;
+      sendJson(response, {ticket:'fixture-ticket'}); return;
     }
     if (url.pathname === '/api/v1/player/starts') {
       const now = new Date();

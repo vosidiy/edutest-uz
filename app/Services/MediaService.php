@@ -35,7 +35,6 @@ final class MediaService
         string $target,
         int $targetId,
         UploadedFile $file,
-        ?int $expectedVersion = null,
     ): array {
         $this->signingKey();
         $record = $this->ownedTarget($userId, $quizPublicId, $target, $targetId, true);
@@ -68,53 +67,18 @@ final class MediaService
         }
 
         try {
-            $result = $this->replaceReference($record, $target, $targetId, $mediaType, $relative, $expectedVersion);
+            $result = $this->replaceReference($record, $target, $targetId, $mediaType, $relative);
         } catch (Throwable $exception) {
             @unlink($absolute);
             throw $exception;
         }
 
-        if ($record['media_type'] !== null && $record['media_type'] !== 'video') {
-            $this->deleteStoredReference((string) $record['media_src']);
+        if (in_array($result['_replacedType'], ['image', 'audio'], true)) {
+            $this->deleteStoredReference((string) $result['_replacedSrc']);
         }
+        unset($result['_replacedType'], $result['_replacedSrc']);
 
         $result['media'] = $this->descriptor($mediaType, $relative, $target, $targetId);
-
-        return $result;
-    }
-
-    /** @return array<string, mixed> */
-    public function attachVideo(
-        int $userId,
-        string $quizPublicId,
-        string $target,
-        int $targetId,
-        string $url,
-        ?int $expectedVersion = null,
-    ): array {
-        $this->signingKey();
-        $record = $this->ownedTarget($userId, $quizPublicId, $target, $targetId, true);
-
-        $normalized = $this->normalizeVideoUrl($url);
-        if ($target === 'cover') throw new AuthoringException('invalid_cover', lang('Player.errors.invalid_cover'), 422);
-        if ($target === 'option') throw new AuthoringException('invalid_option_media', lang('Player.errors.invalid_option_media'), 422);
-
-        if ($normalized === null) {
-            throw new AuthoringException(
-                'invalid_video_url',
-                'Use a valid YouTube, Vimeo, or direct HTTPS MP4 URL.',
-                422,
-                ['videoUrl' => 'The video URL is not supported.'],
-            );
-        }
-
-        $result = $this->replaceReference($record, $target, $targetId, 'video', $normalized, $expectedVersion);
-
-        if ($record['media_type'] !== null && $record['media_type'] !== 'video') {
-            $this->deleteStoredReference((string) $record['media_src']);
-        }
-
-        $result['media'] = $this->descriptor('video', $normalized, $target, $targetId);
 
         return $result;
     }
@@ -125,16 +89,16 @@ final class MediaService
         string $quizPublicId,
         string $target,
         int $targetId,
-        ?int $expectedVersion = null,
     ): array {
         $record = $this->ownedTarget($userId, $quizPublicId, $target, $targetId, true);
         $targetId = (int) $record['id'];
 
-        $result = $this->replaceReference($record, $target, $targetId, null, null, $expectedVersion);
+        $result = $this->replaceReference($record, $target, $targetId, null, null);
 
-        if ($record['media_type'] !== null && $record['media_type'] !== 'video') {
-            $this->deleteStoredReference((string) $record['media_src']);
+        if (in_array($result['_replacedType'], ['image', 'audio'], true)) {
+            $this->deleteStoredReference((string) $result['_replacedSrc']);
         }
+        unset($result['_replacedType'], $result['_replacedSrc']);
 
         $result['media'] = null;
 
@@ -182,16 +146,11 @@ final class MediaService
     /** @return array<string, string>|null */
     public function descriptor(?string $type, ?string $src, string $target, int $id): ?array
     {
-        if ($type === null || $src === null) {
+        if ($src === null || ! in_array($type, ['image', 'audio'], true)) {
             return null;
         }
-
-        if ($type === 'video') {
-            return [
-                'type'     => 'video',
-                'url'      => $src,
-                'embedUrl' => $this->embedUrl($src),
-            ];
+        if (in_array($target, ['cover', 'option'], true) && $type !== 'image') {
+            return null;
         }
 
         $expires = time() + self::SIGNED_TTL;
@@ -204,12 +163,15 @@ final class MediaService
     }
 
     /** @return array<string, string>|null */
-    public function attemptDescriptor(string $type, string $src, string $attemptPublicId, string $key): ?array
+    public function attemptDescriptor(
+        string $type,
+        string $src,
+        string $attemptPublicId,
+        string $key,
+        array $allowedTypes = ['image', 'audio'],
+    ): ?array
     {
-        if ($type === 'video') {
-            return ['type' => 'video', 'url' => $src, 'embedUrl' => $this->embedUrl($src)];
-        }
-        if (! in_array($type, ['image', 'audio'], true)) {
+        if (! in_array($type, $allowedTypes, true) || ! in_array($type, ['image', 'audio'], true)) {
             return null;
         }
         $expires = time() + self::SIGNED_TTL;
@@ -222,8 +184,8 @@ final class MediaService
 
     public function copyStoredReference(?string $type, ?string $src, int $userId, int $quizId): ?string
     {
-        if ($type === null || $src === null || $type === 'video') {
-            return $src;
+        if ($src === null || ! in_array($type, ['image', 'audio'], true)) {
+            return null;
         }
 
         $source = $this->absolutePath($src);
@@ -398,7 +360,6 @@ final class MediaService
         int $targetId,
         ?string $type,
         ?string $src,
-        ?int $expectedVersion,
     ): array {
         $this->db->transBegin();
 
@@ -409,17 +370,12 @@ final class MediaService
             }
             $quiz = $this->db->query($sql, [$record['quiz_id']])->getRowArray();
             if ($quiz === null || $quiz['deleted_at'] !== null) throw new AuthoringException('media_not_found', 'Media target not found.', 404);
-            $version = (int) $quiz['version'];
-            if ($version !== (int) $record['version'] || ($expectedVersion !== null && $version !== $expectedVersion)) {
-                throw new AuthoringException(
-                    'version_conflict',
-                    'This quiz was changed in another tab.',
-                    409,
-                    ['version' => (string) $version],
-                );
-            }
             $table = match ($target) { 'question' => 'questions', 'cover' => 'quizzes', default => 'question_options' };
-            if ($this->db->table($table)->where('id', $targetId)->countAllResults() !== 1) throw new AuthoringException('media_not_found', 'Media target not found.', 404);
+            $current = $this->db->table($table)
+                ->select($target === 'cover' ? "'image' AS media_type, cover_src AS media_src" : 'media_type, media_src')
+                ->where('id', $targetId)
+                ->get()->getRowArray();
+            if ($current === null) throw new AuthoringException('media_not_found', 'Media target not found.', 404);
             $change = $target === 'cover' ? ['cover_src' => $src] : ['media_type' => $type, 'media_src' => $src];
             if ($target === 'option' && $src === null) {
                 $option = $this->db->table('question_options')->select('content, pos')->where('id', $targetId)->get()->getRowArray();
@@ -427,10 +383,10 @@ final class MediaService
                     $change['content'] = 'Option ' . (int) $option['pos'];
                 }
             }
-            $this->db->table($table)->where('id', $targetId)->update($change + ['updated_at' => $this->now()]);
+            $updatedAt = $this->now();
+            $this->db->table($table)->where('id', $targetId)->update($change + ['updated_at' => $updatedAt]);
             $this->db->table('quizzes')->where('id', $record['quiz_id'])->update([
-                'version'    => $version + 1,
-                'updated_at' => $this->now(),
+                'updated_at' => $updatedAt,
             ]);
 
             if ($this->db->transStatus() === false || ! $this->db->transCommit()) {
@@ -441,7 +397,11 @@ final class MediaService
             throw $exception;
         }
 
-        return ['version' => $version + 1];
+        return [
+            'updatedAt' => (new DateTimeImmutable($updatedAt, new DateTimeZone('UTC')))->format(DATE_ATOM),
+            '_replacedType' => $current['media_src'] === null ? null : $current['media_type'],
+            '_replacedSrc' => $current['media_src'],
+        ];
     }
 
     /** @return array<string, mixed> */
@@ -458,14 +418,14 @@ final class MediaService
 
         if ($target === 'cover') {
             $sql = "SELECT z.id, z.id AS quiz_id, CASE WHEN z.cover_src IS NULL THEN NULL ELSE 'image' END AS media_type,
-                    z.cover_src AS media_src, z.version, z.status FROM " . $this->db->prefixTable('quizzes') . ' z
+                    z.cover_src AS media_src FROM " . $this->db->prefixTable('quizzes') . ' z
                     WHERE z.public_id = ? AND z.user_id = ? AND z.deleted_at IS NULL';
         } elseif ($target === 'question') {
-            $sql = 'SELECT q.id, q.quiz_id, q.media_type, q.media_src, z.version, z.status
+            $sql = 'SELECT q.id, q.quiz_id, q.media_type, q.media_src
                     FROM ' . $this->db->prefixTable('questions') . ' q JOIN ' . $this->db->prefixTable('quizzes') . ' z ON z.id = q.quiz_id
                     WHERE q.id = ? AND z.public_id = ? AND z.user_id = ? AND z.deleted_at IS NULL';
         } else {
-            $sql = 'SELECT o.id, q.quiz_id, o.media_type, o.media_src, z.version, z.status
+            $sql = 'SELECT o.id, q.quiz_id, o.media_type, o.media_src
                     FROM ' . $this->db->prefixTable('question_options') . ' o
                     JOIN ' . $this->db->prefixTable('questions') . ' q ON q.id = o.question_id
                     JOIN ' . $this->db->prefixTable('quizzes') . ' z ON z.id = q.quiz_id
@@ -483,67 +443,6 @@ final class MediaService
         }
 
         return $row;
-    }
-
-    private function normalizeVideoUrl(string $url): ?string
-    {
-        $url   = trim($url);
-        $parts = parse_url($url);
-
-        if ($parts === false || strtolower((string) ($parts['scheme'] ?? '')) !== 'https' || isset($parts['user'])) {
-            return null;
-        }
-
-        $host = strtolower((string) ($parts['host'] ?? ''));
-        $path = (string) ($parts['path'] ?? '');
-
-        if ($host === 'youtu.be' && preg_match('~^/([A-Za-z0-9_-]{6,20})$~', $path, $match)) {
-            return 'https://youtu.be/' . $match[1];
-        }
-
-        if (in_array($host, ['youtube.com', 'www.youtube.com', 'm.youtube.com'], true)) {
-            parse_str((string) ($parts['query'] ?? ''), $query);
-            $id = $query['v'] ?? null;
-            if (is_string($id) && preg_match('/^[A-Za-z0-9_-]{6,20}$/', $id)) {
-                return 'https://www.youtube.com/watch?v=' . $id;
-            }
-            if (preg_match('~^/(?:embed|shorts)/([A-Za-z0-9_-]{6,20})$~', $path, $match)) {
-                return 'https://www.youtube.com/watch?v=' . $match[1];
-            }
-        }
-
-        if (in_array($host, ['vimeo.com', 'www.vimeo.com', 'player.vimeo.com'], true)
-            && preg_match('~/(?:video/)?([0-9]+)$~', $path, $match)) {
-            return 'https://vimeo.com/' . $match[1];
-        }
-
-        if (preg_match('/\.mp4$/i', $path)) {
-            return $url;
-        }
-
-        return null;
-    }
-
-    private function embedUrl(string $url): string
-    {
-        $parts = parse_url($url);
-        $host  = strtolower((string) ($parts['host'] ?? ''));
-        $path  = (string) ($parts['path'] ?? '');
-
-        if ($host === 'youtu.be') {
-            return 'https://www.youtube-nocookie.com/embed/' . ltrim($path, '/');
-        }
-
-        if (str_contains($host, 'youtube.com')) {
-            parse_str((string) ($parts['query'] ?? ''), $query);
-            return 'https://www.youtube-nocookie.com/embed/' . ($query['v'] ?? '');
-        }
-
-        if (str_contains($host, 'vimeo.com') && preg_match('~/(?:video/)?([0-9]+)$~', $path, $match)) {
-            return 'https://player.vimeo.com/video/' . $match[1];
-        }
-
-        return $url;
     }
 
     private function relativePath(int $userId, int $quizId, string $extension): string

@@ -11,8 +11,8 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const php = process.env.PLAYER_PHP || 'php';
 const publicId = 'a'.repeat(32);
 const user = {id:1,email:'teacher@example.test',display_name:'Teacher One',phone:null,bio:'',timezone:'Asia/Tashkent',public_page:false};
-const quiz = {publicId,shareUrl:'/q/123456789',resultsAvailable:true,resultsUrl:`/results/quizzes/${publicId}`,version:4,
-  status:'published',deleted:false,listed:false,title:'Snapshot assessment',description:'Current authoring pool',cover:null,
+const quiz = {publicId,shareUrl:'/q/123456789',resultsAvailable:true,resultsUrl:`/results/quizzes/${publicId}`,
+  status:'published',deleted:false,title:'Snapshot assessment',description:'Current authoring pool',cover:null,
   timeLimitSec:7200,timeLimitMinutes:120,askEmail:true,askPhone:false,feedback:'at_end',shuffleQuestions:true,
   shuffleOptions:false,drawCount:1,showScore:true,showAnswers:true,showExplain:true,publishedAt:new Date().toISOString(),
   updatedAt:new Date().toISOString(),mediaLimits:{imageBytes:5242880,audioBytes:20971520,serverBytes:20971520},questions:[{
@@ -26,6 +26,13 @@ const report = {quiz:{publicId,title:quiz.title,builderUrl:`/quizzes/${publicId}
   attempts:[],filters:{query:'Ali',dateRange:'last_7_days',dateFromUtc:null,dateToUtc:null,minScore:50,page:1},
   pagination:{page:1,pageSize:25,total:26,pageCount:2}};
 let origin;
+let quizPutCount = 0;
+
+async function requestJson(request) {
+  const chunks = [];
+  for await (const chunk of request) chunks.push(chunk);
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
 
 function render(page, data) {
   return execFileSync(php, [path.join(repo, 'tests/browser/render-teacher.php'), origin + '/'], {
@@ -47,6 +54,11 @@ const server = http.createServer(async (request, response) => {
     }
     if (url.pathname === '/favicon.ico') { response.writeHead(204).end(); return; }
     if (url.pathname === `/api/v1/quizzes/${publicId}`) {
+      if (request.method === 'PUT') {
+        const saved = await requestJson(request);
+        quizPutCount++;
+        Object.assign(quiz, saved, {updatedAt:new Date().toISOString()});
+      }
       response.writeHead(200, {'Content-Type':'application/json','Cache-Control':'no-store'});
       response.end(JSON.stringify({data:{quiz},meta:{timestamp:new Date().toISOString()}}));
       return;
@@ -82,8 +94,24 @@ try {
 
   await browser.navigate(`${origin}/quizzes/${publicId}/edit`);
   await browser.until(() => browser.evaluate(`document.querySelector('#quiz-builder')?.hasAttribute('v-cloak') === false && document.body.textContent.includes('Which answer is correct?')`), 'builder hydration');
-  assert.equal(await browser.evaluate(`document.body.textContent.includes('Save quiz')`), true);
+  assert.equal(await browser.evaluate(`document.querySelector('[data-save-quiz]').textContent.trim()`), 'Saved');
+  assert.equal(await browser.evaluate(`document.querySelector('[data-save-quiz]').classList.contains('btn-default')`), true);
+  assert.equal(await browser.evaluate(`document.querySelector('[data-save-quiz]').disabled`), false);
+  assert.equal(quizPutCount, 0);
+  await browser.evaluate(`document.querySelector('[data-save-quiz]').click()`);
+  await browser.until(() => quizPutCount === 1, 'clean saved request');
+  assert.equal(await browser.evaluate(`document.querySelector('[data-save-quiz]').textContent.trim()`), 'Saved');
+  await browser.evaluate(`const field=document.querySelector('#builder-settings textarea');field.value='Changed description';field.dispatchEvent(new Event('input',{bubbles:true}))`);
+  await browser.until(() => browser.evaluate(`document.querySelector('[data-save-quiz]').textContent.trim()==='Save quiz'`), 'dirty save action');
+  assert.equal(await browser.evaluate(`document.querySelector('[data-save-quiz]').classList.contains('btn-primary')`), true);
+  await browser.evaluate(`document.querySelector('[data-save-quiz]').click()`);
+  await browser.until(() => browser.evaluate(`document.querySelector('[data-save-quiz]').textContent.trim()==='Saved'`), 'saved acknowledgement');
+  assert.equal(quizPutCount, 2);
+  assert.equal(await browser.evaluate(`document.querySelector('[data-save-quiz]').classList.contains('btn-default')`), true);
+  assert.equal(await browser.evaluate(`document.querySelector('[data-save-quiz]').disabled`), false);
   assert.equal(await browser.evaluate(`[...document.querySelectorAll('button')].some(button => ['Publish','Unpublish'].includes(button.textContent.trim()))`), false);
+  assert.equal(await browser.evaluate(`document.body.textContent.includes('Video URL')`), false);
+  assert.equal(await browser.evaluate(`document.querySelector('#quiz-builder video, #quiz-builder iframe') === null`), true);
   assert.equal(await browser.evaluate(`document.querySelector('.input-switch[role="switch"]').checked`), true);
   assert.equal(await browser.evaluate(`document.querySelector('.label-switch').textContent.trim()`), 'Active');
   assert.equal(await browser.evaluate(`document.body.textContent.includes('Single choice · grid')`), true);
@@ -98,6 +126,8 @@ try {
   assert.equal(await browser.evaluate(`document.querySelector('#builder-settings input[placeholder="All questions"]').max`), '1');
   assert.equal(await browser.evaluate(`document.body.textContent.includes('Fix validation errors')`), false);
   assert.equal(await browser.evaluate(`document.body.textContent.includes('Saved changes apply to students')`), false);
+  assert.equal(await browser.evaluate(`document.body.textContent.includes('Show on my page')`), false);
+  assert.equal(await browser.evaluate(`document.querySelector('[aria-label*="conflict" i]') === null`), true);
 
   await browser.navigate(`${origin}/results/quizzes/${publicId}`);
   await browser.until(() => browser.evaluate(`document.body.textContent.includes('Attempts (26)')`), 'attempt report');

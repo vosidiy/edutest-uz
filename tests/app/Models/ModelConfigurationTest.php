@@ -66,7 +66,10 @@ final class ModelConfigurationTest extends CIUnitTestCase
 
     public function testJsonAndBooleanFieldsAreCastButDecimalsAreNot(): void
     {
-        $this->assertSame('int-bool', $this->casts(new QuizModel())['listed']);
+        $this->assertArrayNotHasKey('listed', $this->casts(new QuizModel()));
+        $this->assertArrayNotHasKey('version', $this->casts(new QuizModel()));
+        $this->assertNotContains('listed', $this->property(new QuizModel(), 'allowedFields'));
+        $this->assertNotContains('version', $this->property(new QuizModel(), 'allowedFields'));
         $this->assertSame('int-bool', $this->casts(new QuestionOptionModel())['is_correct']);
         $this->assertSame('json-array', $this->casts(new AttemptModel())['snapshot']);
         $this->assertSame('json-array', $this->casts(new AttemptModel())['answers']);

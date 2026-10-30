@@ -29,6 +29,14 @@ final class SchemaSqlTest extends CIUnitTestCase
         $this->assertStringContainsString("CHECK (status IN ('in_progress', 'completed', 'abandoned'))", $sql);
         $this->assertStringContainsString("ended_reason IN ('completed', 'exited', 'expired')", $sql);
         $this->assertStringContainsString("CHECK (media_type IS NULL OR media_type = 'image')", $sql);
+        $this->assertStringContainsString("CHECK (media_type IS NULL OR media_type IN ('image', 'audio'))", $sql);
+        $this->assertStringNotContainsString("media_type IN ('image', 'audio', 'video')", $sql);
+        preg_match('/CREATE TABLE quizzes \((.*?)\) ENGINE=InnoDB/s', $sql, $quizTable);
+        $this->assertArrayHasKey(1, $quizTable);
+        $this->assertStringNotContainsString(' listed ', ' ' . $quizTable[1] . ' ');
+        $this->assertStringNotContainsString("\n  version ", $quizTable[1]);
+        $this->assertStringNotContainsString('ix_quiz_listed', $quizTable[1]);
+        $this->assertStringNotContainsString('chk_quizzes_listed', $quizTable[1]);
         foreach (['quiz_papers', 'attempt_answers', 'practice_keys', 'cheat_events', 'mode ', 'current_paper_id', 'text_answers'] as $removed) {
             $this->assertStringNotContainsString($removed, $sql);
         }

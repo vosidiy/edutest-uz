@@ -3,9 +3,20 @@
 <?= $this->section('content') ?>
 <?= $this->include('teacher/partials/quiz_header') ?>
 <div class="container">
+
+    <div class="mt-4">
+        <a class="btn btn-default" href="<?= esc($report['quiz']['url'], 'attr') ?>">← <?= esc(lang('Workspace.backResponses')) ?></a>
+
+        <p class="mt-4">
+            <a href="<?= site_url('dashboard') ?>"><?= esc(lang('Workspace.dashboardTitle')) ?> 
+            <span aria-hidden="true">/</span> 
+            <a href="<?= esc($report['quiz']['url'], 'attr') ?>"><?= esc($report['quiz']['title']) ?></a>
+        </p>
+    </div>
+
     <header class="card mt-5 mb-5 p-4 page-header-attempt-detail">
         <div style="flex-grow:1">
-            <p class="eyebrow"><a href="<?= site_url('dashboard') ?>"><?= esc(lang('Workspace.dashboardTitle')) ?></a> <span aria-hidden="true">/</span> <a href="<?= esc($report['quiz']['url'], 'attr') ?>"><?= esc($report['quiz']['title']) ?></a></p>
+            
 
             <div class="results-title-line">
                 <h4 class="mb-2">

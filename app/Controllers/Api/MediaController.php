@@ -42,19 +42,6 @@ final class MediaController extends ApiController
     private function put(string $publicId, string $target, int $targetId): ResponseInterface
     {
         return $this->runApi(function () use ($publicId, $target, $targetId): array {
-            $contentType = strtolower($this->request->getHeaderLine('Content-Type'));
-            if (str_contains($contentType, 'application/json')) {
-                $data = $this->jsonObject();
-                return service('media')->attachVideo(
-                    $this->userId(),
-                    $publicId,
-                    $target,
-                    $targetId,
-                    (string) ($data['videoUrl'] ?? ''),
-                    $this->version($data['version'] ?? null),
-                );
-            }
-
             $file = $this->request->getFile('media');
             if ($file === null) {
                 throw new AuthoringException('invalid_upload', 'Choose a media file to upload.', 422);
@@ -65,7 +52,6 @@ final class MediaController extends ApiController
                 $target,
                 $targetId,
                 $file,
-                $this->version($this->request->getPost('version')),
             );
         });
     }
@@ -77,16 +63,6 @@ final class MediaController extends ApiController
             $publicId,
             $target,
             $targetId,
-            $this->version($this->request->getGet('version')),
         ));
-    }
-
-    private function version(mixed $value): int
-    {
-        if (! is_int($value) && ! (is_string($value) && ctype_digit($value))) {
-            throw new AuthoringException('version_required', 'A current quiz version is required.', 422);
-        }
-
-        return (int) $value;
     }
 }

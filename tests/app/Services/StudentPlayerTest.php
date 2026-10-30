@@ -12,7 +12,7 @@ use Tests\Support\PlayerTestCase;
 
 final class StudentPlayerTest extends PlayerTestCase
 {
-    public function testStartStoresSnapshotAndIsIdempotentBeforeCheckingLiveVersion(): void
+    public function testStartStoresSnapshotAndSuccessfulTicketRetryIsIdempotent(): void
     {
         $quiz = $this->quiz(count: 3);
         $ticket = $this->player->admission->ticket($quiz['share']);
@@ -29,6 +29,35 @@ final class StudentPlayerTest extends PlayerTestCase
         self::assertSame('[]', $row['answers']);
         self::assertStringContainsString('Capital cities', (string) $row['snapshot']);
         self::assertStringNotContainsString('Changed after start', (string) $row['snapshot']);
+    }
+
+    public function testPreissuedTicketStartsLatestPublishedDefinition(): void
+    {
+        $quiz = $this->quiz(count: 1);
+        $ticket = $this->player->admission->ticket($quiz['share']);
+        self::assertArrayNotHasKey('quizVersion', $ticket);
+        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        $document['questions'][0]['content'] = 'Edited after ticket';
+        $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
+
+        $started = $this->player->admission->start(['ticket' => $ticket['ticket'], 'name' => 'Alice']);
+        $loaded = $this->player->assessment->load($started['attemptId'], $started['credential']);
+
+        self::assertSame('Edited after ticket', $loaded['quiz']['questions'][0]['content']);
+    }
+
+    public function testPreissuedTicketCannotStartAnUnpublishedQuiz(): void
+    {
+        $quiz = $this->quiz(count: 1);
+        $ticket = $this->player->admission->ticket($quiz['share']);
+        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        $document['status'] = 'draft';
+        $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
+
+        $this->expectPlayerError('quiz_unpublished', fn () => $this->player->admission->start([
+            'ticket' => $ticket['ticket'],
+            'name' => 'Alice',
+        ]));
     }
 
     public function testPublishedEditsAffectOnlyFutureStarts(): void

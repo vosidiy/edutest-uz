@@ -177,7 +177,6 @@ export function createPlayerView(t) {
     const content = cloneTemplate(kind);
     const element = content.firstElementChild;
     if (kind === 'image') element.alt = t('mediaImage');
-    if (kind === 'embed') element.title = t('mediaVideo');
     element.addEventListener('error', () => onError(wrapper));
     element.src = url;
     insert(fragment, 'content', content);

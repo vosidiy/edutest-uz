@@ -16,11 +16,10 @@ function fixture() {
     setTimeout,clearTimeout,console});
   const app = component.data();
   app.$nextTick = async fn => {fn?.();};
-  app.$refs = {conflictDialog:{open:false,showModal(){this.open=true;},close(){this.open=false;}},
-    detailsDialog:{showModal(){},close(){}},editTitle:{focus(){}},detailsTitle:{focus(){}}};
+  app.$refs = {detailsDialog:{showModal(){},close(){}},editTitle:{focus(){}},detailsTitle:{focus(){}}};
   Object.entries(component.methods).forEach(([name,fn])=>{app[name]=fn.bind(app);});
   Object.entries(component.computed).forEach(([name,fn])=>Object.defineProperty(app,name,{get:()=>fn.call(app)}));
-  const quiz={publicId:'fixture',title:'Quiz',description:'',listed:false,status:'published',version:1,timeLimitSec:7200,timeLimitMinutes:120,
+  const quiz={publicId:'fixture',title:'Quiz',description:'',status:'published',updatedAt:'2026-10-31T00:00:00+00:00',timeLimitSec:7200,timeLimitMinutes:120,
     askEmail:false,askPhone:false,drawCount:null,shuffleQuestions:false,shuffleOptions:false,feedback:'at_end',
     showScore:true,showAnswers:false,showExplain:false,cover:null,mediaLimits:{imageBytes:5242880,audioBytes:20971520},
     questions:[{id:'1',content:'Question',optionsLayout:'list',explanation:'',media:null,
@@ -30,15 +29,16 @@ function fixture() {
 }
 function deferred() {let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};}
 function response(payload) {
-  const quiz=clone(payload); quiz.version++;
+  const quiz=clone(payload); quiz.updatedAt='2026-10-31T00:00:01+00:00';
   quiz.questions.forEach((q,i)=>{q.id ||= String(100+i);q.options.forEach((o,j)=>{o.id ||= String(1000+i*10+j);});});
   return {data:{quiz}};
 }
 
-test('unchanged saves never mutate and reverting restores clean state', async()=>{
-  const {app,setRequest}=fixture();let requests=0;setRequest(async()=>{requests++;});
+test('explicit clean saves send a request and reverting restores clean state', async()=>{
+  const {app,setRequest}=fixture();let requests=0;setRequest(async(_url,options)=>{requests++;return response(JSON.parse(options.body));});
   assert.equal(app.hasChanges,false);
-  assert.equal(await app.save(true),true);assert.equal(requests,0);
+  assert.equal(await app.save(true),true);assert.equal(requests,1);
+  assert.equal(app.quiz.updatedAt,'2026-10-31T00:00:01+00:00');
   app.quiz.title='Changed';app.markDirty();
   assert.equal(app.hasChanges,true);assert.equal(app.saveState,'dirty');
   app.quiz.title='Quiz';app.markDirty();assert.equal(app.hasChanges,false);assert.equal(app.saveState,'saved');
@@ -69,14 +69,14 @@ test('cover failure retains file and retries only media after a successful aggre
   setRequest(async(url,options)=>{
     calls.push(options.method);
     if(options.method==='PUT')return response(JSON.parse(options.body));
-    assert.equal(options.body.get('version'),'2');
     if(fail)throw new Error('Offline');
-    return {data:{version:3,media:{type:'image',url:'/signed-cover'}}};
+    return {data:{updatedAt:'2026-10-31T00:00:02+00:00',media:{type:'image',url:'/signed-cover'}}};
   });
   assert.equal(await app.save(true),false);assert.deepEqual(calls,['PUT','POST']);
   assert.equal(app.pendingCover.url,'blob:pending');assert.match(app.globalError,/Cover retained/);
-  fail=false;assert.equal(await app.save(true),true);
-  assert.deepEqual(calls,['PUT','POST','POST']);assert.equal(app.pendingCover,null);assert.equal(app.quiz.version,3);
+  fail=false;assert.equal(await app.save(),true);
+  assert.deepEqual(calls,['PUT','POST','POST']);assert.equal(app.pendingCover,null);
+  assert.equal(app.quiz.updatedAt,'2026-10-31T00:00:02+00:00');
 });
 test('a newer cover applied during upload is not cleared by the old acknowledgement',async()=>{
   const {app,setRequest}=fixture();const gate=deferred();
@@ -84,19 +84,14 @@ test('a newer cover applied during upload is not cleared by the old acknowledgem
   setRequest(()=>gate.promise);
   const saving=app.save(true);
   app.pendingCover={action:'remove'};
-  gate.resolve({data:{version:2,media:{type:'image',url:'/old-cover'}}});
+  gate.resolve({data:{updatedAt:'2026-10-31T00:00:02+00:00',media:{type:'image',url:'/old-cover'}}});
   assert.equal(await saving,false);assert.equal(app.pendingCover.action,'remove');
-  setRequest(async(url,options)=>{assert.equal(options.method,'DELETE');assert.match(url,/version=2/);return {data:{version:3,media:null}};});
-  assert.equal(await app.save(true),true);assert.equal(app.quiz.cover,null);
+  setRequest(async(url,options)=>{assert.equal(options.method,'DELETE');assert.doesNotMatch(url,/version=/);return {data:{updatedAt:'2026-10-31T00:00:03+00:00',media:null}};});
+  assert.equal(await app.save(),true);assert.equal(app.quiz.cover,null);
 });
-test('validation and conflict preserve local changes; conflict button reopens without writing',async()=>{
-  const {app,setRequest}=fixture();app.quiz.title='Local';let calls=0;
-  setRequest(async()=>{calls++;throw Object.assign(new Error('Conflict'),{code:'version_conflict',fields:{version:'7'}});});
-  assert.equal(await app.save(true),false);assert.equal(app.saveState,'conflict');
-  app.$refs.conflictDialog.close();await app.save(true);assert.equal(calls,1);assert.equal(app.$refs.conflictDialog.open,true);
-  setRequest(async(url,options)=>{assert.match(url,/overwrite=1/);return response(JSON.parse(options.body));});
-  await app.overwriteConflict();assert.equal(app.saveState,'saved');
-  app.quiz.title='';setRequest(async()=>{throw Object.assign(new Error('Title required'),{status:422,fields:{title:'Required'}});});
+test('validation failures preserve local changes and use the retry state',async()=>{
+  const {app,setRequest}=fixture();app.quiz.title='';
+  setRequest(async()=>{throw Object.assign(new Error('Title required'),{status:422,fields:{title:'Required'}});});
   assert.equal(await app.save(true),false);assert.equal(app.saveState,'retry');assert.equal(app.quiz.title,'');
 });
 test('details cancel retains previous staged cover; URL cleanup never revokes a live preview',()=>{
@@ -108,19 +103,6 @@ test('details cancel retains previous staged cover; URL cleanup never revokes a 
   app.detailsClosed();assert.deepEqual(revoked,['blob:dialog']);assert.equal(app.pendingCover.url,'blob:pending');
   app.openDetails();app.detailsTitle='   ';app.applyDetails();assert.equal(app.detailsError,'Invalid title');
   app.detailsTitle='Updated';app.applyDetails();assert.equal(app.quiz.title,'Updated');assert.equal(app.hasChanges,true);
-});
-
-test('conflict reload clears staged work only after a successful server load',async()=>{
-  const {app,quiz,setRequest,revoked}=fixture();
-  app.pendingCover={action:'upload',url:'blob:pending'};
-  app.coverUrls.add('blob:pending');app.quiz.title='Local';app.saveState='conflict';
-  setRequest(async()=>{throw new Error('Offline');});
-  await app.reloadConflict();
-  assert.equal(app.pendingCover.url,'blob:pending');assert.equal(app.quiz.title,'Local');
-  setRequest(async()=>({data:{quiz:clone(quiz)}}));
-  await app.reloadConflict();
-  assert.equal(app.pendingCover,null);assert.equal(app.quiz.title,'Quiz');
-  assert.equal(app.hasChanges,false);assert.deepEqual(revoked,['blob:pending']);
 });
 
 test('a queued close event cannot discard a newly reopened details dialog',()=>{
@@ -140,7 +122,7 @@ test('manual save persists staged status and preserves edits made during its res
   setRequest(()=>gate.promise);
   const saving=app.save(true);
   assert.equal(app.saving,true);
-  const server=clone(app.quiz);server.version++;
+  const server=clone(app.quiz);server.updatedAt='2026-10-31T00:00:02+00:00';
   app.quiz.questions[0].content='Edited during save';app.markDirty();
   gate.resolve({data:{quiz:server}});assert.equal(await saving,false);
   assert.equal(app.quiz.status,'draft');

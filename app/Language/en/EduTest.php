@@ -24,7 +24,6 @@ return [
             'invalidCover' => 'Choose a valid JPEG, PNG or WebP up to 5 MiB and 16 megapixels.',
             'checkingCover' => 'Checking image…',
             'saving' => 'Saving…',
-            'resolveConflict' => 'Resolve conflict',
             'coverFailed' => 'Submitted quiz content is saved, but the cover change could not be saved. Your cover change is retained. Choose Retry to try again.',
             'unsavedMedia' => 'Newer edits are still unsaved. Wait for them to finish saving before changing question media.',
         ],

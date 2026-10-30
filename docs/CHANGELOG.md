@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Last-write-wins quiz authoring (2026-10-31)
+
+- Removed the quiz `version` counter, optimistic conflict/overwrite flow, versioned media requests, and quiz-version admission claims; teacher content/media saves now use last-write-wins behavior.
+- Made both **Save quiz** and clean **Saved** clicks perform an explicit write and refresh `updated_at`, while preserving serialized saves, retry behavior, pending covers, and in-flight edit merging.
+- Removed the per-quiz `listed` field and **Show on my page** setting. Future public visibility will derive from published status rather than a separate quiz flag.
+
+### Save-state button and image/audio-only media (2026-10-31)
+
+- Made the enabled builder save action show primary **Save quiz** only while changes are pending and default **Saved** when the document is clean.
+- Removed quiz video URL authoring, backend URL handling, descriptors, embeds, player/report rendering, related CSS/text, and landing-page claims while retaining question images/audio and image-only covers/options.
+- Restricted canonical question media to `image|audio`; legacy video references in immutable attempt snapshots remain stored but are no longer projected or rendered.
+
 ### Manual quiz builder and Active switch (2026-10-29)
 
 - Replaced timed autosave and separate Publish/Unpublish actions with one optimistic, atomic **Save quiz** operation for content and staged Draft/Active status.

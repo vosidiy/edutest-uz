@@ -22,6 +22,8 @@ final class QuizAuthoringServiceTest extends PlayerTestCase
         self::assertSame('list', $document['questions'][0]['optionsLayout']);
         self::assertArrayNotHasKey('mode', $document);
         self::assertArrayNotHasKey('revision', $document);
+        self::assertArrayNotHasKey('version', $document);
+        self::assertArrayNotHasKey('listed', $document);
     }
 
     public function testTimerValidationUsesOneToOneHundredTwentyWholeMinutes(): void
@@ -131,7 +133,7 @@ final class QuizAuthoringServiceTest extends PlayerTestCase
         self::assertSame([true, false], array_column($saved['questions'][0]['options'], 'isCorrect'));
     }
 
-    public function testListAndGridLayoutsAndOptimisticLockingPersist(): void
+    public function testListAndGridLayoutsUseLastWriteWins(): void
     {
         $quiz = $this->quiz(count: 2);
         $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
@@ -139,7 +141,24 @@ final class QuizAuthoringServiceTest extends PlayerTestCase
         $document['questions'][0]['optionsLayout'] = 'grid';
         $saved = $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
         self::assertSame('grid', $saved['questions'][0]['optionsLayout']);
-        $this->expectAuthoringError('version_conflict', fn () => $this->authoring->save($quiz['owner'], $quiz['publicId'], $stale));
+        $stale['title'] = 'Last writer';
+        $replaced = $this->authoring->save($quiz['owner'], $quiz['publicId'], $stale);
+        self::assertSame('Last writer', $replaced['title']);
+        self::assertSame('list', $replaced['questions'][0]['optionsLayout']);
+    }
+
+    public function testUnchangedExplicitSaveRefreshesUpdatedAt(): void
+    {
+        $quiz = $this->quiz(count: 1);
+        $row = $this->db->table('quizzes')->where('public_id', $quiz['publicId'])->get()->getRowArray();
+        $this->db->table('quizzes')->where('id', $row['id'])->update(['updated_at' => '2000-01-01 00:00:00.000000']);
+        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+
+        $saved = $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
+        $stored = $this->db->table('quizzes')->where('id', $row['id'])->get()->getRowArray();
+
+        self::assertNotSame('2000-01-01 00:00:00.000000', $stored['updated_at']);
+        self::assertNotSame($document['updatedAt'], $saved['updatedAt']);
     }
 
     public function testQuestionAndOptionReorderingAvoidsTransientUniquePositionCollisions(): void

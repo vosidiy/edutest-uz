@@ -4,7 +4,7 @@
   const BuilderRules = Object.freeze({
     editable(quiz) {
       if (!quiz) return '';
-      const fields = ['title', 'description', 'status', 'listed', 'timeLimitMinutes', 'askEmail', 'askPhone', 'drawCount',
+      const fields = ['title', 'description', 'status', 'timeLimitMinutes', 'askEmail', 'askPhone', 'drawCount',
         'shuffleQuestions', 'shuffleOptions', 'feedback', 'showScore', 'showAnswers', 'showExplain'];
       const value = Object.fromEntries(fields.map(key => [key, quiz[key]]));
       value.questions = (quiz.questions || []).map(q => ({id:q.id, content:q.content, optionsLayout:q.optionsLayout,
@@ -50,14 +50,9 @@
 
   const MediaPreview = {
     props: { media: { type: Object, default: null } },
-    methods: {
-      directVideo(url) { try { return new URL(url).pathname.toLowerCase().endsWith('.mp4'); } catch (_) { return false; } }
-    },
-    template: `<div v-if="media" class="media-preview">
+    template: `<div v-if="media && (media.type==='image' || media.type==='audio')" class="media-preview">
       <img v-if="media.type==='image'" :src="media.url" alt="Question media">
-      <audio v-else-if="media.type==='audio'" :src="media.url" controls preload="metadata"></audio>
-      <video v-else-if="directVideo(media.embedUrl || media.url)" :src="media.embedUrl || media.url" controls preload="metadata"></video>
-      <iframe v-else :src="media.embedUrl" title="Question video" loading="lazy" allow="fullscreen; picture-in-picture" allowfullscreen></iframe>
+      <audio v-else :src="media.url" controls preload="metadata"></audio>
     </div>`
   };
 
@@ -87,8 +82,7 @@
         detailsChecking: false,
         detailsError: '',
         coverUrls: new Set(),
-        workspaceMessages: JSON.parse(root.dataset.workspaceMessages || '{}'),
-        conflictVersion: null
+        workspaceMessages: JSON.parse(root.dataset.workspaceMessages || '{}')
       };
     },
     computed: {
@@ -103,7 +97,6 @@
         if (this.saving || this.mediaBusy) return this.workspaceMessages.saving;
         if (this.saveState === 'dirty') return 'Unsaved changes';
         if (this.saveState === 'retry') return 'Save failed — retry';
-        if (this.saveState === 'conflict') return 'Newer changes found';
         if (this.lastSavedAt) return `Saved ${new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(this.lastSavedAt)}`;
         return this.quiz?.status === 'draft' ? 'Draft loaded' : 'Quiz loaded';
       }
@@ -132,7 +125,6 @@
           this.cleanCoverUrls();
           this.applyServerQuiz(response.data.quiz);
           this.saveState = 'saved';
-          this.conflictVersion = null;
           this.globalError = '';
         } catch (error) {
           this.fatalError = error.message;
@@ -149,17 +141,16 @@
         this.$nextTick(() => { this.hydrating = false; });
       },
       markDirty() {
-        if (this.saveState === 'conflict') return;
         if (!this.saving) this.saveState = this.hasChanges ? 'dirty' : 'saved';
         this.globalError = '';
       },
-      async acceptSaved(server, sent, references, sentPasscode) {
+      async acceptSaved(server, sent, references) {
         // Keep the same reactive row objects: a new ID must follow its row even if reordered/deleted during the request.
         this.hydrating = true;
         const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
         for (const key of Object.keys(server)) {
           if (key === 'questions') continue;
-          if (['version', 'status', 'resultsAvailable', 'resultsUrl', 'updatedAt', 'publishedAt'].includes(key) || same(this.quiz[key], sent[key])) this.quiz[key] = server[key];
+          if (['status', 'resultsAvailable', 'resultsUrl', 'updatedAt', 'publishedAt'].includes(key) || same(this.quiz[key], sent[key])) this.quiz[key] = server[key];
         }
         references.forEach(({question, options}, index) => {
           const remote = server.questions[index], before = sent.questions[index];
@@ -182,20 +173,16 @@
         await this.$nextTick();
         this.hydrating = false;
       },
-      save(manual = false, overwrite = false) {
+      save(force = false) {
         if (this.savePromise) return this.savePromise;
         if (this.mediaBusy) return Promise.resolve(false);
-        if (this.saveState === 'conflict' && !overwrite) {
-          if (manual) this.openConflict();
-          return Promise.resolve(false);
-        }
         if (!this.quiz) return Promise.resolve(false);
         if (BuilderRules.repairQuestions(this.quiz)) this.markDirty();
-        if (!this.hasChanges && !overwrite) return Promise.resolve(true);
-        this.savePromise = this.performSave(overwrite).finally(() => { this.savePromise = null; });
+        if (!force && !this.hasChanges) return Promise.resolve(true);
+        this.savePromise = this.performSave(force).finally(() => { this.savePromise = null; });
         return this.savePromise;
       },
-      async performSave(overwrite) {
+      async performSave(force) {
         this.saving = true;
         this.saveState = 'saving';
         this.globalError = '';
@@ -204,8 +191,8 @@
         const cover = this.pendingCover;
         let contentSaved = this.editableFingerprint === this.savedFingerprint;
         try {
-          if (!contentSaved || overwrite) {
-            const response = await EduTestApi.request('/api/v1/quizzes/' + this.publicId + (overwrite ? '?overwrite=1' : ''), {method:'PUT', body:JSON.stringify(sent)});
+          if (!contentSaved || force) {
+            const response = await EduTestApi.request('/api/v1/quizzes/' + this.publicId, {method:'PUT', body:JSON.stringify(sent)});
             await this.acceptSaved(response.data.quiz, sent, references);
             contentSaved = true;
           }
@@ -213,16 +200,14 @@
             const endpoint = '/api/v1/quizzes/' + this.publicId + '/cover';
             let options, url = endpoint;
             if (cover.action === 'remove') {
-              url += '?version=' + this.quiz.version;
               options = {method:'DELETE', body:'{}'};
             } else {
               const form = new FormData();
               form.append('media', cover.file);
-              form.append('version', String(this.quiz.version));
               options = {method:'POST', body:form};
             }
             const response = await EduTestApi.request(url, options);
-            this.quiz.version = response.data.version;
+            this.quiz.updatedAt = response.data.updatedAt;
             this.quiz.cover = response.data.media;
             if (this.pendingCover === cover) this.pendingCover = null;
             if (this.detailsCover === cover) this.detailsCover = null;
@@ -233,7 +218,7 @@
           return !this.hasChanges;
         } catch (error) {
           this.handleSaveError(error);
-          if (cover && contentSaved && error.code !== 'version_conflict') this.globalError = this.workspaceMessages.coverFailed + ' ' + error.message;
+          if (cover && contentSaved) this.globalError = this.workspaceMessages.coverFailed + ' ' + error.message;
           return false;
         } finally {
           this.saving = false;
@@ -241,28 +226,10 @@
       },
       handleSaveError(error) {
         this.globalError = error.message;
-        if (error.code === 'version_conflict') {
-          this.saveState = 'conflict';
-          this.conflictVersion = Number(error.fields?.version || 0);
-          this.openConflict();
-        } else {
-          this.saveState = 'retry';
-        }
-      },
-      openConflict() {
-        if (!this.$refs.conflictDialog?.open) this.$refs.conflictDialog?.showModal();
-      },
-      async reloadConflict() {
-        this.$refs.conflictDialog?.close();
-        await this.load();
-      },
-      async overwriteConflict() {
-        this.$refs.conflictDialog?.close();
-        if (this.conflictVersion) this.quiz.version = this.conflictVersion;
-        await this.save(true, true);
+        this.saveState = 'retry';
       },
       beforeUnload(event) {
-        if (!this.hasChanges && !this.saving && !this.mediaBusy && this.saveState !== 'conflict') return;
+        if (!this.hasChanges && !this.saving && !this.mediaBusy) return;
         event.preventDefault();
         event.returnValue = '';
       },
@@ -414,7 +381,7 @@
           : `/api/v1/quizzes/${this.publicId}/options/${target.id}/media`;
       },
       async prepareMedia(questionIndex, optionIndex) {
-        if (this.mediaBusy || !await this.save(true)) return null;
+        if (this.mediaBusy || (this.hasChanges && !await this.save())) return null;
         if (this.hasChanges) { this.globalError = this.workspaceMessages.unsavedMedia; return null; }
         const endpoint = this.targetEndpoint(questionIndex, optionIndex);
         if (!endpoint) {
@@ -444,23 +411,15 @@
           if (!endpoint) return;
           const form = new FormData();
           form.append('media', file);
-          form.append('version', String(this.quiz.version));
           await this.runMedia(endpoint, { method: 'POST', body: form }, questionIndex, optionIndex);
         });
         input.click();
-      },
-      async addVideo(questionIndex, optionIndex) {
-        const videoUrl = window.prompt('Paste a YouTube, Vimeo, or direct HTTPS MP4 URL:');
-        if (!videoUrl) return;
-        const endpoint = await this.prepareMedia(questionIndex, optionIndex);
-        if (!endpoint) return;
-        await this.runMedia(endpoint, { method: 'POST', body: JSON.stringify({ videoUrl, version: this.quiz.version }) }, questionIndex, optionIndex);
       },
       async removeMedia(questionIndex, optionIndex) {
         if (!window.confirm('Remove this media?')) return;
         const endpoint = await this.prepareMedia(questionIndex, optionIndex);
         if (!endpoint) return;
-        await this.runMedia(`${endpoint}?version=${this.quiz.version}`, { method: 'DELETE', body: '{}' }, questionIndex, optionIndex);
+        await this.runMedia(endpoint, { method: 'DELETE', body: '{}' }, questionIndex, optionIndex);
       },
       async runMedia(endpoint, options, questionIndex, optionIndex) {
         this.globalError = '';
@@ -469,7 +428,7 @@
         const target = this.targetAt(questionIndex, optionIndex);
         try {
           const response = await EduTestApi.request(endpoint, options);
-          this.quiz.version = response.data.version;
+          this.quiz.updatedAt = response.data.updatedAt;
           if (target) target.media = response.data.media;
           this.lastSavedAt = new Date();
           this.saveState = this.hasChanges ? 'dirty' : 'saved';
