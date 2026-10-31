@@ -140,6 +140,10 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $response->assertDontSee('Fix validation errors');
         $response->assertDontSee('Video URL');
         $response->assertDontSee('supported video');
+        $response->assertDontSee('preview = true');
+        $response->assertDontSee('preview = false');
+        $response->assertDontSee('preview-paper');
+        $response->assertDontSee('preview-options');
         $response->assertDontSee('Show on my page');
         $response->assertDontSee('Newer changes found');
         $response->assertDontSee('Saved changes apply to students');

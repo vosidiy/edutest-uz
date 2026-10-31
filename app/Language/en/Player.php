@@ -107,7 +107,6 @@ return [
         'coverHelp' => 'Optional JPEG, PNG or WebP image, up to 5 MiB and 16 megapixels.',
         'coverUploading' => 'Uploading cover…',
         'removeCoverConfirm' => 'Remove the quiz cover?',
-        'teacherDisclosure' => 'Answer keys are downloaded at start for instant offline feedback. Browser timers stop answering at expiry; delayed uploads are accepted and flagged. Offline timing is reported by the browser and cannot be independently verified.',
         'scoreChanged' => 'The server-calculated result differs from the local preview. The confirmed result below is official.',
         'startAnother' => 'Start again',
     ],

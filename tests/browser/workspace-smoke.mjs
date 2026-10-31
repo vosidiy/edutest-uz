@@ -115,6 +115,9 @@ try {
   assert.equal(await browser.evaluate(`document.querySelector('.input-switch[role="switch"]').checked`), true);
   assert.equal(await browser.evaluate(`document.querySelector('.label-switch').textContent.trim()`), 'Active');
   assert.equal(await browser.evaluate(`document.body.textContent.includes('Single choice · grid')`), true);
+  assert.equal(await browser.evaluate(`document.querySelector('#builder-editor textarea[placeholder="Type question text..."]') !== null`), true);
+  assert.equal(await browser.evaluate(`[...document.querySelectorAll('#builder-editor button')].some(button => ['Preview','Edit'].includes(button.textContent.trim()))`), false);
+  assert.equal(await browser.evaluate(`document.querySelector('.preview-paper, .preview-options') === null`), true);
   for (const removed of ['Practice','Passcode','Integrity','Short text','Multiple choice']) {
     assert.equal(await browser.evaluate(`document.body.textContent.includes(${JSON.stringify(removed)})`), false, removed);
   }

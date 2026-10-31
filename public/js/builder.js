@@ -2,6 +2,23 @@
   'use strict';
 
   const BuilderRules = Object.freeze({
+    normalizeTimerMinutes(value) {
+      if ((typeof value !== 'number' && typeof value !== 'string') || (typeof value === 'string' && value.trim() === '')) return 120;
+      if (typeof value === 'string' && !/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim())) return 120;
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return 120;
+      const minutes = Math.round(numeric);
+      return minutes >= 1 && minutes <= 120 ? minutes : 120;
+    },
+    normalizeDrawCount(value, questionCount) {
+      if (!Number.isInteger(questionCount) || questionCount < 1) return null;
+      if ((typeof value !== 'number' && typeof value !== 'string') || (typeof value === 'string' && value.trim() === '')) return null;
+      if (typeof value === 'string' && !/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim())) return null;
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return null;
+      const count = Math.round(numeric);
+      return count >= 1 && count <= questionCount ? count : null;
+    },
     editable(quiz) {
       if (!quiz) return '';
       const fields = ['title', 'description', 'status', 'timeLimitMinutes', 'askEmail', 'askPhone', 'drawCount',
@@ -66,7 +83,6 @@
         fatalError: '',
         globalError: '',
         selectedIndex: 0,
-        preview: false,
         saving: false,
         saveState: 'saved',
         lastSavedAt: null,
@@ -177,6 +193,16 @@
         if (this.savePromise) return this.savePromise;
         if (this.mediaBusy) return Promise.resolve(false);
         if (!this.quiz) return Promise.resolve(false);
+        const normalizedMinutes = BuilderRules.normalizeTimerMinutes(this.quiz.timeLimitMinutes);
+        if (this.quiz.timeLimitMinutes !== normalizedMinutes) {
+          this.quiz.timeLimitMinutes = normalizedMinutes;
+          this.markDirty();
+        }
+        const normalizedDrawCount = BuilderRules.normalizeDrawCount(this.quiz.drawCount, this.quiz.questions?.length || 0);
+        if (this.quiz.drawCount !== normalizedDrawCount) {
+          this.quiz.drawCount = normalizedDrawCount;
+          this.markDirty();
+        }
         if (BuilderRules.repairQuestions(this.quiz)) this.markDirty();
         if (!force && !this.hasChanges) return Promise.resolve(true);
         this.savePromise = this.performSave(force).finally(() => { this.savePromise = null; });
@@ -337,13 +363,11 @@
         const options = [{ id: null, content: '', isCorrect: true, media: null }, { id: null, content: '', isCorrect: false, media: null }];
         this.quiz.questions.push({ id: null, position: this.quiz.questions.length + 1, content: '', optionsLayout: 'list', explanation: '', media: null, options });
         this.selectQuestion(this.quiz.questions.length - 1);
-        this.preview = false;
       },
       removeQuestion() {
         if (!this.selectedQuestion || !window.confirm('Delete this question and its media?')) return;
         this.quiz.questions.splice(this.selectedIndex, 1);
         this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, this.quiz.questions.length - 1));
-        if (this.quiz.questions.length === 0) this.preview = false;
       },
       moveQuestion(direction) {
         const target = this.selectedIndex + direction;

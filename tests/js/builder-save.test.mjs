@@ -43,6 +43,24 @@ test('explicit clean saves send a request and reverting restores clean state', a
   assert.equal(app.hasChanges,true);assert.equal(app.saveState,'dirty');
   app.quiz.title='Quiz';app.markDirty();assert.equal(app.hasChanges,false);assert.equal(app.saveState,'saved');
 });
+test('save normalizes an invalid timer before sending and updates the visible model',async()=>{
+  const {app,setRequest}=fixture();let sent;
+  app.quiz.timeLimitMinutes='letters';app.markDirty();
+  setRequest(async(_url,options)=>{sent=JSON.parse(options.body);return response(sent);});
+  assert.equal(await app.save(true),true);
+  assert.equal(sent.timeLimitMinutes,120);
+  assert.equal(app.quiz.timeLimitMinutes,120);
+  assert.equal(app.hasChanges,false);
+});
+test('save normalizes an invalid draw count to the whole pool before sending',async()=>{
+  const {app,setRequest}=fixture();let sent;
+  app.quiz.drawCount='letters';app.markDirty();
+  setRequest(async(_url,options)=>{sent=JSON.parse(options.body);return response(sent);});
+  assert.equal(await app.save(true),true);
+  assert.equal(sent.drawCount,null);
+  assert.equal(app.quiz.drawCount,null);
+  assert.equal(app.hasChanges,false);
+});
 test('one save pipeline preserves newer text, layouts, reorders, deletions and new row identities',async()=>{
   const {app,setRequest}=fixture(); const gate=deferred();let sent,requests=0;
   app.quiz.questions[0].id=null; app.quiz.questions[0].options[0].id=null;

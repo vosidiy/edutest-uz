@@ -311,14 +311,7 @@ final class QuizAuthoringService
             $fields['status'] = 'Choose Draft or Active.';
         }
 
-        $minutes = $payload['timeLimitMinutes'] ?? null;
-        if ((is_int($minutes) && $minutes >= 1 && $minutes <= 120)
-            || (is_string($minutes) && ctype_digit($minutes) && (int) $minutes >= 1 && (int) $minutes <= 120)) {
-            $minutes = (int) $minutes;
-        } else {
-            $fields['timeLimitMinutes'] = 'Choose a whole-minute timer from 1 to 120 minutes.';
-            $minutes = 0;
-        }
+        $minutes = $this->normalizeTimerMinutes($payload['timeLimitMinutes'] ?? null);
         $seconds = $minutes * 60;
 
         $feedback = is_string($payload['feedback'] ?? null) ? $payload['feedback'] : '';
@@ -332,17 +325,7 @@ final class QuizAuthoringService
         }
 
         $questions = $this->normalizeQuestions($payload['questions'] ?? null, $fields);
-        $drawCount = $payload['drawCount'] ?? null;
-        if ($drawCount === '' || $drawCount === null) {
-            $drawCount = null;
-        } elseif ((is_int($drawCount) || (is_string($drawCount) && ctype_digit($drawCount))) && (int) $drawCount > 0 && (int) $drawCount <= 65535) {
-            $drawCount = (int) $drawCount;
-            if ($drawCount > count($questions)) {
-                $drawCount = null;
-            }
-        } else {
-            $fields['drawCount'] = 'Use a positive whole number or leave draw count empty.';
-        }
+        $drawCount = $this->normalizeDrawCount($payload['drawCount'] ?? null, count($questions));
 
         if ($fields !== []) {
             throw new AuthoringException('validation_failed', 'Check the quiz details and try again.', 422, $fields);
@@ -364,6 +347,41 @@ final class QuizAuthoringService
             'showExplain'       => $showExplain,
             'questions'         => $questions,
         ];
+    }
+
+    private function normalizeTimerMinutes(mixed $value): int
+    {
+        if ((! is_int($value) && ! is_float($value) && ! is_string($value))
+            || (is_string($value) && (trim($value) === '' || ! is_numeric($value)))) {
+            return 120;
+        }
+
+        $numeric = (float) $value;
+        if (! is_finite($numeric)) {
+            return 120;
+        }
+
+        $minutes = (int) round($numeric, 0, PHP_ROUND_HALF_UP);
+
+        return $minutes >= 1 && $minutes <= 120 ? $minutes : 120;
+    }
+
+    private function normalizeDrawCount(mixed $value, int $questionCount): ?int
+    {
+        if ($questionCount < 1
+            || (! is_int($value) && ! is_float($value) && ! is_string($value))
+            || (is_string($value) && (trim($value) === '' || ! is_numeric($value)))) {
+            return null;
+        }
+
+        $numeric = (float) $value;
+        if (! is_finite($numeric)) {
+            return null;
+        }
+
+        $drawCount = (int) round($numeric, 0, PHP_ROUND_HALF_UP);
+
+        return $drawCount >= 1 && $drawCount <= $questionCount ? $drawCount : null;
     }
 
     /** @return list<array<string, mixed>> */

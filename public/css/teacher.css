@@ -1277,7 +1277,7 @@ input[type=radio] {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 11px 14px;
+  padding: 4px 8px;
   border: 1px solid transparent;
   border-radius: var(--border-radius-md);
 }
@@ -1547,7 +1547,7 @@ input[type="file"] { height: auto; padding: 8px; }
 .account-form { display: grid; gap: var(--space-4); }
 .account-card h2 { margin-bottom: var(--space-1); }
 .account-card .alert ul { margin: 0; }
-.account-actions { display: flex; justify-content: flex-end; }
+.account-actions { display: flex;  }
 
 .eyebrow {
   margin-bottom: 5px;
@@ -1961,8 +1961,7 @@ input[type="file"] { height: auto; padding: 8px; }
   background: var(--bg-color-lower);
 }
 
-.editor-paper,
-.preview-paper {
+.editor-paper {
   max-width: 780px;
   margin: 0 auto;
   overflow: hidden;
@@ -2076,60 +2075,6 @@ input[type="file"] { height: auto; padding: 8px; }
   margin-top: 21px;
   padding-top: 18px;
   border-top: 1px solid var(--border-color-default);
-}
-
-.preview-paper { padding-bottom: 30px; }
-.preview-paper > .editor-paper-head { margin-bottom: 30px; }
-
-.preview-paper > h1,
-.preview-paper > .media-preview,
-.preview-options,
-.preview-text-answer {
-  margin-right: clamp(20px, 5vw, 50px);
-  margin-left: clamp(20px, 5vw, 50px);
-}
-
-.preview-paper > h1 {
-  margin-bottom: 22px;
-  font-size: clamp(1.5rem, 3vw, 2rem);
-  line-height: 1.3;
-}
-
-.preview-options {
-  display: grid;
-  gap: 9px;
-  margin-top: var(--space-5);
-}
-
-.preview-options > div {
-  display: grid;
-  align-items: center;
-  gap: 11px;
-  padding: var(--space-3);
-  border: 1px solid var(--border-color-default);
-  border-radius: 10px;
-  grid-template-columns: 34px 1fr;
-}
-
-.preview-options > div > span {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border-radius: 7px;
-  background: var(--neutral-100);
-  color: var(--text-color-secondary);
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-
-.preview-options .media-preview { grid-column: 2; }
-
-.preview-text-answer {
-  padding: 14px;
-  border: 1px dashed var(--border-color-strong);
-  border-radius: 9px;
-  color: var(--text-color-secondary);
 }
 
 .settings-content { padding: var(--space-3); }
@@ -2250,7 +2195,6 @@ input[type="file"] { height: auto; padding: 8px; }
     align-items: flex-start;
   }
 
-  .preview-options > div { grid-template-columns: 30px 1fr; }
   .dialog-actions { flex-direction: column-reverse; }
   .dialog-actions .btn { width: 100%; }
 }

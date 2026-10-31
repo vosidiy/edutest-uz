@@ -26,21 +26,30 @@ final class QuizAuthoringServiceTest extends PlayerTestCase
         self::assertArrayNotHasKey('listed', $document);
     }
 
-    public function testTimerValidationUsesOneToOneHundredTwentyWholeMinutes(): void
+    public function testTimerNormalizationRoundsValidValuesAndDefaultsInvalidValues(): void
     {
         $quiz = $this->quiz(count: 1);
-        foreach ([0, -1, 1.5, '1.5', 121] as $invalid) {
+        foreach ([[1, 1], [60, 60], [119, 119], [120, 120], [1.4, 1], [1.5, 2], ['60.4', 60], [120.4, 120], [0.5, 1]] as [$input, $expected]) {
             $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
-            $document['timeLimitMinutes'] = $invalid;
-            $this->expectAuthoringError('validation_failed', fn () => $this->authoring->save($quiz['owner'], $quiz['publicId'], $document));
-        }
-        foreach ([1, 60, 119, 120] as $valid) {
-            $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
-            $document['timeLimitMinutes'] = $valid;
+            $document['timeLimitMinutes'] = $input;
             $saved = $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
-            self::assertSame($valid, $saved['timeLimitMinutes']);
-            self::assertSame($valid * 60, $saved['timeLimitSec']);
+            self::assertSame($expected, $saved['timeLimitMinutes']);
+            self::assertSame($expected * 60, $saved['timeLimitSec']);
         }
+
+        foreach ([0, -1, 120.5, 121, '', 'letters', '0x10', null, [], new \stdClass(), '1e9999', NAN, INF] as $input) {
+            $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+            $document['timeLimitMinutes'] = $input;
+            $saved = $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
+            self::assertSame(120, $saved['timeLimitMinutes']);
+            self::assertSame(7200, $saved['timeLimitSec']);
+        }
+
+        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        unset($document['timeLimitMinutes']);
+        $saved = $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
+        self::assertSame(120, $saved['timeLimitMinutes']);
+        self::assertSame(7200, $saved['timeLimitSec']);
     }
 
     public function testStatusChangesAreAtomicWithManualSave(): void
@@ -114,11 +123,29 @@ final class QuizAuthoringServiceTest extends PlayerTestCase
         self::assertSame(['Option 1', 'Option 2', 'Third'], array_column($attempt['quiz']['questions'][0]['options'], 'content'));
     }
 
-    public function testDrawCountAboveQuestionPoolUsesWholePool(): void
+    public function testDrawCountRoundsValidValuesAndUsesWholePoolForInvalidValues(): void
     {
-        $quiz = $this->quiz(count: 2);
+        $quiz = $this->quiz(count: 5);
+        foreach ([[1, 1], [2.4, 2], [2.5, 3], ['4.4', 4], [0.5, 1], [5, 5]] as [$input, $expected]) {
+            $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+            $document['drawCount'] = $input;
+            self::assertSame($expected, $this->authoring->save($quiz['owner'], $quiz['publicId'], $document)['drawCount']);
+        }
+
+        foreach ([0, -1, 5.5, 6, '', 'letters', '0x2', null, [], new \stdClass(), '1e9999', NAN, INF] as $input) {
+            $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+            $document['drawCount'] = $input;
+            self::assertNull($this->authoring->save($quiz['owner'], $quiz['publicId'], $document)['drawCount']);
+        }
+
         $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
-        $document['drawCount'] = 3;
+        unset($document['drawCount']);
+        self::assertNull($this->authoring->save($quiz['owner'], $quiz['publicId'], $document)['drawCount']);
+
+        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        $document['status'] = 'draft';
+        $document['questions'] = [];
+        $document['drawCount'] = 1;
         self::assertNull($this->authoring->save($quiz['owner'], $quiz['publicId'], $document)['drawCount']);
     }
 

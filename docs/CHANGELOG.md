@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Fault-tolerant question draw count (2026-10-31)
+
+- Made **Questions per attempt** round numeric values to the nearest question and silently use the entire pool for missing, malformed, non-finite, zero, negative, or above-pool input instead of returning a validation error.
+- Applied matching browser and server normalization so invalid values clear to the **All questions** state and persist as `draw_count = NULL`.
+
+### Fault-tolerant quiz timer (2026-10-31)
+
+- Made builder timer saves round numeric values to the nearest whole minute and silently use the 120-minute default for missing, malformed, non-finite, or out-of-range input instead of returning a validation error.
+- Applied matching browser and server normalization so the visible field, stored seconds, and returned quiz document remain consistent.
+
+### Simplified builder editing (2026-10-31)
+
+- Removed the teacher-only question Preview/Edit mode, its Vue state, preview-only markup/styles, and dashboard preview claim; inline media and cover previews remain available while editing.
+
 ### Last-write-wins quiz authoring (2026-10-31)
 
 - Removed the quiz `version` counter, optimistic conflict/overwrite flow, versioned media requests, and quiz-version admission claims; teacher content/media saves now use last-write-wins behavior.
