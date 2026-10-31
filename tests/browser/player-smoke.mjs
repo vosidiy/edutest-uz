@@ -21,10 +21,13 @@ const questions = [
   {id:'2',content:'Second question?',optionsLayout:'grid',media:null,explanation:'Right is correct.',correctCode:'right',options:[
     {id:'21',code:'wrong',content:'Wrong',media:null},{id:'22',code:'right',content:'Right',media:null},
   ]},
+  {id:'3',content:'Third question?',optionsLayout:'list',media:null,explanation:'Right is still correct.',correctCode:'right',options:[
+    {id:'31',code:'right',content:'Right',media:null},{id:'32',code:'wrong',content:'Wrong',media:null},
+  ]},
 ];
 const snapshot = () => ({schemaVersion:1,quiz:{title:'Snapshot quiz',description:'Two questions',shareToken,timeLimitSec:7200,
   askEmail:false,askPhone:false,feedback:'after_each',showScore:true,showAnswers:true,showExplain:true},cover:null,questions});
-const summary = () => ({title:'Snapshot quiz',description:'Two questions',teacher:'Teacher',questionCount:2,timeLimitMinutes:'120.0',
+const summary = () => ({title:'Snapshot quiz',description:'Three questions',teacher:'Teacher',questionCount:questions.length,timeLimitMinutes:'120.0',
   shareToken,askEmail:false,askPhone:false,cover:null});
 const iso = () => new Date().toISOString();
 const ack = () => ({attemptId:official.attemptId,status:official.status,answerVersion:official.answerVersion,
@@ -113,7 +116,7 @@ try {
   await browser.navigate(`${origin}/q/${shareToken}/start`);
   await browser.until(() => browser.evaluate(`location.pathname === '/q/${shareToken}' && !!document.querySelector('#quiz-admission')`), 'direct start redirect');
   assert.equal(await browser.evaluate(`document.body.textContent.includes('Practice')`), false);
-  assert.deepEqual(await browser.evaluate(`[...document.querySelectorAll('.player-facts dt')].map(node => node.textContent)`), ['Questions','Time limit','Format']);
+  assert.deepEqual(await browser.evaluate(`[...document.querySelectorAll('#quiz-introduction .card-body > p > strong')].map(node => node.textContent)`), ['Questions','Time limit']);
 
   await browser.evaluate(`{
     document.querySelector('[name="name"]').value = 'Offline Student';
@@ -122,6 +125,11 @@ try {
   await browser.until(() => browser.evaluate(`location.pathname.endsWith('/start') && !!document.querySelector('.player-question')`), 'attempt start');
   assert.equal(await browser.evaluate(`JSON.parse(localStorage.getItem('edutest:player:${shareToken}')).format`), 5);
   assert.equal(await browser.evaluate(`document.querySelector('.player-answers').classList.contains('player-answers-grid')`), false);
+  assert.equal(await browser.evaluate(`document.querySelector('#player-header-title').textContent`), 'Snapshot quiz');
+  assert.equal(await browser.evaluate(`document.querySelector('#player-header-progress')`), null);
+  assert.equal(await browser.evaluate(`document.querySelector('.player-quiz-title, .player-current-user')`), null);
+  assert.equal(await browser.evaluate(`document.querySelector('[data-slot="progress-label"]').textContent`), 'Question 1 of 3');
+  assert.equal(await browser.evaluate(`document.querySelector('.player-progress').getAttribute('aria-labelledby')`), 'player-progress-label');
   assert.ok(await browser.evaluate(`{
     const [minutes,seconds] = document.querySelector('[data-slot="remaining"]').textContent.split(':').map(Number);
     minutes * 60 + seconds >= 7190;
@@ -129,6 +137,10 @@ try {
 
   await browser.evaluate(`document.querySelector('input[value="right"]').click();document.querySelector('[data-action="submit"]').click()`);
   await browser.until(() => browser.evaluate(`!!document.querySelector('.player-feedback')`), 'first feedback');
+  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback h3').textContent`), 'Correct');
+  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback').textContent.includes('Your answer')`), false);
+  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback').textContent.includes('Correct answer')`), false);
+  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback').textContent.includes('Right is correct.')`), true);
   await browser.until(() => requests.some(row => row.path.endsWith('/progress')), 'first checkpoint');
   await browser.evaluate(`document.querySelector('[data-action="next"]').click()`);
   await browser.until(() => browser.evaluate(`document.querySelector('#current-question').textContent === 'Second question?'`), 'second question');
@@ -140,8 +152,26 @@ try {
 
   await browser.command('Network.emulateNetworkConditions', {offline:true,latency:0,downloadThroughput:0,uploadThroughput:0,connectionType:'none'});
   await browser.evaluate(`document.querySelector('input[value="wrong"]').click();document.querySelector('[data-action="submit"]').click()`);
+  await browser.until(() => browser.evaluate(`document.querySelector('.player-feedback h3')?.textContent === 'Incorrect'`), 'wrong feedback');
+  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback').textContent.includes('Your answer')`), false);
+  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback').textContent.includes('Correct answer')`), true);
+  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback').textContent.includes('B) Right')`), true);
+  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback').textContent.includes('Right is correct.')`), true);
   await browser.evaluate(`document.querySelector('[data-action="next"]').click()`);
+  await browser.until(() => browser.evaluate(`document.querySelector('#current-question')?.textContent === 'Third question?'`), 'third question');
+  assert.equal(await browser.evaluate(`document.querySelector('[data-slot="progress-label"]').textContent`), 'Question 3 of 3');
+  await browser.evaluate(`document.querySelector('[data-action="skip"]').click()`);
   await browser.until(() => browser.evaluate(`!!document.querySelector('.player-results-header')`), 'offline result');
+  assert.equal(await browser.evaluate(`document.querySelector('.player-score').textContent`), '33%');
+  assert.deepEqual(await browser.evaluate(`[...document.querySelectorAll('.player-review-item [data-slot="verdict"]')].map(node => [node.textContent,node.classList.contains('badge-' + ({Correct:'correct',Incorrect:'wrong',Unanswered:'unanswered'}[node.textContent]))])`),
+    [['Correct',true],['Incorrect',true],['Unanswered',true]]);
+  assert.equal(await browser.evaluate(`(() => {
+    const stored=JSON.parse(localStorage.getItem('edutest:player:${shareToken}'));
+    return stored.answers[2].answerCode === null && stored.answers[2].answeredAt !== null;
+  })()`), true);
+  await browser.evaluate(`document.querySelectorAll('.player-review-item summary')[2].click()`);
+  assert.equal(await browser.evaluate(`document.querySelectorAll('.player-review-item')[2].textContent.includes('Your answer')`), false);
+  assert.equal(await browser.evaluate(`document.querySelectorAll('.player-review-item')[2].textContent.includes('Correct answer')`), true);
   assert.equal(await browser.evaluate(`JSON.parse(localStorage.getItem('edutest:player:${shareToken}')).finishPending`), true);
   assert.equal(await browser.evaluate(`document.querySelector('[data-slot="status"]').textContent.includes('Provisional')`), true);
 
@@ -150,7 +180,7 @@ try {
   await browser.until(() => official?.status === 'completed', 'official finish upload');
   await browser.until(() => browser.evaluate(`JSON.parse(localStorage.getItem('edutest:player:${shareToken}')).result?.official === true`), 'official reconciliation');
   assert.equal(requests.filter(row => row.path.endsWith('/finish')).length, 1);
-  assert.equal(official.answers.length, 2);
+  assert.equal(official.answers.length, questions.length);
   assert.equal(await browser.evaluate(`document.querySelector('[data-slot="status"]').textContent.includes('confirmed')`), true);
   assert.deepEqual(browser.errors, []);
   console.log('Player snapshot/offline browser behavior passed.');

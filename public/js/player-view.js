@@ -41,14 +41,14 @@ export function createPlayerView(t) {
 
   function question(model, callbacks) {
     const fragment = cloneTemplate('question');
-    text(fragment, 'title', model.title);
-    optionalText(fragment, 'identity', model.identity);
+    const progressLabel = t('questionOf', {number: model.number, total: model.total});
+    text(fragment, 'progress-label', progressLabel);
     const timers = slot(fragment, 'timers');
     for (const deadline of model.deadlines) timers.append(timer(deadline));
     const progress = slot(fragment, 'progress');
     progress.max = model.total;
     progress.value = model.confirmedCount;
-    progress.setAttribute('aria-label', t('progress'));
+    progress.setAttribute('aria-valuetext', progressLabel);
     text(fragment, 'question', model.question.content);
     insert(fragment, 'media', callbacks.media(`q:${model.question.id}`, model.question.media));
 
@@ -97,7 +97,6 @@ export function createPlayerView(t) {
     const fragment = cloneTemplate('feedback');
     fragment.firstElementChild.classList.add(model.verdict);
     text(fragment, 'verdict', t(model.verdict));
-    text(fragment, 'answer', `${t('yourAnswer')}: ${model.answer}`);
     optionalText(fragment, 'correct-label', model.showAnswers ? t(model.correctLabel) : '');
     const answers = document.createDocumentFragment();
     for (const answer of model.correctAnswers) {
@@ -159,6 +158,7 @@ export function createPlayerView(t) {
       text(row, 'number', String(index + 1));
       text(row, 'question', item.question);
       text(row, 'verdict', t(item.verdict));
+      slot(row, 'verdict').classList.add(`badge-${item.verdict}`);
       details.addEventListener('toggle', () => {
         if (!details.open || details.dataset.loaded) return;
         details.dataset.loaded = 'true';

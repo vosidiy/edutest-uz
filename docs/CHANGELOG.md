@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Simplified quiz player presentation (2026-10-31)
+
+- Moved current-question text from the shared header to an accessible label above the progress bar, removed duplicate active-question quiz/student identity, and kept the quiz title in the shared header.
+- Made Skip record an unanswered checkpoint and advance immediately without feedback; simplified correct/wrong feedback while preserving captured answer/explanation visibility settings.
+- Displayed result percentages as truncated whole numbers and added correct, wrong, and unanswered review badge styles.
+
 ### Fault-tolerant question draw count (2026-10-31)
 
 - Made **Questions per attempt** round numeric values to the nearest question and silently use the entire pool for missing, malformed, non-finite, zero, negative, or above-pool input instead of returning a validation error.

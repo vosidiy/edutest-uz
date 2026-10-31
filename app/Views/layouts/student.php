@@ -31,8 +31,6 @@
         </a>
         <div id="player-header-context" class="student-header-context" hidden>
             <span id="player-header-title"></span>
-            <span id="player-header-separator" aria-hidden="true" hidden>·</span>
-            <span id="player-header-progress" hidden></span>
         </div>
         <button id="player-header-quit" type="button" class="btn btn-link danger student-header-quit" hidden><?= esc(lang('Player.ui.quitAction')) ?></button>
     </div>

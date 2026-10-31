@@ -9,6 +9,13 @@ export function completionEmoji(percent) {
   return '😢';
 }
 
+export function wholePercent(percent) {
+  const value = Number(percent);
+  return Number.isFinite(value) ? Math.trunc(value) : 0;
+}
+
+export const shouldRevealCorrectAnswer = (verdict, showAnswers) => verdict !== 'correct' && Boolean(showAnswers);
+
 export function resultCounts(items, total) {
   const counts = {correct: 0, wrong: 0, unanswered: 0};
   for (const item of Array.isArray(items) ? items : []) {

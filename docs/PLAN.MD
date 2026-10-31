@@ -28,7 +28,7 @@ Practice mode, text answers, multiple selection, schedules, passcodes, integrity
 2. A browser with an active local attempt is redirected to `/q/{shareToken}/start`.
 3. Start locks the live quiz row, validates the current published definition, draws/shuffles questions and options, and inserts one immutable snapshot in `attempts.snapshot`.
 4. The player stores the loaded run locally. It can continue without a network connection after loading and survives a browser restart through `localStorage`.
-5. Submit and Skip append to an ordered confirmed answer prefix and silently checkpoint the whole prefix.
+5. Submit appends to the ordered confirmed answer prefix and may show configured feedback. Skip appends an explicit unanswered entry and advances immediately without feedback. Both silently checkpoint the whole prefix.
 6. Finish sends the complete answer document. The server locks the attempt, validates it against the stored snapshot, replaces the checkpoint, and calculates the official result.
 7. At the fixed `expires_at`, the browser freezes input, fills the unanswered tail as skipped, renders immediately, and queues an `expired` Finish.
 8. Intentional Exit does the same with reason `exited`.

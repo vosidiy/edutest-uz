@@ -3,8 +3,8 @@ import {createState, PlayerClock, editAnswer, submitAnswer, nextQuestion, finish
   visibleDeadlines, hasPending, mergeServer, receiptOnly} from './player-state.js?v=7';
 import {PlayerSync} from './player-sync.js?v=7';
 import {PlayerTabGuard} from './player-tab-guard.js';
-import {completionEmoji, resultCounts} from './player-presentation.js?v=1';
-import {createPlayerView} from './player-view.js?v=7';
+import {completionEmoji, resultCounts, shouldRevealCorrectAnswer, wholePercent} from './player-presentation.js?v=2';
+import {createPlayerView} from './player-view.js?v=8';
 
 const config = JSON.parse(document.querySelector('#player-config').textContent);
 const root = document.querySelector('#player-root');
@@ -14,8 +14,6 @@ const alertBox = document.querySelector('#player-alert');
 const announcer = document.querySelector('#player-announcer');
 const headerContext = document.querySelector('#player-header-context');
 const headerTitle = document.querySelector('#player-header-title');
-const headerSeparator = document.querySelector('#player-header-separator');
-const headerProgress = document.querySelector('#player-header-progress');
 const headerQuit = document.querySelector('#player-header-quit');
 const storageKey = `edutest:player:${config.shareToken}`;
 const admissionKey = `${storageKey}:admission`;
@@ -117,10 +115,7 @@ function updateHeader() {
   headerContext.hidden = !visible;
   headerTitle.textContent = visible ? state.quiz.title : '';
   const answering = visible && !state.finishReason;
-  headerSeparator.hidden = !answering;
-  headerProgress.hidden = !answering;
   headerQuit.hidden = !answering;
-  if (answering) headerProgress.textContent = t('questionOf', {number: state.index + 1, total: state.items.length});
 }
 
 function updateStatus() {
@@ -221,8 +216,7 @@ function renderQuestion() {
   const question = state.quiz.questions[state.index];
   const item = state.items[state.index];
   root.append(view.question({
-    title: state.quiz.title,
-    identity: state.student?.name || '',
+    number: state.index + 1,
     question,
     item,
     options: question.options.map((option, index) => ({...option, letter: optionLetter(index)})),
@@ -240,14 +234,14 @@ function renderQuestion() {
     onNext: advance,
     media: renderMedia,
     feedback: () => state.quiz.settings.feedback === 'after_each'
-      ? feedback(question, item, grade(question, {answerCodes: item.answerCodes})) : null,
+      ? feedback(question, grade(question, {answerCodes: item.answerCodes})) : null,
   }));
 }
 
 function confirmAnswer(skipped) {
   if (!submitAnswer(state, skipped, clock.now())) return;
+  if (skipped || state.quiz.settings.feedback === 'at_end') nextQuestion(state, clock.now());
   persist();
-  if (state.quiz.settings.feedback === 'at_end') nextQuestion(state, clock.now());
   worker.schedule(0);
   render();
 }
@@ -259,17 +253,10 @@ function advance() {
   render();
 }
 
-function answerText(question, item) {
-  const code = item.answerCodes[0];
-  if (!code) return t('unanswered');
-  const index = question.options.findIndex(option => option.code === code);
-  const option = question.options[index];
-  return `${optionLetter(index)}) ${option?.content || t('mediaImage')}`;
-}
-
-function feedback(question, item, award) {
+function feedback(question, award) {
   const correctAnswers = [];
-  if (state.quiz.settings.showAnswers) {
+  const showAnswers = shouldRevealCorrectAnswer(award.result, state.quiz.settings.showAnswers);
+  if (showAnswers) {
     const index = question.options.findIndex(option => option.code === question.correctCode);
     const option = question.options[index];
     if (option) correctAnswers.push({
@@ -280,8 +267,7 @@ function feedback(question, item, award) {
   }
   return view.feedback({
     verdict: award.result === 'skipped' ? 'unanswered' : award.result,
-    answer: answerText(question, item),
-    showAnswers: state.quiz.settings.showAnswers,
+    showAnswers,
     correctLabel: 'correctAnswer',
     correctAnswers,
     explanation: state.quiz.settings.showAnswers && state.quiz.settings.showExplain ? question.explanation : '',
@@ -300,7 +286,7 @@ function renderResults() {
     heading: state.finishReason === 'exited' ? 'quitComplete' : 'complete',
     emoji: scoreVisible ? completionEmoji(result.percent) : '🎉',
     scoreVisible,
-    percent: result.percent,
+    percent: wholePercent(result.percent),
     total: Number(result.maxScore ?? state.quiz.questions.length),
     counts: scoreVisible ? resultCounts(items, state.quiz.questions.length) : null,
     status: state.result?.official ? 'confirmed' : 'provisional',
@@ -318,7 +304,7 @@ function renderResults() {
     const question = state.quiz.questions[index];
     const media = renderMedia(`q:${question.id}`, question.media);
     if (media) details.append(media);
-    details.append(feedback(question, state.items[index], grade(question, state.answers[index] || {})));
+    details.append(feedback(question, grade(question, state.answers[index] || {})));
   }));
 }
 

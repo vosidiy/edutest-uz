@@ -127,11 +127,13 @@ Player API:
 
 Teacher authoring uses `PUT /api/v1/quizzes/{publicId}` as the only content/status save endpoint. Its document includes storage status `draft|published` and `timeLimitMinutes`; both browser and service normalize the timer, and the service converts it to seconds before committing content, status, publication timestamp, and a refreshed `updated_at` in one transaction. Every explicit **Save quiz** or **Saved** click performs this write. The builder has no autosave, Publish/Unpublish endpoints, version field, conflict/overwrite flow, or public-listing checkbox. Concurrent teacher writes are last-write-wins. Media actions save pending edits only when server IDs are needed; media requests carry no expected version and return refreshed `updatedAt`. Pending-cover handling, in-flight edit merging, retry states, and unsaved-navigation protection remain in force.
 
-The local format is version 5. It stores the snapshot projection, credential, fixed deadline, confirmed answers, answer/server versions, current draft, and pending progress/final outbox flags. Web Locks prevent two tabs for the same share token from advancing the same local run. Confirmed answers cannot be revisited.
+The local format is version 5. It stores the snapshot projection, credential, fixed deadline, confirmed answers, answer/server versions, current draft, and pending progress/final outbox flags. Web Locks prevent two tabs for the same share token from advancing the same local run. Confirmed answers cannot be revisited. Submit may show the configured per-question feedback; Skip records an explicit unanswered entry and advances immediately without feedback.
 
 The countdown derives from `expiresAt`, not decrement persistence, so closing/backgrounding cannot reset it. It renders total minutes and seconds (`120:00`). At zero the player freezes input, adds the unanswered tail, shows local results, and queues Finish with reason `expired`.
 
 Once loaded, the run works through connection loss and browser restarts. Progress is silently retried. Finish carries the full document and supersedes pending progress. There is deliberately no service worker, so opening/reopening a page requires connectivity.
+
+The active player keeps the quiz title in the shared header and places `Question N of M` above the confirmed-answer progress bar. Correct feedback avoids repeating the selected and correct choice; incorrect or unanswered review feedback reveals the correct choice only when the captured visibility settings allow it. Result percentages retain full precision in data and scoring but display as truncated whole numbers. Review verdicts use distinct correct, wrong, and unanswered badges.
 
 ## Lifecycle and reporting
 

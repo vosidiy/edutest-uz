@@ -3,15 +3,12 @@
 <!-- Active question. Template placeholders are replaced without adding layout wrappers. -->
 <template id="player-question-template">
     <div class="player-topbar">
-        <div class="player-current-user">
-            <p class="player-quiz-title" data-slot="title"></p>
-            <small data-slot="identity"></small>
-        </div>
+        <span id="player-progress-label" class="player-progress-label" data-slot="progress-label"></span>
         <div class="player-timers" data-slot="timers"></div>
     </div>
-    <progress class="player-progress" data-slot="progress"></progress>
+    <progress class="player-progress" data-slot="progress" aria-labelledby="player-progress-label"></progress>
     <section class="card player-question" aria-labelledby="current-question">
-        <h2 id="current-question" tabindex="-1" data-slot="question"></h2>
+        <h2 id="current-question" data-slot="question"></h2>
         <template data-slot="media"></template>
         <form data-action="answer">
             <fieldset class="player-answers" data-slot="answers">
@@ -19,8 +16,9 @@
                 <template data-slot="options"></template>
             </fieldset>
             <div class="player-actions" data-slot="answer-actions">
-                <button type="button" class="btn btn-default" data-action="skip"></button>
                 <button type="submit" class="btn btn-primary btn-lg" data-action="submit"></button>
+                <button type="button" class="btn btn-default" data-action="skip">
+                </button>
             </div>
         </form>
         <template data-slot="feedback"></template>
@@ -55,7 +53,6 @@
 <template id="player-feedback-template">
     <section class="player-feedback">
         <h3 data-slot="verdict"></h3>
-        <p data-slot="answer"></p>
         <strong style="margin-top:8px; display:block;" data-slot="correct-label"></strong>
         <template data-slot="correct-answers"></template>
         <strong data-slot="explanation-label"></strong>
@@ -72,7 +69,7 @@
 <template id="player-results-template">
     <section class="card player-results-header">
         <span class="player-completion-icon" aria-hidden="true" data-slot="emoji"></span>
-        <h2 tabindex="-1" data-slot="heading"></h2>
+        <h2 data-slot="heading"></h2>
         <p class="player-result-title" data-slot="title"></p>
         <p class="player-student-identity" data-slot="identity"></p>
         <div class="player-score" data-slot="score"></div>
