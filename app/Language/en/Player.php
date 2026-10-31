@@ -28,7 +28,6 @@ return [
     'ui' => [
         'javascriptRequired' => 'Enable JavaScript to start this quiz. Your details have not been submitted.',
         'start' => 'Start new quiz',
-        'privacyDetails' => 'Privacy details',
         'startFailed' => 'Could not start the quiz. Check your connection and try again.',
         'resultSaved' => 'Result saved',
         'resultWaiting' => 'Waiting to save',
@@ -52,7 +51,6 @@ return [
         'email' => 'Email',
         'phone' => 'Phone',
         'optional' => 'optional',
-        'assessmentNotice' => 'The teacher receives your details, answers, score, timing, IP address, and browser information.',
         'timingNotice' => 'The timer continues offline. Submit before time runs out; pending uploads retry when you reconnect.',
         'loading' => 'Loading your quiz…',
         'questionOf' => 'Question {number} of {total}',

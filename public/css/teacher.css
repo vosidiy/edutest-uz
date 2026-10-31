@@ -1063,7 +1063,7 @@ a.card {
   border: 1px solid var(--border-color-strong);
   border-radius: var(--border-radius-md);
   outline: none;
-  background: var(--bg-color-lower);
+  background: var(--bg-color-base);
   color: var(--text-color-base);
 }
 
