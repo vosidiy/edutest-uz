@@ -22,7 +22,7 @@ The builder rounds numeric timer input to the nearest whole minute from 1–120 
 
 ### `questions` and `question_options`
 
-These tables are the mutable authoring pool. Questions are single-choice only and store `options_layout` as `list` or `grid`. Question text may be blank. On Save, services pad missing choices to two, replace blank choice text with `Option N`, and enforce exactly one correct option by retaining the first marked choice or selecting the first option. Option codes are stable opaque browser answer values.
+These tables are the mutable authoring pool. Questions are single-choice only and store `options_layout` as `list` or `grid`. The builder immediately mirrors that selection as a one-column or two-column answer editor, with a narrow-screen single-column fallback, while the same stored value controls the student player. Question text may be blank. On Save, services pad missing choices to two, replace blank choice text with `Option N`, and enforce exactly one correct option by retaining the first marked choice or selecting the first option. Option codes are stable opaque browser answer values.
 
 Question media is restricted to private images or audio; answer options and covers are image-only. The media API accepts multipart file uploads and does not accept video URLs. Video descriptors from old attempt snapshots are ignored rather than rendered, while the snapshots themselves remain immutable.
 
@@ -37,8 +37,7 @@ One row owns one student's assessment run:
 - `answer_version` provides monotonic replacement and idempotency.
 - `expires_at` is fixed at start and is the only countdown authority.
 - summary columns (`score`, `max_score`, `percent`) support reports without trusting the browser.
-- `token_hash` authorizes the attempt without retaining the bearer token.
-- unique `(quiz_id, start_key)` makes a successful start retry idempotent.
+- the random unique `public_id` is the reporting locator, the per-quiz cookie value, and the pre-issued idempotency key used by Start.
 
 Status is `in_progress`, `completed`, or `abandoned`. `completed` is terminal for normal completion, intentional exit, and browser-reported expiry. `abandoned/expired` is a lazy provisional server result and may be replaced by a valid delayed Finish, which sets `late_sync = 1`.
 
@@ -46,7 +45,7 @@ There are no `quiz_papers`, `attempt_answers`, `practice_keys`, or `cheat_events
 
 ## Attempt snapshot
 
-Start runs in a transaction while holding the quiz row lock. Admission tickets bind only the quiz ID and a random start key. The service first looks up `(quiz_id,start_key)` so a successful retry returns the original attempt even when the live quiz changed afterward. A new start verifies that the current quiz is still published and not deleted, validates its latest authoring state, captures that definition, and inserts the attempt.
+Start runs in a transaction while holding the quiz row lock. A 15-minute admission ticket binds the quiz ID and a server-generated attempt `public_id`. The service first looks up that public ID, so a successful retry returns the original attempt even when the live quiz changed afterward. A new start verifies that the current quiz is still published and not deleted, validates its latest authoring state, captures that definition, and inserts the attempt using the ticket's ID.
 
 The snapshot schema is:
 
@@ -127,7 +126,11 @@ Player API:
 
 Teacher authoring uses `PUT /api/v1/quizzes/{publicId}` as the only content/status save endpoint. Its document includes storage status `draft|published` and `timeLimitMinutes`; both browser and service normalize the timer, and the service converts it to seconds before committing content, status, publication timestamp, and a refreshed `updated_at` in one transaction. Every explicit **Save quiz** or **Saved** click performs this write. The builder has no autosave, Publish/Unpublish endpoints, version field, conflict/overwrite flow, or public-listing checkbox. Concurrent teacher writes are last-write-wins. Media actions save pending edits only when server IDs are needed; media requests carry no expected version and return refreshed `updatedAt`. Pending-cover handling, in-flight edit merging, retry states, and unsaved-navigation protection remain in force.
 
-The local format is version 5. It stores the snapshot projection, credential, fixed deadline, confirmed answers, answer/server versions, current draft, and pending progress/final outbox flags. Web Locks prevent two tabs for the same share token from advancing the same local run. Confirmed answers cannot be revisited. Submit may show the configured per-question feedback; Skip records an explicit unanswered entry and advances immediately without feedback.
+Attempt API requests use one cookie named `edutest_attempt_{shareToken}`. Its raw `public_id` value is HttpOnly, SameSite=Strict, scoped to `/`, Secure on HTTPS, and expires 24 hours after the attempt deadline. The server independently enforces the same grace boundary. Different quiz cookies can coexist; starting another run of the same quiz replaces that quiz's cookie. Assessment URLs keep their public ID and require it to match the cookie selected from the attempt's owning quiz.
+
+Public pages resolve that cookie before rendering. The introduction redirects only an unexpired in-progress run to Start. Start redirects missing sessions to the introduction and terminal/expired sessions to Results; Results performs the inverse active-run redirect. The server injects the resolved attempt ID into the player shell because JavaScript cannot read an HttpOnly cookie.
+
+The local format is version 6. It stores the attempt ID, snapshot projection, fixed deadline, confirmed answers, answer/server versions, current draft, and pending progress/final outbox flags, but no authorization credential. Web Locks prevent two tabs for the same share token from advancing the same local run. A missing local document is reconstructed from the cookie-owned server checkpoint. When localStorage names another attempt, the cookie wins and the old document moves to a recovery key that is never submitted under the new session. Format-5 bearer state is preserved only as unsynchronized recovery data. Confirmed answers cannot be revisited. Submit may show configured feedback; Skip records an explicit unanswered entry and advances immediately without feedback.
 
 The countdown derives from `expiresAt`, not decrement persistence, so closing/backgrounding cannot reset it. It renders total minutes and seconds (`120:00`). At zero the player freezes input, adds the unanswered tail, shows local results, and queues Finish with reason `expired`.
 
@@ -137,7 +140,7 @@ The active player keeps the quiz title in the shared header and places `Question
 
 ## Lifecycle and reporting
 
-The teacher-facing lifecycle is Draft/Active while storage remains `draft|published`. Saving Draft→Active sets `published_at`; later Active saves preserve it, and saving Active→Draft also preserves it. The same manual Save updates the authoring pool for future starts but does not touch existing attempt snapshots. Soft delete preserves the underlying status and does not revoke an existing attempt bearer credential.
+The teacher-facing lifecycle is Draft/Active while storage remains `draft|published`. Saving Draft→Active sets `published_at`; later Active saves preserve it, and saving Active→Draft also preserves it. The same manual Save updates the authoring pool for future starts but does not touch existing attempt snapshots. Soft delete preserves the underlying status and does not revoke an existing attempt cookie.
 
 Teacher list/detail reporting reads summary columns plus `snapshot` and `answers`. Detail reconstructs presented question/option order, selected/correct answers, explanation, and media entirely from the attempt. In-progress reports can show only checkpoints already received; unsynchronized browser work is unknowable.
 
@@ -147,13 +150,15 @@ The per-quiz attempt list contains only attempts with an authoritative `finished
 
 ## Security boundaries
 
+- Successful teacher login or registration creates the existing HttpOnly, SameSite=Lax CodeIgniter session with a rolling one-year lifetime. The framework renews its persistent cookie during session-ID regeneration, retains matching server-side session files for the same configured lifetime, and explicit Logout destroys the authenticated session immediately. Production deployments require HTTPS and secure-cookie configuration.
 - Teacher ownership always comes from `service('auth')->id()`.
 - Session-authenticated mutations use CSRF protection.
-- Player API requests require the player header/filter and attempt bearer credential where applicable.
+- Player API requests require the player header/filter and the matching per-quiz attempt cookie. SameSite=Strict, same-origin/Origin and Fetch Metadata checks, plus the non-form custom header protect cookie-authenticated mutations while player APIs remain outside teacher-session CSRF.
 - SQL uses models, Query Builder, or bound parameters.
 - Views escape authored and identity content as plain text.
 - Uploaded media is validated by content and kept private.
 - Share tokens and browser-visible answer keys are not examination-security boundaries.
+- The raw attempt public ID is intentionally an MVP-strength cookie credential. Anyone who learns it and manually reproduces the cookie can act as that attempt until the server-side grace window closes.
 
 ## Development reset
 

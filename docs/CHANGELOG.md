@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Persistent teacher login (2026-11-01)
+
+- Extended the existing CodeIgniter teacher session from two hours to a rolling one-year lifetime, keeping successful login and registration active across browser restarts without adding a remember-token table or login checkbox.
+- Preserved session-ID regeneration, explicit Logout, active-account checks, CSRF protection, login throttling, and the existing HttpOnly, SameSite=Lax cookie boundary.
+
+### Cookie-based attempt sessions (2026-11-01)
+
+- Replaced browser-stored bearer credentials and server-side token hashes with one persistent HttpOnly, SameSite=Strict raw `public_id` cookie per quiz, retaining the existing assessment URLs and player request boundary.
+- Made admission tickets pre-issue the attempt public ID so successful Start retries remain idempotent without `start_key`; removed `attempts.token_hash`, `attempts.start_key`, bearer parsing, and credential-bearing browser/API state.
+- Added server-driven introduction/start/results redirects, cookie-only reconstruction of missing local progress, format-6 local state, mismatch recovery storage, and a server-enforced 24-hour post-deadline synchronization/result grace period.
+- Updated the canonical schema and destructive user-preserving development reset for the reduced attempt table; existing databases require the documented manual phpMyAdmin `ALTER TABLE`.
+
+### Builder answer-layout mirroring (2026-11-01)
+
+- Made the answer editor immediately mirror each question's List or Grid selection, using one-column or two-column answer cards while preserving the existing player layout setting and save behavior.
+
 ### Simplified quiz player presentation (2026-10-31)
 
 - Moved current-question text from the shared header to an accessible label above the progress bar, removed duplicate active-question quiz/student identity, and kept the quiz title in the shared header.

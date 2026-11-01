@@ -168,7 +168,7 @@ final class TeacherResultsServiceTest extends PlayerTestCase
         self::assertSame(['A', 'B'], array_column($report['questions'][0]['options'], 'label'));
         self::assertNotNull($report['questions'][0]['answeredAt']);
         $json = json_encode($report, JSON_THROW_ON_ERROR);
-        foreach (['token_hash', 'start_key', 'media_src'] as $private) {
+        foreach (['media_src'] as $private) {
             self::assertStringNotContainsString($private, $json);
         }
     }
@@ -195,7 +195,7 @@ final class TeacherResultsServiceTest extends PlayerTestCase
         $tail = ['questionId' => $attempt['quiz']['questions'][1]['id'], 'answerCode' => null, 'answeredAt' => null];
         $this->player->assessment->finish(
             $attempt['attemptId'],
-            $attempt['credential'],
+            $attempt["attemptId"],
             $this->finishBody($attempt, [$first, $tail], 1, 'exited'),
         );
 
@@ -215,7 +215,7 @@ final class TeacherResultsServiceTest extends PlayerTestCase
         }
         $this->player->assessment->finish(
             $attempt['attemptId'],
-            $attempt['credential'],
+            $attempt["attemptId"],
             $this->finishBody($attempt, $answers, count($answers)),
         );
     }

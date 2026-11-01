@@ -4,12 +4,16 @@ import vm from 'node:vm';
 
 const source = fs.readFileSync(new URL('../../public/js/builder.js', import.meta.url), 'utf8');
 const header = fs.readFileSync(new URL('../../app/Views/teacher/partials/quiz_header.php', import.meta.url), 'utf8');
+const builder = fs.readFileSync(new URL('../../app/Views/teacher/builder.php', import.meta.url), 'utf8');
 assert.doesNotMatch(source, /autosave|scheduleAutosave|shouldAutosave/i);
 assert.doesNotMatch(source, /addVideo|embedUrl|directVideo|<video|<iframe/i);
 assert.doesNotMatch(source + header, /preview\s*:|this\.preview|preview\s*=\s*(?:true|false)|preview-paper|preview-options/i);
 assert.doesNotMatch(source + header, /version_conflict|conflictDialog|overwriteConflict|quiz\.listed|Show on my page/i);
 assert.match(header, /:class="hasChanges \? 'btn-primary' : 'btn-default'"/);
 assert.match(header, /hasChanges \? 'Save quiz' : 'Saved'/);
+assert.match(builder, /class="answer-list"/);
+assert.match(builder, /'answer-list-grid': selectedQuestion\.optionsLayout === 'grid'/);
+assert.match(builder, /<div class="answer-list"[\s\S]*v-for="\(option,index\) in selectedQuestion\.options"/);
 const window = {};
 vm.runInNewContext(source, {window, document: {querySelector: () => null}});
 

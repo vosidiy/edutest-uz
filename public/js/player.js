@@ -1,7 +1,7 @@
 import {grade, summarize} from './player-scoring.js?v=5';
 import {createState, PlayerClock, editAnswer, submitAnswer, nextQuestion, finishTimed, quitQuiz,
-  visibleDeadlines, hasPending, mergeServer, receiptOnly} from './player-state.js?v=7';
-import {PlayerSync} from './player-sync.js?v=7';
+  visibleDeadlines, hasPending, mergeServer, receiptOnly} from './player-state.js?v=8';
+import {PlayerSync} from './player-sync.js?v=8';
 import {PlayerTabGuard} from './player-tab-guard.js';
 import {completionEmoji, resultCounts, shouldRevealCorrectAnswer, wholePercent} from './player-presentation.js?v=2';
 import {createPlayerView} from './player-view.js?v=8';
@@ -17,6 +17,7 @@ const headerTitle = document.querySelector('#player-header-title');
 const headerQuit = document.querySelector('#player-header-quit');
 const storageKey = `edutest:player:${config.shareToken}`;
 const admissionKey = `${storageKey}:admission`;
+const recoveryKey = attemptId => `${storageKey}:recovery:${attemptId || Date.now()}`;
 const tabGuard = new PlayerTabGuard(config.shareToken);
 const t = (key, values = {}) => Object.entries(values).reduce(
   (text, [name, value]) => String(text).replaceAll(`{${name}}`, String(value)), config.ui[key] || key,
@@ -60,16 +61,15 @@ function showAlert() {
   alertBox.hidden = messages.length === 0;
 }
 
-async function request(path, {method = 'GET', body, credential, lock = method !== 'GET'} = {}) {
+async function request(path, {method = 'GET', body, lock = method !== 'GET'} = {}) {
   if (lock && !tabGuard.allowed) throw Object.assign(new Error(t('tabBlocked')), {code: 'tab_inactive'});
   const headers = {'X-EduTest-Player': '1', Accept: 'application/json'};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  if (credential) headers.Authorization = `Bearer ${credential}`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
   try {
     const response = await fetch(config.apiBase + path, {
-      method, headers, credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer',
+      method, headers, credentials: 'same-origin', cache: 'no-store', referrerPolicy: 'no-referrer',
       signal: controller.signal, body: body === undefined ? undefined : JSON.stringify(body),
     });
     let value;
@@ -86,6 +86,12 @@ async function request(path, {method = 'GET', body, credential, lock = method !=
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function preserveLocal(value) {
+  if (!value) return;
+  write(recoveryKey(value.attemptId), value);
+  write(storageKey, null);
 }
 
 const worker = new PlayerSync(() => state, request, {
@@ -151,6 +157,7 @@ async function start(event) {
     const body = {ticket: admission.ticket};
     for (const [key, value] of new FormData(form)) body[key] = value;
     const response = await request('/starts', {method: 'POST', body});
+    if (state && state.attemptId !== response.data.attemptId) preserveLocal(state);
     state = createState(response.data);
     write(admissionKey, null);
     persist();
@@ -169,7 +176,7 @@ async function start(event) {
 }
 
 async function activate(recover = true) {
-  if (!state || state.format !== 5 || state.shareToken !== config.shareToken) {
+  if (!state || state.format !== 6 || state.shareToken !== config.shareToken) {
     window.location.replace(config.quizUrl);
     return;
   }
@@ -187,6 +194,23 @@ async function activate(recover = true) {
   tick();
   if (recover && navigator.onLine) worker.recover();
   else worker.flush();
+}
+
+async function restoreSession() {
+  if (!config.attemptId || !await claim()) {
+    window.location.replace(config.quizUrl);
+    return;
+  }
+  try {
+    const response = await request(`/assessments/${config.attemptId}`, {lock: false});
+    state = createState(response.data);
+    persist();
+    await activate(false);
+  } catch (error) {
+    lastError = error.message;
+    showAlert();
+    window.location.replace(config.quizUrl);
+  }
 }
 
 function optionLetter(index) {
@@ -341,7 +365,7 @@ function renderMedia(key, descriptor) {
 async function refreshMedia() {
   if (!state || !navigator.onLine || !await claim()) return;
   const response = await request(`/assessments/${state.attemptId}/media`, {
-    method: 'POST', body: {}, credential: state.credential,
+    method: 'POST', body: {},
   });
   if (!mergeServer(state, response.data)) throw new Error(t('conflictText'));
   persist();
@@ -372,8 +396,7 @@ document.querySelector('#keep-local').addEventListener('click', () => {
 });
 document.querySelector('#use-server').addEventListener('click', () => {
   if (!remoteConflict || !state) return;
-  const credential = state.credential;
-  state = createState({...remoteConflict, credential});
+  state = createState(remoteConflict);
   worker.paused = false;
   remoteConflict = null;
   persist();
@@ -387,17 +410,19 @@ if (admissionForm) {
   admissionForm.querySelector('button[type="submit"]').disabled = false;
 }
 
-if (state?.format !== 5 || state?.shareToken !== config.shareToken) {
-  if (state) write(storageKey, null);
+if (state?.format !== 6 || state?.shareToken !== config.shareToken) {
+  if (state) preserveLocal(state);
+  state = null;
+}
+
+if (state && config.attemptId && state.attemptId !== config.attemptId) {
+  preserveLocal(state);
   state = null;
 }
 
 if (config.page === 'intro') {
-  if (state && !state.finishReason) window.location.replace(`${config.quizUrl}/start`);
 } else if (!state) {
-  window.location.replace(config.quizUrl);
-} else if (config.page === 'start' && state.finishReason) {
-  window.location.replace(`${config.quizUrl}/results`);
+  restoreSession();
 } else {
   activate();
 }

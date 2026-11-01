@@ -97,7 +97,7 @@ abstract class PlayerTestCase extends CIUnitTestCase
     {
         $ticket = $this->player->admission->ticket($quiz['share']);
         $data = $this->player->admission->start(['ticket' => $ticket['ticket'], 'name' => 'Student'] + $identity);
-        return $data + $this->player->assessment->load($data['attemptId'], $data['credential']);
+        return $this->player->assessment->load($data['attemptId'], $data['attemptId']);
     }
 
     protected function submission(array $attempt, int $index, bool $correct = true): array

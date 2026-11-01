@@ -35,7 +35,7 @@ final class AdmissionService
 
         $claims = [
             'quizId'   => (string) $quiz['id'],
-            'startKey' => bin2hex(random_bytes(16)),
+            'attemptId'=> bin2hex(random_bytes(16)),
         ];
 
         return [
@@ -57,11 +57,14 @@ final class AdmissionService
 
             // A successful start replay wins over later quiz edits, Draft status, or deletion.
             $existing = $this->store->db->table('attempts')
-                ->where('quiz_id', $quiz['id'])
-                ->where('start_key', $claims['startKey'])
+                ->where('public_id', $claims['attemptId'])
                 ->get()->getRowArray();
             if ($existing !== null) {
-                return $this->startResult($existing, (string) $claims['startKey']);
+                if ((string) $existing['quiz_id'] !== (string) $quiz['id']) {
+                    throw new PlayerException('invalid_credential', 401);
+                }
+
+                return $this->startResult($existing, $quiz);
             }
 
             if ($quiz['deleted_at'] !== null || $quiz['status'] !== 'published') {
@@ -72,13 +75,9 @@ final class AdmissionService
             $this->definitions->assertReady($snapshot);
 
             $now = PlayerStore::now();
-            $publicId = bin2hex(random_bytes(16));
-            $token = $this->credentials->attemptToken($publicId, (string) $claims['startKey']);
             $attempt = [
                 'quiz_id'       => $quiz['id'],
-                'public_id'     => $publicId,
-                'token_hash'    => PlayerStore::binary(hash('sha256', $token, true)),
-                'start_key'     => $claims['startKey'],
+                'public_id'     => $claims['attemptId'],
                 'name'          => $identity['name'],
                 'email'         => $identity['email'],
                 'phone'         => $identity['phone'],
@@ -103,19 +102,18 @@ final class AdmissionService
                 throw new PlayerException('server_error', 500);
             }
 
-            return ['attemptId' => $publicId, 'credential' => $token];
+            return $this->startResult($attempt, $quiz);
         });
     }
 
-    /** @return array{attemptId:string,credential:string} */
-    private function startResult(array $attempt, string $startKey): array
+    /** @return array{attemptId:string,shareToken:string,expiresAt:string} */
+    private function startResult(array $attempt, array $quiz): array
     {
-        $token = $this->credentials->attemptToken((string) $attempt['public_id'], $startKey);
-        if (! hash_equals((string) $attempt['token_hash'], hash('sha256', $token, true))) {
-            throw new PlayerException('invalid_credential', 401);
-        }
-
-        return ['attemptId' => (string) $attempt['public_id'], 'credential' => $token];
+        return [
+            'attemptId' => (string) $attempt['public_id'],
+            'shareToken'=> (string) $quiz['share_token'],
+            'expiresAt' => (string) $attempt['expires_at'],
+        ];
     }
 
     /** @return array{name:string,email:?string,phone:?string} */
@@ -157,8 +155,8 @@ final class AdmissionService
     {
         if (count($claims) !== 2
             || ! ctype_digit((string) ($claims['quizId'] ?? ''))
-            || ! is_string($claims['startKey'] ?? null)
-            || preg_match('/^[a-f0-9]{32}$/D', $claims['startKey']) !== 1) {
+            || ! is_string($claims['attemptId'] ?? null)
+            || preg_match('/^[a-f0-9]{32}$/D', $claims['attemptId']) !== 1) {
             throw new PlayerException('invalid_credential', 401);
         }
     }

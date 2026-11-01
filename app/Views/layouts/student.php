@@ -52,7 +52,7 @@
 <?= $this->include('student/partials/player_templates') ?>
 <script type="application/json" id="player-config"><?= json_encode([
     'shareToken' => $shareToken, 'page' => $page, 'apiBase' => site_url('api/v1/player'),
-    'quizUrl' => site_url('q/' . $shareToken), 'ui' => lang('Player.ui'),
+    'quizUrl' => site_url('q/' . $shareToken), 'attemptId' => $attemptId ?? null, 'ui' => lang('Player.ui'),
 ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?></script>
 <script type="module" src="<?= esc(base_url('js/player.js') . '?v=' . filemtime(FCPATH . 'js/player.js'), 'attr') ?>"></script>
 </body>

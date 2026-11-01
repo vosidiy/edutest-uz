@@ -24,7 +24,7 @@ const snapshot = () => ({
   cover:null,
   questions,
 });
-const data = () => ({attemptId:'attempt',credential:'secret',status:'in_progress',answerVersion:0,answers:[],
+const data = () => ({attemptId:'attempt',status:'in_progress',answerVersion:0,answers:[],
   startedAt,expiresAt,finishedAt:null,finishReason:null,lateSync:false,student:{name:'Alex'},quiz:snapshot(),result:null});
 const fresh = () => createState(data());
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -51,6 +51,8 @@ for (const fixture of cases) {
 
 test('confirmed answers form an ordered versioned prefix', () => {
   const state = fresh();
+  assert.equal(state.format, 6);
+  assert.equal('credential' in state, false);
   answer(state);
   assert.equal(state.answerVersion, 1);
   assert.equal(state.progressPending, true);
@@ -110,6 +112,7 @@ test('Finish sends the complete latest document and overrides queued progress', 
     await worker.flush();
     assert.equal(requests.length, 1);
     assert.ok(requests[0].path.endsWith('/finish'));
+    assert.equal('credential' in requests[0].request, false);
     assert.equal(requests[0].request.body.answers.length, 2);
     assert.equal(hasPending(state), false);
   } finally { worker.stop(); }

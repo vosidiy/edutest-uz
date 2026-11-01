@@ -1,4 +1,4 @@
-import {hasPending, mergeServer} from './player-state.js?v=7';
+import {hasPending, mergeServer} from './player-state.js?v=8';
 
 /** Durable, latest-document synchronization for one assessment attempt. */
 export class PlayerSync {
@@ -34,7 +34,7 @@ export class PlayerSync {
 
   async drain() {
     const state = this.getState();
-    if (!state || state.format !== 5 || this.busy || this.paused || this.callbacks.canSend?.() === false
+    if (!state || state.format !== 6 || this.busy || this.paused || this.callbacks.canSend?.() === false
       || (!hasPending(state) && !this.needsLoad)) return;
 
     this.busy = true;
@@ -46,7 +46,7 @@ export class PlayerSync {
         && (hasPending(state) || this.needsLoad)) {
         if (this.needsLoad) {
           this.needsLoad = false;
-          const response = await this.send(`/assessments/${state.attemptId}`, {credential: state.credential});
+          const response = await this.send(`/assessments/${state.attemptId}`);
           if (this.getState() !== state) return;
           if (!mergeServer(state, response.data)) {
             this.paused = true;
@@ -62,7 +62,7 @@ export class PlayerSync {
           const version = state.answerVersion;
           const answers = JSON.parse(JSON.stringify(state.answers));
           const response = await this.send(`/assessments/${state.attemptId}/progress`, {
-            method: 'PUT', credential: state.credential, body: {answerVersion: version, answers},
+            method: 'PUT', body: {answerVersion: version, answers},
           });
           if (this.getState() !== state) return;
           state.serverVersion = Math.max(state.serverVersion, Number(response.data.answerVersion || version));
@@ -74,7 +74,7 @@ export class PlayerSync {
 
         if (state.finishPending) {
           const response = await this.send(`/assessments/${state.attemptId}/finish`, {
-            method: 'POST', credential: state.credential, body: state.finishRecord,
+            method: 'POST', body: state.finishRecord,
           });
           if (this.getState() !== state) return;
           if (!mergeServer(state, response.data)) {

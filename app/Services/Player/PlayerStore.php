@@ -55,12 +55,6 @@ final class PlayerStore
         return (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
     }
 
-    /** Binary digests must not pass through a text escaper (notably SQLite's NUL handling). */
-    public static function binary(string $value): \CodeIgniter\Database\RawSql
-    {
-        return new \CodeIgniter\Database\RawSql("X'" . bin2hex($value) . "'");
-    }
-
     public static function iso(?string $value): ?string
     {
         return $value === null ? null : (new DateTimeImmutable($value, new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s.u\Z');

@@ -43,7 +43,7 @@ test('page exit during acquisition cannot activate an old page or leave a lock h
   const pending=guard.acquire();guard.release();await callback({name:'q'});
   assert.equal(await pending,false);assert.equal(guard.allowed,false);
 });
-const payload=()=>({attemptId:'a',credential:'secret',status:'in_progress',answerVersion:1,startedAt:'2026-01-01T00:00:00Z',
+const payload=()=>({attemptId:'a',status:'in_progress',answerVersion:1,startedAt:'2026-01-01T00:00:00Z',
   expiresAt:'2026-01-01T02:00:00Z',finishReason:null,lateSync:false,result:null,student:{name:'Student'},
   answers:[{questionId:'1',answerCode:'a',answeredAt:'2026-01-01T00:01:00.000Z'}],quiz:{schemaVersion:1,cover:null,
     quiz:{title:'Quiz',description:'',shareToken:'123456789',timeLimitSec:7200,feedback:'at_end',showScore:true,showAnswers:false,showExplain:false},
@@ -51,6 +51,7 @@ const payload=()=>({attemptId:'a',credential:'secret',status:'in_progress',answe
       {id:'2',content:'Two',optionsLayout:'list',correctCode:'a',media:null,explanation:'',options:[{id:'21',code:'a',content:'A',media:null},{id:'22',code:'b',content:'B',media:null}]}]}});
 test('player resumes after the stored confirmed prefix',()=>{
   const state=createState(payload());
+  assert.equal(state.format,6);assert.equal('credential' in state,false);
   assert.equal(state.index,1);assert.equal(state.phase,'answering');
   const complete=payload();complete.status='completed';complete.answerVersion=2;complete.finishReason='completed';complete.result={official:true};
   complete.answers.push({questionId:'2',answerCode:'a',answeredAt:'2026-01-01T00:02:00.000Z'});

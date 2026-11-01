@@ -21,7 +21,7 @@ abstract class ApiController extends BaseController
             $status = $error->status;
             $body = ['error' => ['code' => $error->errorCode, 'message' => $error->getMessage(), 'fields' => (object) $error->fields]];
         } catch (Throwable $error) {
-            // Never record a request, credential, answer, or query body.
+            // Never record a request, attempt cookie, answer, or query body.
             log_message('error', 'Student API failure ({type}).', ['type' => $error::class]);
             $status = 500;
             $body = ['error' => ['code' => 'server_error', 'message' => lang('Player.errors.server_error'), 'fields' => (object) []]];
@@ -39,13 +39,4 @@ abstract class ApiController extends BaseController
         return json_decode($body, true, 32, JSON_THROW_ON_ERROR);
     }
 
-    protected function bearer(): string
-    {
-        $token = \App\Services\Player\BearerHeader::token(
-            $this->request->getHeaderLine('Authorization'),
-            service('superglobals')->getServerArray(),
-        );
-        if ($token === null) throw new PlayerException('invalid_credential', 401);
-        return $token;
-    }
 }

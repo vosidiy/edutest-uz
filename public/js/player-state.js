@@ -39,10 +39,9 @@ export function createState(data) {
   const answers = copy(data.answers || []);
   const terminal = data.status !== 'in_progress';
   return {
-    format: 5,
+    format: 6,
     shareToken: quiz.shareToken,
     attemptId: data.attemptId,
-    credential: data.credential,
     quiz,
     student: copy(data.student || null),
     startedAt: data.startedAt,
@@ -145,7 +144,7 @@ export function expireIfDue(state, now = state.lastClock) {
 }
 
 export function hasPending(state) {
-  return state?.format === 5 && (state.progressPending || state.finishPending);
+  return state?.format === 6 && (state.progressPending || state.finishPending);
 }
 export const hasUploadPending = hasPending;
 

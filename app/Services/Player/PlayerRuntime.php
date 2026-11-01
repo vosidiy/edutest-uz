@@ -12,6 +12,7 @@ final class PlayerRuntime
 {
     public readonly AdmissionService $admission;
     public readonly AssessmentService $assessment;
+    public readonly AttemptSessionService $sessions;
 
     public function __construct(?BaseConnection $db = null, ?MediaService $media = null, ?AttemptSnapshotService $snapshots = null)
     {
@@ -19,7 +20,8 @@ final class PlayerRuntime
         $media ??= new MediaService($store->db);
         $snapshots ??= new AttemptSnapshotService($store->db, $media);
         $credentials = new Credentials();
+        $this->sessions = new AttemptSessionService($store);
         $this->admission = new AdmissionService($store, $credentials, new DefinitionService(), $snapshots);
-        $this->assessment = new AssessmentService($store, $snapshots, new ScoringService());
+        $this->assessment = new AssessmentService($store, $snapshots, new ScoringService(), $this->sessions);
     }
 }

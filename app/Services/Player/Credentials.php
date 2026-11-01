@@ -29,12 +29,6 @@ final class Credentials
         return $data['claims'];
     }
 
-    /** Deterministic pseudorandom credential permits safe start replay without storing plaintext. */
-    public function attemptToken(string $publicId, string $startKey): string
-    {
-        return hash_hmac('sha256', 'assessment:' . $publicId . ':' . $startKey, $this->key());
-    }
-
     private function key(): string
     {
         $key = (string) config('Encryption')->key;

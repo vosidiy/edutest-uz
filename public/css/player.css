@@ -310,8 +310,15 @@ summary { cursor: pointer; user-select: none; }
 .player-feedback.wrong { border-left-color: var(--red-600); background: var(--red-100); }
 .player-feedback h3 { font-size: 1rem;}
 .player-feedback p { white-space: pre-wrap; overflow-wrap: anywhere; }
-.player-media { margin-top:8px; max-width: 100%; background: var(--neutral-400); border-radius: var(--border-radius-md); }
-.player-media img { display: block; width: 100%; max-height: 250px; border-radius: var(--border-radius-md); object-fit: contain; }
+
+.player-media { margin-top:8px; max-width: 100%; background: var(--neutral-400); border-radius: var(--border-radius-md); padding:4px;}
+
+.player-media img { display: block; width: 100%; height: 250px; border-radius: var(--border-radius-md); object-fit: contain; }
+
+.player-question > .player-media > img { 
+  max-height: 450px; height:auto;
+}
+
 .player-media audio { width: 100%; }
 .player-media .btn { margin-top: 8px; }
 .player-sync-status { min-height: 26px; padding: 16px 0; font-size: .9rem; color: var(--neutral-600); display: flex; align-items: center; gap: 12px; }

@@ -6,21 +6,23 @@
 - `/q/{shareToken}/start` is the player.
 - `/q/{shareToken}/results` reopens the result view.
 
-There is no `/play` route. Direct access to `/start` without a matching browser-local attempt returns to the introduction. If the introduction finds an active local attempt for that share token, it redirects to `/start` automatically.
+There is no `/play` route. Direct access to `/start` without a matching attempt cookie returns to the introduction. An unexpired active cookie redirects the introduction to `/start`; terminal or expired cookies can reopen `/results` during their grace period.
 
 Name is required. Email and phone are optional and are rendered only when their captured quiz settings enable them.
 
 ## Start
 
-The browser first requests a short-lived admission ticket. The ticket binds `quizId` and a random `startKey`. Start is idempotent: a retry with the same successful ticket returns the attempt stored for `(quiz_id,start_key)`. A first Start uses the latest published quiz definition, even if the teacher edited it after issuing the ticket.
+The browser first requests a short-lived admission ticket. The ticket binds `quizId` and a server-generated attempt `public_id`. Start is idempotent: a retry with the same successful ticket returns the attempt already stored under that ID. A first Start uses the latest published quiz definition, even if the teacher edited it after issuing the ticket.
 
-For a new start, the server locks the current published quiz, validates it, applies draw/question/option shuffling, inserts the attempt-owned snapshot, and returns its student projection with the attempt bearer credential and fixed `expiresAt`.
+For a new start, the server locks the current published quiz, validates it, applies draw/question/option shuffling, inserts the attempt-owned snapshot, and returns its student projection with the fixed `expiresAt`. The response sets `edutest_attempt_{shareToken}` to the raw public ID as a persistent HttpOnly, SameSite=Strict cookie. It expires 24 hours after the quiz deadline, while the deadline itself still stops answering.
 
 The projection includes answer keys by design so the loaded player can provide feedback and immediate offline results. It never exposes private media paths; those are replaced by short-lived signed URLs.
 
 ## Local state and no backtracking
 
-Local state format 5 contains the attempt ID/credential, snapshot projection, fixed timestamps, answer prefix/version, current draft, terminal data, and progress/final outbox flags. It is scoped by share token in `localStorage`.
+Local state format 6 contains the attempt ID, snapshot projection, fixed timestamps, answer prefix/version, current draft, terminal data, and progress/final outbox flags. It contains no authorization credential and remains scoped by share token in `localStorage`.
+
+When the cookie exists but local state does not, the online player rebuilds local state from the latest server checkpoint. If the cookie and localStorage identify different attempts, the cookie-owned attempt wins and the older local document is moved to an unsynchronized recovery key. Format-5 bearer documents follow the same clean-cutover recovery path and cannot upload.
 
 Only one tab may control a local run. A Web Lock is held per share token; another tab shows the blocked state. A missing Web Locks API is surfaced as a reduced-safety warning.
 
@@ -61,7 +63,7 @@ Visibility is captured in the attempt snapshot:
 
 ## Privacy and media
 
-The assessment stores disclosed identity, IP, browser agent, snapshot, checkpoints, result, and timing. The introduction explains this collection. Player endpoints are CSRF-exempt because they do not use teacher sessions; they require the player request boundary and bearer credential as applicable.
+The assessment stores disclosed identity, IP, browser agent, snapshot, checkpoints, result, and timing. The introduction explains this collection. Player endpoints are CSRF-exempt because they do not use teacher sessions; they require the matching attempt cookie plus the player request boundary's custom header, same-origin, Origin, and Fetch Metadata checks.
 
 Media renewal is attempt-bound. The server resolves the requested key only inside that attempt's stored snapshot and issues a new signed URL. Editing or deleting the live quiz does not change the media references an existing attempt is authorized to request.
 

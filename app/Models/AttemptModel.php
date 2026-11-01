@@ -15,8 +15,6 @@ final class AttemptModel extends Model
     protected $allowedFields = [
         'quiz_id',
         'public_id',
-        'token_hash',
-        'start_key',
         'name',
         'email',
         'phone',

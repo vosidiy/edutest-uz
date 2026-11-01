@@ -6,7 +6,6 @@ namespace Tests\App\Services;
 
 use App\Exceptions\PlayerException;
 use App\Services\AttemptSnapshotService;
-use App\Services\Player\PlayerStore;
 use App\Services\TeacherResultsService;
 use Tests\Support\PlayerTestCase;
 
@@ -41,7 +40,7 @@ final class StudentPlayerTest extends PlayerTestCase
         $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
 
         $started = $this->player->admission->start(['ticket' => $ticket['ticket'], 'name' => 'Alice']);
-        $loaded = $this->player->assessment->load($started['attemptId'], $started['credential']);
+        $loaded = $this->player->assessment->load($started['attemptId'], $started['attemptId']);
 
         self::assertSame('Edited after ticket', $loaded['quiz']['questions'][0]['content']);
     }
@@ -77,18 +76,18 @@ final class StudentPlayerTest extends PlayerTestCase
     {
         $attempt = $this->startQuiz($this->quiz(count: 2));
         $first = $this->submission($attempt, 0);
-        $ack = $this->player->assessment->progress($attempt['attemptId'], $attempt['credential'], $this->progressBody([$first], 1));
+        $ack = $this->player->assessment->progress($attempt['attemptId'], $attempt["attemptId"], $this->progressBody([$first], 1));
         self::assertSame(1, $ack['answerVersion']);
-        self::assertSame($ack, $this->player->assessment->progress($attempt['attemptId'], $attempt['credential'], $this->progressBody([$first], 1)));
+        self::assertSame($ack, $this->player->assessment->progress($attempt['attemptId'], $attempt["attemptId"], $this->progressBody([$first], 1)));
 
         $changed = $first;
         $changed['answerCode'] = null;
         $this->expectPlayerError('progress_conflict', fn () => $this->player->assessment->progress(
-            $attempt['attemptId'], $attempt['credential'], $this->progressBody([$changed], 1),
+            $attempt['attemptId'], $attempt["attemptId"], $this->progressBody([$changed], 1),
         ));
 
         $second = $this->submission($attempt, 1, false);
-        $ack = $this->player->assessment->progress($attempt['attemptId'], $attempt['credential'], $this->progressBody([$first, $second], 3));
+        $ack = $this->player->assessment->progress($attempt['attemptId'], $attempt["attemptId"], $this->progressBody([$first, $second], 3));
         self::assertSame(3, $ack['answerVersion']);
     }
 
@@ -96,15 +95,15 @@ final class StudentPlayerTest extends PlayerTestCase
     {
         $attempt = $this->startQuiz($this->quiz(count: 2));
         $first = $this->submission($attempt, 0);
-        $this->player->assessment->progress($attempt['attemptId'], $attempt['credential'], $this->progressBody([$first], 1));
+        $this->player->assessment->progress($attempt['attemptId'], $attempt["attemptId"], $this->progressBody([$first], 1));
         $second = $this->submission($attempt, 1, false);
         $body = $this->finishBody($attempt, [$first, $second], 2);
-        $finished = $this->player->assessment->finish($attempt['attemptId'], $attempt['credential'], $body);
+        $finished = $this->player->assessment->finish($attempt['attemptId'], $attempt["attemptId"], $body);
 
         self::assertSame('completed', $finished['status']);
         self::assertSame(1, $finished['result']['score']);
         self::assertSame('50.00', $finished['result']['percent']);
-        self::assertSame($finished, $this->player->assessment->finish($attempt['attemptId'], $attempt['credential'], $body));
+        self::assertSame($finished, $this->player->assessment->finish($attempt['attemptId'], $attempt["attemptId"], $body));
     }
 
     public function testExitFillsUnreachedTailAndRejectsFurtherProgress(): void
@@ -114,12 +113,12 @@ final class StudentPlayerTest extends PlayerTestCase
         $tail = ['questionId' => $attempt['quiz']['questions'][1]['id'], 'answerCode' => null, 'answeredAt' => null];
         $finished = $this->player->assessment->finish(
             $attempt['attemptId'],
-            $attempt['credential'],
+            $attempt["attemptId"],
             $this->finishBody($attempt, [$first, $tail], 1, 'exited'),
         );
         self::assertSame('exited', $finished['finishReason']);
         $this->expectPlayerError('attempt_finalized', fn () => $this->player->assessment->progress(
-            $attempt['attemptId'], $attempt['credential'], $this->progressBody([$first], 2),
+            $attempt['attemptId'], $attempt["attemptId"], $this->progressBody([$first], 2),
         ));
     }
 
@@ -131,7 +130,7 @@ final class StudentPlayerTest extends PlayerTestCase
 
         $this->expectPlayerError('invalid_progress', fn () => $this->player->assessment->finish(
             $attempt['attemptId'],
-            $attempt['credential'],
+            $attempt["attemptId"],
             $this->finishBody($attempt, [$first, $tail], 1, 'completed'),
         ));
     }
@@ -140,20 +139,24 @@ final class StudentPlayerTest extends PlayerTestCase
     {
         $attempt = $this->startQuiz($this->quiz(count: 1));
         $answer = $this->submission($attempt, 0);
-        $this->player->assessment->progress($attempt['attemptId'], $attempt['credential'], $this->progressBody([$answer], 1));
+        $this->player->assessment->progress($attempt['attemptId'], $attempt["attemptId"], $this->progressBody([$answer], 1));
+        $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        $startedAt = $now->modify('-3 hours');
+        $answeredAt = $now->modify('-2 hours');
+        $expiresAt = $now->modify('-1 hour');
         $this->db->table('attempts')->where('public_id', $attempt['attemptId'])->update([
-            'started_at' => '1999-12-31 23:00:00.000000',
-            'expires_at' => '2000-01-01 00:00:00.000000',
+            'started_at' => $startedAt->format('Y-m-d H:i:s.u'),
+            'expires_at' => $expiresAt->format('Y-m-d H:i:s.u'),
         ]);
-        $provisional = $this->player->assessment->load($attempt['attemptId'], $attempt['credential']);
+        $provisional = $this->player->assessment->load($attempt['attemptId'], $attempt['attemptId']);
         self::assertSame('abandoned', $provisional['status']);
         self::assertTrue($provisional['result']['provisional']);
 
         // Simulate a browser record made at the original deadline. It remains valid even
         // though the server resolved the attempt lazily before receiving it.
-        $answer['answeredAt'] = '1999-12-31T23:30:00.000Z';
-        $body = $this->finishBody($attempt, [$answer], 2, 'expired', PlayerStore::iso('2000-01-01 00:00:00.000000'));
-        $finished = $this->player->assessment->finish($attempt['attemptId'], $attempt['credential'], $body);
+        $answer['answeredAt'] = $answeredAt->format('Y-m-d\TH:i:s.u\Z');
+        $body = $this->finishBody($attempt, [$answer], 2, 'expired', $expiresAt->format('Y-m-d\TH:i:s.u\Z'));
+        $finished = $this->player->assessment->finish($attempt['attemptId'], $attempt["attemptId"], $body);
         self::assertSame('completed', $finished['status']);
         self::assertTrue($finished['lateSync']);
     }
@@ -163,7 +166,7 @@ final class StudentPlayerTest extends PlayerTestCase
         $quiz = $this->quiz(count: 1);
         $attempt = $this->startQuiz($quiz);
         $answer = $this->submission($attempt, 0);
-        $this->player->assessment->finish($attempt['attemptId'], $attempt['credential'], $this->finishBody($attempt, [$answer], 1));
+        $this->player->assessment->finish($attempt['attemptId'], $attempt["attemptId"], $this->finishBody($attempt, [$answer], 1));
         $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
         $document['questions'] = [];
         $document['status'] = 'draft';
@@ -173,6 +176,33 @@ final class StudentPlayerTest extends PlayerTestCase
             ->attempt($quiz['owner'], $attempt['attemptId'], 'UTC');
         self::assertCount(1, $report['questions']);
         self::assertSame('correct', $report['questions'][0]['result']);
+    }
+
+    public function testAttemptCookieLookupIsScopedToItsQuiz(): void
+    {
+        $firstQuiz = $this->quiz(count: 1);
+        $secondQuiz = $this->quiz(count: 1);
+        $attempt = $this->startQuiz($firstQuiz);
+
+        self::assertSame(
+            $attempt['attemptId'],
+            $this->player->sessions->current($firstQuiz['share'], $attempt['attemptId'])['public_id'],
+        );
+        self::assertNull($this->player->sessions->current($secondQuiz['share'], $attempt['attemptId']));
+    }
+
+    public function testAttemptAuthorizationEndsAfterThePostDeadlineGracePeriod(): void
+    {
+        $attempt = $this->startQuiz($this->quiz(count: 1));
+        $expired = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->modify('-25 hours');
+        $this->db->table('attempts')->where('public_id', $attempt['attemptId'])->update([
+            'expires_at' => $expired->format('Y-m-d H:i:s.u'),
+        ]);
+
+        $this->expectPlayerError('invalid_attempt_session', fn () => $this->player->assessment->load(
+            $attempt['attemptId'],
+            $attempt['attemptId'],
+        ));
     }
 
     private function expectPlayerError(string $code, callable $operation): void

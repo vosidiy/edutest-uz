@@ -55,7 +55,7 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $answers = [$this->submission($attempt, 0), $this->submission($attempt, 1)];
         $this->player->assessment->finish(
             $attempt['attemptId'],
-            $attempt['credential'],
+            $attempt["attemptId"],
             $this->finishBody($attempt, $answers, 2),
         );
 
@@ -135,6 +135,8 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $response->assertSee('Questions per attempt');
         $response->assertSee('List');
         $response->assertSee('Grid');
+        self::assertStringContainsString('class="answer-list"', $response->getBody());
+        self::assertStringContainsString("'answer-list-grid': selectedQuestion.optionsLayout === 'grid'", $response->getBody());
         self::assertStringNotContainsString('>Publish</button>', $response->getBody());
         self::assertStringNotContainsString('>Unpublish</button>', $response->getBody());
         $response->assertDontSee('Fix validation errors');

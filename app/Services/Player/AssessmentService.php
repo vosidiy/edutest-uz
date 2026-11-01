@@ -13,20 +13,21 @@ final class AssessmentService
         private readonly PlayerStore $store,
         private readonly AttemptSnapshotService $snapshots,
         private readonly ScoringService $scoring,
+        private readonly AttemptSessionService $sessions,
     ) {}
 
     /** @return array<string, mixed> */
-    public function load(string $publicId, string $token): array
+    public function load(string $publicId, ?string $sessionPublicId): array
     {
-        $authorized = $this->authorize($publicId, $token);
+        $authorized = $this->authorize($publicId, $sessionPublicId);
 
         return $this->mutate($authorized, fn (array $attempt): array => $this->serialize($attempt));
     }
 
     /** @return array<string, mixed> */
-    public function progress(string $publicId, string $token, array $input): array
+    public function progress(string $publicId, ?string $sessionPublicId, array $input): array
     {
-        $authorized = $this->authorize($publicId, $token);
+        $authorized = $this->authorize($publicId, $sessionPublicId);
 
         return $this->mutate($authorized, function (array $attempt) use ($input): array {
             if ($attempt['status'] !== 'in_progress') {
@@ -68,9 +69,9 @@ final class AssessmentService
     }
 
     /** @return array<string, mixed> */
-    public function finish(string $publicId, string $token, array $input): array
+    public function finish(string $publicId, ?string $sessionPublicId, array $input): array
     {
-        $authorized = $this->authorize($publicId, $token);
+        $authorized = $this->authorize($publicId, $sessionPublicId);
 
         return $this->store->transaction(function () use ($authorized, $input): array {
             $attempt = $this->store->lock('attempts', (string) $authorized['id']);
@@ -129,9 +130,9 @@ final class AssessmentService
     }
 
     /** @return array<string, mixed> */
-    public function results(string $publicId, string $token): array
+    public function results(string $publicId, ?string $sessionPublicId): array
     {
-        $data = $this->load($publicId, $token);
+        $data = $this->load($publicId, $sessionPublicId);
         if ($data['result'] === null) {
             throw new PlayerException('not_finished', 409);
         }
@@ -140,9 +141,9 @@ final class AssessmentService
     }
 
     /** Renew attempt-bound media URLs. */
-    public function media(string $publicId, string $token): array
+    public function media(string $publicId, ?string $sessionPublicId): array
     {
-        return $this->load($publicId, $token);
+        return $this->load($publicId, $sessionPublicId);
     }
 
     public function resolveQuizOverdue(int $quizId, int $limit = 250): void
@@ -403,16 +404,16 @@ final class AssessmentService
         return $result;
     }
 
-    private function authorize(string $publicId, string $token): array
+    private function authorize(string $publicId, ?string $sessionPublicId): array
     {
         if (preg_match('/^[a-f0-9]{32}$/D', $publicId) !== 1
-            || preg_match('/^[a-f0-9]{64}$/D', $token) !== 1) {
-            throw new PlayerException('invalid_credential', 401);
+            || $sessionPublicId === null
+            || ! hash_equals($publicId, $sessionPublicId)) {
+            throw new PlayerException('invalid_attempt_session', 401);
         }
         $attempt = $this->store->db->table('attempts')->where('public_id', $publicId)->get()->getRowArray();
-        if ($attempt === null
-            || ! hash_equals((string) $attempt['token_hash'], hash('sha256', $token, true))) {
-            throw new PlayerException('invalid_credential', 401);
+        if ($attempt === null || $this->sessions->authorizationExpired($attempt)) {
+            throw new PlayerException('invalid_attempt_session', 401);
         }
 
         return $attempt;

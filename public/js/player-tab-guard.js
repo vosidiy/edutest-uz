@@ -1,4 +1,4 @@
-/** Origin-scoped coordination only: no identity, credentials or shared storage. */
+/** Origin-scoped coordination only: no identity, authorization data, or shared storage. */
 export class PlayerTabGuard {
   constructor(shareCode, locks) {
     this.name = 'edutest:quiz-run:' + shareCode;

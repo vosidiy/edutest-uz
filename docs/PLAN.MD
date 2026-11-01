@@ -25,7 +25,7 @@ Practice mode, text answers, multiple selection, schedules, passcodes, integrity
 ## Student flow
 
 1. `GET /q/{shareToken}` shows the introduction and admission form.
-2. A browser with an active local attempt is redirected to `/q/{shareToken}/start`.
+2. A browser with an unexpired attempt cookie is redirected to `/q/{shareToken}/start`; localStorage continues to hold the offline quiz document and outbox.
 3. Start locks the live quiz row, validates the current published definition, draws/shuffles questions and options, and inserts one immutable snapshot in `attempts.snapshot`.
 4. The player stores the loaded run locally. It can continue without a network connection after loading and survives a browser restart through `localStorage`.
 5. Submit appends to the ordered confirmed answer prefix and may show configured feedback. Skip appends an explicit unanswered entry and advances immediately without feedback. Both silently checkpoint the whole prefix.
@@ -46,7 +46,7 @@ Each Assessment attempt is the equivalent of one printed paper. Its `snapshot` c
 - The settings switch stages Draft or Active (`draft` or `published` in storage). One manual **Save quiz** persists content and status atomically; there are no separate Publish/Unpublish actions and no timed autosave.
 - Every explicit Save writes the submitted document and refreshes `updated_at`, even when the builder is already clean. Concurrent teacher tabs use last-write-wins behavior.
 - An Active save requires at least one question and affects only future starts. A Draft may have no questions. Moving back to Draft preserves the original publication timestamp.
-- Soft deletion keeps bearer-authorized attempts and historical reports available.
+- Soft deletion keeps cookie-authorized attempts and historical reports available.
 - Reports decode each attempt's snapshot and answers, showing correct, wrong, and skipped questions.
 - The builder exposes draw count, list/grid layout, whole-minute timer, shuffle, contact, feedback, and result-visibility settings only. A draw count larger than the current pool is stored as the whole-pool setting.
 - Image/audio media actions first save pending quiz edits when server IDs are needed.
@@ -54,8 +54,10 @@ Each Assessment attempt is the equivalent of one printed paper. Its `snapshot` c
 
 ## Privacy and security
 
+- Teacher authentication uses a rolling one-year CodeIgniter session. Successful login or registration persists across browser restarts, while explicit Logout ends the session immediately.
 - Teacher mutations use session authentication and CSRF protection.
-- Attempt API access uses a random bearer credential stored only as a SHA-256 hash on the server.
+- Attempt API access uses one persistent HttpOnly, SameSite=Strict cookie per quiz. Its raw value is the attempt's random `public_id`; this deliberate MVP trade-off treats knowledge of that identifier as sufficient attempt access.
+- Attempt cookies expire 24 hours after the quiz deadline so delayed offline Finish requests and result reopening can complete without extending answer time.
 - Nine-digit share tokens are convenient locators, not secrets; player routes remain throttled.
 - Private media stays outside `public/`; attempt projections replace stored private paths with short-lived signed URLs.
 - The application never accepts client-provided scores or correctness.

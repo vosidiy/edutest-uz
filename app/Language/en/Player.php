@@ -7,6 +7,7 @@ return [
         'invalid_answer' => 'Check your answer and try again.',
         'invalid_credential' => 'This tab does not have access to that attempt. Return to the quiz introduction.',
         'credential_expired' => 'This start or media credential has expired. Return to the introduction or retry the media.',
+        'invalid_attempt_session' => 'This browser no longer has access to that attempt. Return to the quiz introduction.',
         'signing_unavailable' => 'Student access is unavailable until encryption.key is configured in the private .env file.',
         'invalid_progress' => 'This progress update is invalid. Your local work has been kept in this tab.',
         'not_found' => 'This quiz is not available.',

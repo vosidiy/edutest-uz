@@ -114,7 +114,7 @@ final class ResultsFeatureTest extends PlayerTestCase
         $answers = [$this->submission($attempt, 0), $this->submission($attempt, 1)];
         $this->player->assessment->finish(
             $attempt['attemptId'],
-            $attempt['credential'],
+            $attempt["attemptId"],
             $this->finishBody($attempt, $answers, 2),
         );
         return [$quiz, $attempt];

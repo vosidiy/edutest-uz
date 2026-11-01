@@ -13,4 +13,10 @@ $uri = new \CodeIgniter\HTTP\SiteURI(config('App'), '', '127.0.0.1', 'http');
 \Config\Services::injectMock('request', new \CodeIgniter\HTTP\IncomingRequest(config('App'), $uri, null, new \CodeIgniter\HTTP\UserAgent()));
 $input = json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR);
 $page = $input['page'];
-echo view($page === 'intro' ? 'public/quiz' : 'student/player', ['quiz' => $input['quiz'], 'shareToken' => $input['quiz']['shareToken'], 'page' => $page, 'title' => $input['quiz']['title'] . ' — EduTest']);
+echo view($page === 'intro' ? 'public/quiz' : 'student/player', [
+    'quiz' => $input['quiz'],
+    'shareToken' => $input['quiz']['shareToken'],
+    'page' => $page,
+    'attemptId' => $input['attemptId'] ?? null,
+    'title' => $input['quiz']['title'] . ' — EduTest',
+]);

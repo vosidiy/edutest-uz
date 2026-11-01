@@ -98,6 +98,16 @@ try {
   assert.equal(await browser.evaluate(`document.querySelector('[data-save-quiz]').classList.contains('btn-default')`), true);
   assert.equal(await browser.evaluate(`document.querySelector('[data-save-quiz]').disabled`), false);
   assert.equal(quizPutCount, 0);
+  assert.equal(await browser.evaluate(`document.querySelector('.answer-list').classList.contains('answer-list-grid')`), true);
+  assert.equal(await browser.evaluate(`document.querySelectorAll('.answer-list > .answer-row').length`), 2);
+  await browser.evaluate(`(() => { const layoutSelect=document.querySelector('.answer-editor select');layoutSelect.value='list';layoutSelect.dispatchEvent(new Event('change',{bubbles:true})); })()`);
+  await browser.until(() => browser.evaluate(`!document.querySelector('.answer-list').classList.contains('answer-list-grid')`), 'builder list layout');
+  assert.equal(await browser.evaluate(`document.querySelector('[data-save-quiz]').textContent.trim()`), 'Save quiz');
+  assert.equal(quizPutCount, 0);
+  await browser.evaluate(`(() => { const layoutSelect=document.querySelector('.answer-editor select');layoutSelect.value='grid';layoutSelect.dispatchEvent(new Event('change',{bubbles:true})); })()`);
+  await browser.until(() => browser.evaluate(`document.querySelector('.answer-list').classList.contains('answer-list-grid')`), 'builder grid layout');
+  await browser.until(() => browser.evaluate(`document.querySelector('[data-save-quiz]').textContent.trim()==='Saved'`), 'restored clean layout');
+  assert.equal(quizPutCount, 0);
   await browser.evaluate(`document.querySelector('[data-save-quiz]').click()`);
   await browser.until(() => quizPutCount === 1, 'clean saved request');
   assert.equal(await browser.evaluate(`document.querySelector('[data-save-quiz]').textContent.trim()`), 'Saved');

@@ -1,6 +1,6 @@
 -- 123test canonical application schema
 -- Target: MySQL 8.4, InnoDB, utf8mb4
--- Last updated: 2026-10-31
+-- Last updated: 2026-11-01
 --
 -- Fresh-install use in phpMyAdmin:
 --   1. Select the intended empty database.
@@ -138,8 +138,6 @@ CREATE TABLE attempts (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   quiz_id BIGINT UNSIGNED NOT NULL,
   public_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-  token_hash BINARY(32) NOT NULL,
-  start_key CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   name VARCHAR(120) NOT NULL,
   email VARCHAR(254) NULL,
   phone VARCHAR(32) NULL,
@@ -160,8 +158,6 @@ CREATE TABLE attempts (
   percent DECIMAL(5,2) NULL,
   CONSTRAINT fk_attempts_quiz FOREIGN KEY (quiz_id) REFERENCES quizzes(id),
   CONSTRAINT uq_attempts_public_id UNIQUE (public_id),
-  CONSTRAINT uq_attempts_token_hash UNIQUE (token_hash),
-  CONSTRAINT uq_attempts_quiz_start_key UNIQUE (quiz_id, start_key),
   INDEX ix_attempt_report (quiz_id, status, started_at),
   INDEX ix_attempt_expiry (status, expires_at),
   CONSTRAINT chk_attempts_snapshot CHECK (JSON_TYPE(snapshot) = 'OBJECT'),

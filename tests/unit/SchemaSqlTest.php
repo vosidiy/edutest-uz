@@ -24,7 +24,9 @@ final class SchemaSqlTest extends CIUnitTestCase
         $this->assertStringContainsString('snapshot JSON NOT NULL', $sql);
         $this->assertStringContainsString('answers JSON NOT NULL', $sql);
         $this->assertStringContainsString('answer_version INT UNSIGNED NOT NULL DEFAULT 0', $sql);
-        $this->assertStringContainsString('CONSTRAINT uq_attempts_quiz_start_key UNIQUE (quiz_id, start_key)', $sql);
+        $this->assertStringContainsString('CONSTRAINT uq_attempts_public_id UNIQUE (public_id)', $sql);
+        $this->assertStringNotContainsString('token_hash', $sql);
+        $this->assertStringNotContainsString('start_key', $sql);
         $this->assertStringContainsString('CONSTRAINT chk_attempts_score_percent CHECK', $sql);
         $this->assertStringContainsString("CHECK (status IN ('in_progress', 'completed', 'abandoned'))", $sql);
         $this->assertStringContainsString("ended_reason IN ('completed', 'exited', 'expired')", $sql);

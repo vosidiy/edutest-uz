@@ -2018,7 +2018,7 @@ input[type="file"] { height: auto; padding: 8px; }
 .media-actions .danger { color: var(--red-700); }
 .media-preview { max-width: 100%; }
 
-.media-preview img {
+.option-media-wrap img {
   display: block;
   max-width: 100%;
   width: 400px;
@@ -2026,9 +2026,27 @@ input[type="file"] { height: auto; padding: 8px; }
   border-radius: var(--border-radius-md);
 }
 
+
+.question-editor .media-preview img{
+  display: block;
+  max-width: 100%;
+  height: 320px;
+  border-radius: var(--border-radius-md);
+}
+
 .media-preview audio { width: 100%; }
 
 .answer-editor { margin-top: var(--space-5); }
+
+.answer-list {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.answer-list-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 .section-label {
   display: flex;
@@ -2043,25 +2061,28 @@ input[type="file"] { height: auto; padding: 8px; }
 }
 
 .answer-row {
-  display: grid;
-  gap: var(--space-3);
-  margin-bottom: var(--space-3);
   padding: var(--space-3);
   border: 1px solid var(--border-color-default);
   border-radius: var(--border-radius-md);
   background: var(--neutral-50);
 }
 
+.option-media-wrap{
+  position:relative; width: fit-content; padding: 4px; background: var(--neutral-300); border-radius: 12px; margin-left: 28px;
+  margin-top:8px; margin-bottom: 8px;
+}
+
+.answer-list-grid .btn > .text { display:none}
+
 .answer-main-row {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: var(--space-2);
 }
 
 .answer-main-row .form-control { flex: 1 1 260px; font-size:18px; }
-.answer-letter { min-width: 20px; font-size: 18px; color: var(--primary-700); font-weight:700; }
-.answer-correct-row {  padding-left: 28px; }
+.answer-letter { min-width: 20px; font-size: 18px; color: var(--primary-700); font-weight:700; flex-shrink: 0; }
+.answer-correct-row {  padding-left: 28px; margin-top:8px; }
 .answer-row > .media-preview { max-width: 280px; margin-left: 32px; }
 
 .text-answer-row {
@@ -2171,6 +2192,7 @@ input[type="file"] { height: auto; padding: 8px; }
 
 @media (max-width: 700px) {
   .quiz-card-grid { grid-template-columns: minmax(0, 1fr); }
+  .answer-list-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 480px) {
