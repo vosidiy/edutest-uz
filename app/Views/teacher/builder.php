@@ -107,14 +107,19 @@
                                         </span>
                                     </button>
                                     
-                                    <button v-if="option.media" class="btn btn-link" type="button" @click="removeMedia(selectedIndex,index)">Remove image</button>
+                                    
                                     
                                     <button class="btn btn-red-subtle btn-icon" type="button" @click="removeOption(index)" :disabled="selectedQuestion.options.length <= 2" :aria-label="`Remove answer ${optionLetter(index)}`">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x preview-icon"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                                     </button>
                                 </div>
-                                <media-preview :media="option.media"></media-preview>
                                 
+                                <div v-if="option.media" style="position:relative; width: fit-content; padding: 4px; background: var(--neutral-300); border-radius: 12px; margin-left: 28px;">
+                                    <button v-if="option.media" style="position:absolute; top:0; right:0" class="btn btn-sm btn-red" type="button" @click="removeMedia(selectedIndex,index)">Delete image</button>
+                                    <media-preview :media="option.media"></media-preview>
+                                </div>
+                                
+
                                 <label class="form-check answer-correct-row"><input type="radio" :name="`correct-answer-${selectedIndex}`" :checked="option.isCorrect" @change="setCorrect(index,$event.target.checked)"><span>Mark as correct</span></label>
                             </div>
                             <button class="btn btn-neutral w-full" type="button" @click="addOption">

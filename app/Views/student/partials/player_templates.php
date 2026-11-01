@@ -33,12 +33,14 @@
 
 <template id="player-choice-template">
     <label class="player-option" data-slot="choice">
-        <input name="answer" data-action="select">
-        <span class="player-option-content">
-            <span class="player-option-letter" data-slot="letter"></span>
-            <span class="player-option-copy" data-slot="content"></span>
-            <template data-slot="media"></template>
-        </span>
+        <div style="display:flex; gap:6px">
+            <input name="answer" data-action="select">
+            <span class="player-option-content">
+                <span class="player-option-letter" data-slot="letter"></span>
+                <span class="player-option-copy" data-slot="content"></span>
+            </span>
+        </div>
+        <template data-slot="media"></template>
     </label>
 </template>
 
@@ -52,10 +54,10 @@
 <!-- Shared immediate feedback and expanded result review. -->
 <template id="player-feedback-template">
     <section class="player-feedback">
-        <h3 data-slot="verdict"></h3>
-        <strong style="margin-top:8px; display:block;" data-slot="correct-label"></strong>
+        <h3 style="margin-bottom:4px;" data-slot="verdict"></h3>
+        <span data-slot="correct-label"></span>
         <template data-slot="correct-answers"></template>
-        <strong data-slot="explanation-label"></strong>
+        <p data-slot="explanation-label"></p>
         <p data-slot="explanation"></p>
     </section>
 </template>
@@ -133,8 +135,8 @@
 </template>
 <template id="player-blocked-template">
     <section class="card player-error" data-tab-blocked role="alert">
-        <h1 data-slot="title"></h1>
-        <p data-slot="message"></p>
+        <h2 data-slot="title"></h2>
+        <h5 style="font-size:18px; color:brown; margin:12px 0" data-slot="message"></h5>
         <button type="button" class="btn btn-primary" data-action="retry"></button>
     </section>
 </template>

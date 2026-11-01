@@ -292,7 +292,7 @@ summary { cursor: pointer; user-select: none; }
 .player-answers.player-answers-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .player-answers-grid > legend { grid-column: 1 / -1; }
 .player-answers legend { margin-bottom:8px; color:var(--text-color-secondary); font-size: 14px; }
-.player-option { display: flex; align-items: center; gap: 8px; padding:8px; border: 1px solid var(--neutral-300); border-radius: var(--border-radius-lg); cursor: pointer; min-height:44px;}
+.player-option { padding:8px; border: 1px solid var(--neutral-300); border-radius: var(--border-radius-lg); cursor: pointer; min-height:44px;}
 .player-option:hover { border-color: var(--primary-400); background: var(--neutral-50); }
 .player-option.is-selected { border-color: var(--primary-600); background: var(--primary-100); }
 .player-option:focus-within { outline: 3px solid var(--primary-400); outline-offset: 3px; }
@@ -305,24 +305,24 @@ summary { cursor: pointer; user-select: none; }
 .player-actions .btn { min-height: 44px; }
 .player-actions [data-action="next"] { gap: 8px; }
 .player-actions [data-action="next"] svg { flex-shrink: 0; }
-.player-feedback { margin-top:12px; border: 1px solid var(--neutral-200); border-left: 4px solid var(--neutral-500); border-radius: var(--border-radius-md); padding:12px; background: var(--neutral-50); }
+.player-feedback { margin-top:12px; border: 1px solid var(--neutral-200); border-left: 4px solid var(--neutral-500); border-radius: var(--border-radius-md); padding:6px 12px; background: var(--neutral-50); }
 .player-feedback.correct { border-left-color: var(--green-600); background: var(--green-100); }
 .player-feedback.wrong { border-left-color: var(--red-600); background: var(--red-100); }
 .player-feedback h3 { font-size: 1rem;}
 .player-feedback p { white-space: pre-wrap; overflow-wrap: anywhere; }
-.player-media { margin-top: 16px; max-width: 100%; }
-.player-media img { display: block; max-width: 100%; max-height: 420px; border-radius: var(--border-radius-md); }
+.player-media { margin-top:8px; max-width: 100%; background: var(--neutral-400); border-radius: var(--border-radius-md); }
+.player-media img { display: block; width: 100%; max-height: 250px; border-radius: var(--border-radius-md); object-fit: contain; }
 .player-media audio { width: 100%; }
 .player-media .btn { margin-top: 8px; }
 .player-sync-status { min-height: 26px; padding: 16px 0; font-size: .9rem; color: var(--neutral-600); display: flex; align-items: center; gap: 12px; }
 .player-sync-status .btn { min-height: 36px; }
-.player-results-header { isolation: isolate; overflow: hidden; padding: 48px 36px; border-color: var(--primary-200); background: radial-gradient(circle at 50% 0, rgba(255, 255, 255, .92), transparent 42%), linear-gradient(145deg, #eef2ff 0%, #fff 52%, #f5f3ff 100%); box-shadow: 0 18px 50px rgba(67, 56, 202, .11); text-align: center; }
+.player-results-header { isolation: isolate; overflow: hidden; padding:24px; border-color: var(--primary-200); background: radial-gradient(circle at 50% 0, rgba(255, 255, 255, .92), transparent 42%), linear-gradient(145deg, #eef2ff 0%, #fff 52%, #f5f3ff 100%); box-shadow: 0 18px 50px rgba(67, 56, 202, .11); text-align: center; }
 .player-results-header h1 { margin: 8px 0; font-size: clamp(2rem, 5vw, 2.6rem); }
 .player-results-header .player-actions { justify-content: center; }
 .player-completion-icon { display: block; min-height: 1em; font-size:56px; line-height: 1.05; filter: drop-shadow(0 10px 14px rgba(67, 56, 202, .15)); }
 .player-result-title { color: var(--neutral-600); font-size: 1.05rem; overflow-wrap: anywhere; }
 .player-results-header .player-student-identity { margin-top: 8px; }
-.player-score { margin: 12px; color: var(--primary-700); font-size:56px; font-weight: 750; font-variant-numeric: tabular-nums; letter-spacing: -.04em; }
+.player-score { margin: 8px; color: var(--primary-700); font-size:48px; font-weight: 750; }
 .player-result-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; width: min(100%, 620px); margin:12px auto; text-align: left; }
 .player-result-stat { display: flex; min-width: 0; align-items: center; gap: 10px; padding: 8px; border: 1px solid var(--border-color-default); border-radius: var(--border-radius-lg); background: rgba(255, 255, 255, .82); }
 .player-result-stat.correct { border-color: #bbf7d0; background: rgba(240, 253, 244, .9); }
