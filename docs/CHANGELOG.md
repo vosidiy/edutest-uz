@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Active-by-default new quiz builder (2026-11-01)
+
+- Kept direct quiz creation safely persisted as Draft while opening its first builder session with Active staged, the manual Save action dirty, and no automatic publish request.
+- Removed the one-time builder flag after hydration, kept ordinary Draft edits and duplicates Draft by default, and updated create-dialog wording for the new workflow.
+
 ### Persistent teacher login (2026-11-01)
 
 - Extended the existing CodeIgniter teacher session from two hours to a rolling one-year lifetime, keeping successful login and registration active across browser restarts without adding a remember-token table or login checkbox.

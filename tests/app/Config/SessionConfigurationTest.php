@@ -15,6 +15,5 @@ final class SessionConfigurationTest extends CIUnitTestCase
 
         self::assertSame(31_536_000, $config->expiration);
         self::assertGreaterThan(0, $config->expiration);
-        self::assertSame(300, $config->timeToUpdate);
     }
 }

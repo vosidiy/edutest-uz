@@ -84,6 +84,12 @@
   const coverInput = createForm?.elements.namedItem('cover');
   const coverPreview = createForm?.querySelector('[data-cover-preview]');
 
+  function stagedActiveBuilderUrl(editUrl) {
+    const url = new URL(editUrl, window.location.href);
+    url.searchParams.set('new', 'active');
+    return url.href;
+  }
+
   function updateCreateControls(message = '') {
     if (!createForm) return;
     createForm.setAttribute('aria-busy', String(createBusy || coverChecking));
@@ -161,7 +167,7 @@
     createBusy = true; updateCreateControls(createText.continuing);
     try {
       await removeUnconfirmedCover();
-      window.location.href = createdDraft.editUrl;
+      window.location.href = stagedActiveBuilderUrl(createdDraft.editUrl);
     } catch (failure) { createForm.querySelector('[data-create-error]').textContent = failure.message; }
     finally { createBusy = false; updateCreateControls(); }
   });
@@ -186,7 +192,7 @@
         coverAttempted = true;
         await request(`${endpoint}/cover`, {method: 'POST', body: media});
       } else await removeUnconfirmedCover();
-      window.location.href = createdDraft.editUrl;
+      window.location.href = stagedActiveBuilderUrl(createdDraft.editUrl);
     } catch (failure) {
       error.textContent = failure.fields?.title || failure.message;
     } finally {

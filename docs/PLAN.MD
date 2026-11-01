@@ -43,6 +43,7 @@ Each Assessment attempt is the equivalent of one printed paper. Its `snapshot` c
 
 ## Teacher flow
 
+- Direct quiz creation stores a safe Draft, then opens the first builder session with Active staged and unsaved. The teacher adds at least one question and manually saves to publish; duplicated quizzes continue to open as Draft.
 - The settings switch stages Draft or Active (`draft` or `published` in storage). One manual **Save quiz** persists content and status atomically; there are no separate Publish/Unpublish actions and no timed autosave.
 - Every explicit Save writes the submitted document and refreshes `updated_at`, even when the builder is already clean. Concurrent teacher tabs use last-write-wins behavior.
 - An Active save requires at least one question and affects only future starts. A Draft may have no questions. Moving back to Draft preserves the original publication timestamp.

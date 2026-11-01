@@ -92,6 +92,7 @@
         mediaBusy: false,
         activePanel: 'editor',
         pendingCover: null,
+        stageActiveOnLoad: /(?:^|[?&])new=active(?:&|$)/.test(window.location?.search || ''),
         detailsOpen: false,
         detailsTitle: '',
         detailsCover: null,
@@ -141,6 +142,7 @@
           this.cleanCoverUrls();
           this.applyServerQuiz(response.data.quiz);
           this.saveState = 'saved';
+          this.stageNewQuizActive();
           this.globalError = '';
         } catch (error) {
           this.fatalError = error.message;
@@ -159,6 +161,15 @@
       markDirty() {
         if (!this.saving) this.saveState = this.hasChanges ? 'dirty' : 'saved';
         this.globalError = '';
+      },
+      stageNewQuizActive() {
+        if (!this.stageActiveOnLoad) return;
+        this.stageActiveOnLoad = false;
+        if (this.quiz?.status === 'draft') this.setActive(true);
+        if (!window.URL || !window.location?.href || !window.history?.replaceState) return;
+        const url = new window.URL(window.location.href);
+        url.searchParams.delete('new');
+        window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
       },
       async acceptSaved(server, sent, references) {
         // Keep the same reactive row objects: a new ID must follow its row even if reordered/deleted during the request.

@@ -9,6 +9,23 @@ use Tests\Support\PlayerTestCase;
 
 final class QuizAuthoringServiceTest extends PlayerTestCase
 {
+    public function testDirectCreationAndDuplicationRemainDraftUntilManualSave(): void
+    {
+        $source = $this->quiz(count: 1);
+        $created = $this->authoring->create($source['owner'], 'New quiz');
+        $newDocument = $this->authoring->document($source['owner'], $created['publicId']);
+
+        self::assertSame('draft', $newDocument['status']);
+        self::assertNull($newDocument['publishedAt']);
+        self::assertSame([], $newDocument['questions']);
+
+        $duplicate = $this->authoring->duplicate($source['owner'], $source['publicId']);
+        $duplicateDocument = $this->authoring->document($source['owner'], $duplicate['publicId']);
+        self::assertSame('draft', $duplicateDocument['status']);
+        self::assertNull($duplicateDocument['publishedAt']);
+        self::assertCount(1, $duplicateDocument['questions']);
+    }
+
     public function testNewQuizUsesMvpDefaults(): void
     {
         $quiz = $this->quiz(count: 1);

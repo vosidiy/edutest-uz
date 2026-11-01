@@ -99,6 +99,8 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $response = $this->withSession($session)->get('/dashboard');
         $response->assertOK();
         $response->assertSee('Create a quiz');
+        $response->assertSee('Create quiz');
+        $response->assertDontSee('Create draft');
         $response->assertSee('class="card quiz-card"');
         $response->assertDontSee('Other private quiz');
         $response->assertDontSee('Practice');

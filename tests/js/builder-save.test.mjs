@@ -5,13 +5,16 @@ import vm from 'node:vm';
 
 const source = fs.readFileSync(new URL('../../public/js/builder.js', import.meta.url), 'utf8');
 const clone = value => JSON.parse(JSON.stringify(value));
-function fixture() {
+function fixture(search = '') {
   let component, request;
   const Vue = {createApp(options) { component = options; return {mount() {}}; }};
   const root = {dataset:{publicId:'fixture',workspaceMessages:JSON.stringify({coverFailed:'Cover retained.',invalidTitle:'Invalid title'})}};
   const api = {request:(...args)=>request(...args),toast(){}};
   const revoked = [];
-  vm.runInNewContext(source, {Vue, EduTestApi:api, window:{Vue,EduTestApi:api,confirm:()=>true},
+  const replaced = [];
+  const location = {href:`https://example.test/quizzes/fixture/edit${search}`,search};
+  const history = {state:null,replaceState(_state,_title,url){replaced.push(url);}};
+  vm.runInNewContext(source, {Vue, EduTestApi:api, window:{Vue,EduTestApi:api,confirm:()=>true,location,history,URL},
     document:{querySelector:()=>root}, URL:{revokeObjectURL:url=>revoked.push(url)}, FormData,
     setTimeout,clearTimeout,console});
   const app = component.data();
@@ -25,7 +28,7 @@ function fixture() {
     questions:[{id:'1',content:'Question',optionsLayout:'list',explanation:'',media:null,
       options:[{id:'11',code:'a',content:'Yes',isCorrect:true,media:null},{id:'12',code:'b',content:'No',isCorrect:false,media:null}]}]};
   app.applyServerQuiz(clone(quiz)); app.loading=false; app.hydrating=false;
-  return {app,quiz,revoked,setRequest:fn=>{request=fn;}};
+  return {app,quiz,revoked,replaced,setRequest:fn=>{request=fn;}};
 }
 function deferred() {let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};}
 function response(payload) {
@@ -42,6 +45,23 @@ test('explicit clean saves send a request and reverting restores clean state', a
   app.quiz.title='Changed';app.markDirty();
   assert.equal(app.hasChanges,true);assert.equal(app.saveState,'dirty');
   app.quiz.title='Quiz';app.markDirty();assert.equal(app.hasChanges,false);assert.equal(app.saveState,'saved');
+});
+test('a direct new-quiz flag stages Active once without automatically saving',async()=>{
+  const {app,quiz,replaced,setRequest}=fixture('?new=active&source=create');
+  const draft=clone(quiz);draft.status='draft';draft.publishedAt=null;draft.questions=[];
+  let requests=0;
+  setRequest(async()=>{requests++;return {data:{quiz:clone(draft)}};});
+  await app.load();
+  assert.equal(requests,1);
+  assert.equal(app.quiz.status,'published');
+  assert.equal(app.hasChanges,true);
+  assert.equal(app.saveState,'dirty');
+  assert.deepEqual(replaced,['/quizzes/fixture/edit?source=create']);
+  await app.load();
+  assert.equal(requests,2);
+  assert.equal(app.quiz.status,'draft');
+  assert.equal(app.hasChanges,false);
+  assert.equal(app.saveState,'saved');
 });
 test('save normalizes an invalid timer before sending and updates the visible model',async()=>{
   const {app,setRequest}=fixture();let sent;

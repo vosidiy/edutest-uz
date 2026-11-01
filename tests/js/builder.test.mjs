@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const source = fs.readFileSync(new URL('../../public/js/builder.js', import.meta.url), 'utf8');
+const teacher = fs.readFileSync(new URL('../../public/js/teacher.js', import.meta.url), 'utf8');
 const header = fs.readFileSync(new URL('../../app/Views/teacher/partials/quiz_header.php', import.meta.url), 'utf8');
 const builder = fs.readFileSync(new URL('../../app/Views/teacher/builder.php', import.meta.url), 'utf8');
 assert.doesNotMatch(source, /autosave|scheduleAutosave|shouldAutosave/i);
@@ -14,6 +15,11 @@ assert.match(header, /hasChanges \? 'Save quiz' : 'Saved'/);
 assert.match(builder, /class="answer-list"/);
 assert.match(builder, /'answer-list-grid': selectedQuestion\.optionsLayout === 'grid'/);
 assert.match(builder, /<div class="answer-list"[\s\S]*v-for="\(option,index\) in selectedQuestion\.options"/);
+assert.match(source, /new=active/);
+assert.match(source, /stageNewQuizActive/);
+assert.match(teacher, /function stagedActiveBuilderUrl/);
+assert.equal((teacher.match(/stagedActiveBuilderUrl\(createdDraft\.editUrl\)/g) || []).length, 2);
+assert.match(teacher, /action === 'duplicate'\) window\.location\.href = result\.data\.editUrl/);
 const window = {};
 vm.runInNewContext(source, {window, document: {querySelector: () => null}});
 
