@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Simplified teacher attempt review (2026-11-05)
+
+- Removed the stored quiz-policy summary from the teacher attempt detail view.
+
+### Standalone quiz result totals (2026-11-05)
+
+- Changed the student result summary to show standalone Correct, Wrong, and Unanswered counts instead of `count/total`, and added a separate Total count.
+
 ### Active-by-default new quiz builder (2026-11-01)
 
 - Kept direct quiz creation safely persisted as Draft while opening its first builder session with Active staged, the manual Save action dirty, and no automatic publish request.

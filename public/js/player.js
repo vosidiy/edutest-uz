@@ -4,7 +4,7 @@ import {createState, PlayerClock, editAnswer, submitAnswer, nextQuestion, finish
 import {PlayerSync} from './player-sync.js?v=8';
 import {PlayerTabGuard} from './player-tab-guard.js';
 import {completionEmoji, resultCounts, shouldRevealCorrectAnswer, wholePercent} from './player-presentation.js?v=2';
-import {createPlayerView} from './player-view.js?v=8';
+import {createPlayerView} from './player-view.js?v=9';
 
 const config = JSON.parse(document.querySelector('#player-config').textContent);
 const root = document.querySelector('#player-root');

@@ -73,6 +73,7 @@ return [
         'resultCorrect' => 'Correct',
         'resultWrong' => 'Wrong',
         'resultUnanswered' => 'Unanswered',
+        'resultTotal' => 'Total',
         'correctAnswer' => 'Correct answer',
         'explanation' => 'Explanation',
         'review' => 'Question review',
@@ -105,6 +106,6 @@ return [
         'coverUploading' => 'Uploading cover…',
         'removeCoverConfirm' => 'Remove the quiz cover?',
         'scoreChanged' => 'The server-calculated result differs from the local preview. The confirmed result below is official.',
-        'startAnother' => 'Start again',
+        'startAnother' => 'Start new quiz',
     ],
 ];

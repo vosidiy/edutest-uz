@@ -3197,6 +3197,7 @@ input[type="file"] { height: auto; padding: 8px; }
 
 .answer-options {
   display: grid;
+  grid-template-columns: 1fr 1fr;
   margin: 0;
   padding: 12px;
   list-style: none;
@@ -3228,7 +3229,7 @@ input[type="file"] { height: auto; padding: 8px; }
 }
 
 .answer-option-text {
-  line-height: 1.5;
+  font-size: 18px;
 }
 
 .answer-option-label {

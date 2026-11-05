@@ -58,3 +58,10 @@ test('result counts keep wrong and unanswered questions separate', () => {
 test('missing result rows are conservatively counted as unanswered', () => {
   assert.deepEqual(resultCounts([{result: 'correct'}], 3), {correct: 1, wrong: 0, unanswered: 2});
 });
+
+test('result stats show standalone counts and include the total', () => {
+  assert.doesNotMatch(viewSource, /`\$\{count\}\/\$\{total\}`/);
+  assert.match(viewSource, /text\(fragment, 'count', String\(count\)\)/);
+  assert.match(viewSource, /resultStat\('total', model\.total\)/);
+  assert.match(viewSource, /total: 'resultTotal'/);
+});

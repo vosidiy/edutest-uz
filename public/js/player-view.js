@@ -111,11 +111,11 @@ export function createPlayerView(t) {
     return fragment;
   }
 
-  function resultStat(name, count, total) {
+  function resultStat(name, count) {
     const fragment = cloneTemplate('result-stat');
     fragment.firstElementChild.classList.add(name);
-    text(fragment, 'label', t({correct: 'resultCorrect', wrong: 'resultWrong', unanswered: 'resultUnanswered'}[name]));
-    text(fragment, 'count', `${count}/${total}`);
+    text(fragment, 'label', t({correct: 'resultCorrect', wrong: 'resultWrong', unanswered: 'resultUnanswered', total: 'resultTotal'}[name]));
+    text(fragment, 'count', String(count));
     return fragment;
   }
 
@@ -128,7 +128,8 @@ export function createPlayerView(t) {
     if (model.scoreVisible) {
       text(fragment, 'score', `${model.percent}%`);
       const stats = slot(fragment, 'stats');
-      for (const name of ['correct', 'wrong', 'unanswered']) stats.append(resultStat(name, model.counts[name], model.total));
+      for (const name of ['correct', 'wrong', 'unanswered']) stats.append(resultStat(name, model.counts[name]));
+      stats.append(resultStat('total', model.total));
       slot(fragment, 'hidden-score').remove();
     } else {
       slot(fragment, 'score').remove();

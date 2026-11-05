@@ -58,14 +58,6 @@
             <h6 id="connection-heading">Connection details</h6><p><?= esc(lang('Results.privacyNote')) ?></p>
             IP address: <?= esc($report['attempt']['ip'] ?? lang('Results.notAvailable')) ?>
             Browser user agent: <?= esc($report['attempt']['agent'] ?? lang('Results.notAvailable')) ?>
-
-            <hr>
-            <h6 id="policy-heading">Quiz policy</h6>
-            <p>Visibility and timer settings stored at start.</p>
-                <?php foreach ($report['policies'] as $policy) : ?> 
-                   <?= esc($policy['label']) ?>   <?= esc($policy['value']) ?> &nbsp; | &nbsp; 
-                <?php endforeach ?>
-            </section>
         </article>
 
         
