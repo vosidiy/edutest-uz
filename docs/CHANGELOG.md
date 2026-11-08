@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Student fullscreen control (2026-11-08)
+
+- Enabled the shared student-header Fullscreen button to enter and exit browser fullscreen mode, synchronize its label when fullscreen changes, and hide itself when the browser does not support the API.
+
 ### Simplified teacher attempt review (2026-11-05)
 
 - Removed the stored quiz-policy summary from the teacher attempt detail view.

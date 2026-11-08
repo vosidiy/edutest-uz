@@ -14,6 +14,7 @@ const alertBox = document.querySelector('#player-alert');
 const announcer = document.querySelector('#player-announcer');
 const headerContext = document.querySelector('#player-header-context');
 const headerTitle = document.querySelector('#player-header-title');
+const headerFullscreen = document.querySelector('#player-header-fullscreen');
 const headerQuit = document.querySelector('#player-header-quit');
 const storageKey = `edutest:player:${config.shareToken}`;
 const admissionKey = `${storageKey}:admission`;
@@ -378,6 +379,39 @@ function quit() {
   worker.schedule(0);
   render();
 }
+
+function fullscreenElement() {
+  return document.fullscreenElement || document.webkitFullscreenElement || null;
+}
+
+function updateFullscreenButton() {
+  const active = Boolean(fullscreenElement());
+  headerFullscreen.setAttribute('aria-pressed', String(active));
+  headerFullscreen.querySelector('span').textContent = active ? 'Exit fullscreen' : 'Fullscreen';
+}
+
+async function toggleFullscreen() {
+  try {
+    if (fullscreenElement()) {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      await exit?.call(document);
+    } else {
+      const request = document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen;
+      await request?.call(document.documentElement);
+    }
+  } catch (_) {
+    // Fullscreen requests may be rejected by browser or device policy.
+  }
+}
+
+const fullscreenSupported = Boolean(
+  document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen,
+);
+headerFullscreen.hidden = !fullscreenSupported;
+headerFullscreen.addEventListener('click', toggleFullscreen);
+document.addEventListener('fullscreenchange', updateFullscreenButton);
+document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+updateFullscreenButton();
 
 headerQuit.addEventListener('click', quit);
 window.addEventListener('online', () => { lastError = ''; showAlert(); worker.flush(); });
