@@ -31,6 +31,7 @@ final class StudentPlayerFeatureTest extends PlayerTestCase
         $response->assertSee('Phone');
         $response->assertDontSee('correctCode');
         $response->assertDontSee('Practice');
+        $response->assertDontSee('player-question-template');
     }
 
     public function testStartAndResultsShellUseTheNewRoutes(): void
@@ -42,7 +43,10 @@ final class StudentPlayerFeatureTest extends PlayerTestCase
         $attempt = $this->startQuiz($quiz);
         $this->setAttemptCookie($quiz['share'], $attempt['attemptId']);
         $this->get('/q/' . $quiz['share'])->assertRedirectTo(site_url('q/' . $quiz['share'] . '/start'));
-        $this->get('/q/' . $quiz['share'] . '/start')->assertOK();
+        $start = $this->get('/q/' . $quiz['share'] . '/start');
+        $start->assertOK();
+        $start->assertSee('player-question-template');
+        $start->assertDontSee('quiz-admission');
         $this->get('/q/' . $quiz['share'] . '/results')->assertRedirectTo(site_url('q/' . $quiz['share'] . '/start'));
 
         $answer = $this->submission($attempt, 0);

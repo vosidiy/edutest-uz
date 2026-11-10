@@ -5,13 +5,12 @@ import {completionEmoji, resultCounts, shouldRevealCorrectAnswer, wholePercent} 
 
 const playerSource = fs.readFileSync(new URL('../../public/js/player.js', import.meta.url), 'utf8');
 const viewSource = fs.readFileSync(new URL('../../public/js/player-view.js', import.meta.url), 'utf8');
-const templates = fs.readFileSync(new URL('../../app/Views/student/partials/player_templates.php', import.meta.url), 'utf8');
-const layout = fs.readFileSync(new URL('../../app/Views/layouts/student.php', import.meta.url), 'utf8');
+const playerView = fs.readFileSync(new URL('../../app/Views/student/quiz_player.php', import.meta.url), 'utf8');
 
 test('player media supports image and audio without video or embed renderers', () => {
   assert.match(playerSource, /\['image','audio'\]/);
-  assert.doesNotMatch(playerSource + viewSource + templates, /embedUrl|player-video-template|player-embed-template|mediaVideo/);
-  assert.doesNotMatch(templates, /<video|<iframe/i);
+  assert.doesNotMatch(playerSource + viewSource + playerView, /embedUrl|player-video-template|player-embed-template|mediaVideo/);
+  assert.doesNotMatch(playerView, /<video|<iframe/i);
 });
 
 test('completion emoji follows every score boundary, including decimals', () => {
@@ -39,10 +38,10 @@ test('correct-answer feedback respects verdict and teacher visibility', () => {
 });
 
 test('question progress is in the player body without duplicate title or identity hooks', () => {
-  assert.match(templates, /data-slot="progress-label"/);
-  assert.match(templates, /aria-labelledby="player-progress-label"/);
-  assert.doesNotMatch(templates, /player-quiz-title|data-slot="identity"[\s\S]*player-timers/);
-  assert.doesNotMatch(layout, /player-header-progress|player-header-separator/);
+  assert.match(playerView, /data-slot="progress-label"/);
+  assert.match(playerView, /aria-labelledby="player-progress-label"/);
+  assert.doesNotMatch(playerView, /player-quiz-title|data-slot="identity"[\s\S]*player-timers/);
+  assert.doesNotMatch(playerView, /player-header-progress|player-header-separator/);
   assert.doesNotMatch(viewSource, /yourAnswer|data-slot[^\n]*answer/);
 });
 

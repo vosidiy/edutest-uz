@@ -133,7 +133,7 @@ const browser = await launchBrowser();
 try {
   // Direct player access has no local attempt and returns to the introduction.
   await browser.navigate(`${origin}/q/${shareToken}/start`);
-  await browser.until(() => browser.evaluate(`location.pathname === '/q/${shareToken}' && !!document.querySelector('#quiz-admission')`), 'direct start redirect');
+  await browser.until(() => browser.evaluate(`location.pathname === '/q/${shareToken}' && document.querySelector('#quiz-admission button[type="submit"]')?.disabled === false`), 'direct start redirect');
   assert.equal(await browser.evaluate(`document.body.textContent.includes('Practice')`), false);
   assert.deepEqual(await browser.evaluate(`[...document.querySelectorAll('#quiz-introduction .card-body > p > strong')].map(node => node.textContent)`), ['Questions','Time limit']);
 
@@ -141,7 +141,7 @@ try {
     document.querySelector('[name="name"]').value = 'Offline Student';
     document.querySelector('#quiz-admission button[type="submit"]').click();
   }`);
-  await browser.until(() => browser.evaluate(`location.pathname.endsWith('/start') && !!document.querySelector('.player-question')`), 'attempt start');
+  await browser.until(() => browser.evaluate(`location.pathname.endsWith('/start') && document.querySelector('[data-slot="remaining"]')?.textContent.includes(':')`).catch(() => false), 'attempt start');
   assert.equal(await browser.evaluate(`JSON.parse(localStorage.getItem('edutest:player:${shareToken}')).format`), 6);
   assert.equal(await browser.evaluate(`'credential' in JSON.parse(localStorage.getItem('edutest:player:${shareToken}'))`), false);
   assert.equal(await browser.evaluate(`document.querySelector('.player-answers').classList.contains('player-answers-grid')`), false);
@@ -220,7 +220,7 @@ try {
   console.log('Player snapshot/offline browser behavior passed.');
 } catch (error) {
   const page = await browser.evaluate(`({path:location.pathname,text:document.body.innerText.slice(0,1000),alert:document.querySelector('#player-alert')?.textContent,storage:Object.keys(localStorage)})`).catch(() => null);
-  console.error(JSON.stringify({message:error.message,page,requests,browserErrors:browser.errors}, null, 2));
+  console.error(JSON.stringify({message:error.message,stack:error.stack,page,requests,browserErrors:browser.errors}, null, 2));
   throw error;
 } finally {
   await browser.close();

@@ -27,7 +27,7 @@ final class QuizController extends BaseController
         }
 
         $this->privateResponse();
-        return view('public/quiz', ['quiz' => $quiz, 'title' => $quiz['title'] . ' — EduTest', 'shareToken' => $shareToken, 'page' => 'intro']);
+        return view('student/quiz_form', ['quiz' => $quiz, 'title' => $quiz['title'] . ' — EduTest', 'shareToken' => $shareToken]);
     }
 
     public function start(string $shareToken): string|ResponseInterface
@@ -57,7 +57,7 @@ final class QuizController extends BaseController
 
         // Existing cookie-authorized attempts remain available after a quiz returns to Draft or is soft-deleted.
         $this->privateResponse();
-        return view('student/player', [
+        return view('student/quiz_player', [
             'title' => lang('Player.ui.quizPlayer') . ' — EduTest',
             'shareToken' => $shareToken,
             'page' => $page,

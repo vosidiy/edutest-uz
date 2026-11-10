@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Standalone student quiz views (2026-11-10)
+
+- Replaced the inherited student layout, thin player view, and shared player-template partial with independent quiz-form and quiz-player views that each own their document shell and header.
+- Made successful admission persist the local attempt and navigate to the standalone `/start` player page while preserving tab locking, offline recovery, results, and current presentation behavior.
+
 ### Student fullscreen control (2026-11-08)
 
 - Enabled the shared student-header Fullscreen button to enter and exit browser fullscreen mode, synchronize its label when fullscreen changes, and hide itself when the browser does not support the API.

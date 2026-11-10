@@ -136,7 +136,7 @@ The countdown derives from `expiresAt`, not decrement persistence, so closing/ba
 
 Once loaded, the run works through connection loss and browser restarts. Progress is silently retried. Finish carries the full document and supersedes pending progress. There is deliberately no service worker, so opening/reopening a page requires connectivity.
 
-The active player keeps the quiz title in the shared header and places `Question N of M` above the confirmed-answer progress bar. Correct feedback avoids repeating the selected and correct choice; incorrect or unanswered review feedback reveals the correct choice only when the captured visibility settings allow it. Result percentages retain full precision in data and scoring but display as truncated whole numbers. Review verdicts use distinct correct, wrong, and unanswered badges.
+The active player keeps the quiz title in its own header and places `Question N of M` above the confirmed-answer progress bar. Correct feedback avoids repeating the selected and correct choice; incorrect or unanswered review feedback reveals the correct choice only when the captured visibility settings allow it. Result percentages retain full precision in data and scoring but display as truncated whole numbers. Review verdicts use distinct correct, wrong, and unanswered badges.
 
 ## Lifecycle and reporting
 

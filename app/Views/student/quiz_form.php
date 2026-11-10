@@ -37,28 +37,63 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-fullscreen preview-icon"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect width="10" height="8" x="7" y="8" rx="1"/></svg>
                 <span>Fullscreen</span>
             </button>
-            <button id="player-header-quit" type="button" class="btn btn-link danger student-header-quit" hidden><?= esc(lang('Player.ui.quitAction')) ?></button>
+            <button id="player-header-quit" type="button" class="btn btn-default bg-red-100 student-header-quit" hidden><?= esc(lang('Player.ui.quitAction')) ?></button>
         </div>
     </div>
 </header>
 <main id="student-main" class="student-main">
-    <?= $this->renderSection('content') ?>
+    <section id="quiz-introduction" class="card player-intro" aria-labelledby="quiz-title">
+        <img class="player-cover" src="<?= esc($quiz['cover']['url'] ?? base_url('images/placeholder.png'), 'attr') ?>" alt="Quiz screenshot illustration">
+        <div class="card-body">
+            <p><?= esc(lang('Player.ui.byTeacher')) ?> <?= esc($quiz['teacher']) ?></p>
+            <h1 class="title-intro-quiz" id="quiz-title"><?= esc($quiz['title']) ?></h1>
+            <?php if ($quiz['description'] !== '') : ?><p class="player-description"><?= nl2br(esc($quiz['description'])) ?></p><?php endif ?>
+            <hr>
+            <p>
+                <strong><?= esc(lang('Player.ui.questions')) ?></strong> :
+                <?= esc((string) $quiz['questionCount']) ?>
+            </p>
+            <p>
+                <strong><?= esc(lang('Player.ui.timeLimit')) ?></strong> :
+                <?= esc($quiz['timeLimitMinutes'] . ' ' . lang('Player.ui.minutes')) ?>
+            </p>
+            <form id="quiz-admission" class="player-admission" method="post">
+                <label class="form-field">
+                    <strong class="form-label"><?= esc(lang('Player.ui.name')) ?></strong>
+                    <input class="form-control" placeholder="Type here" name="name" type="text" maxlength="120" autofocus autocomplete="name" required>
+                </label>
+                <?php if ($quiz['askEmail']) : ?>
+                <label class="form-field">
+                    <strong class="form-label"><?= esc(lang('Player.ui.email')) ?> (<?= esc(lang('Player.ui.optional')) ?>)</strong>
+                    <input class="form-control" name="email" type="email" maxlength="254" autocomplete="email">
+                </label>
+                <?php endif ?>
+                <?php if ($quiz['askPhone']) : ?>
+                <label class="form-field">
+                    <strong class="form-label"><?= esc(lang('Player.ui.phone')) ?> (<?= esc(lang('Player.ui.optional')) ?>)</strong>
+                    <input class="form-control" name="phone" type="tel" maxlength="32" autocomplete="tel">
+                </label>
+                <?php endif ?>
+                <button type="submit" class="btn btn-primary btn-xl player-start" disabled><span data-start-label><?= esc(lang('Player.ui.start')) ?></span><span aria-hidden="true"> →</span></button>
+                <noscript><p><?= esc(lang('Player.ui.javascriptRequired')) ?></p></noscript>
+            </form>
+        </div>
+    </section>
     <div id="player-root" tabindex="-1"></div>
-    <div id="player-status" class="player-sync-status" role="status" aria-live="polite"></div>
     <div id="player-alert" class="alert alert-warning" role="alert" hidden></div>
-    <div id="player-announcer" class="sr-only" role="status" aria-live="polite"></div>
 </main>
-<dialog id="player-conflict" class="dialog player-dialog" aria-labelledby="conflict-title">
-    <div class="card-body"><h2 id="conflict-title"><?= esc(lang('Player.ui.conflictTitle')) ?></h2>
-        <p><?= esc(lang('Player.ui.conflictText')) ?></p>
-        <div class="player-actions"><button id="keep-local" type="button" class="btn btn-default"><?= esc(lang('Player.ui.keepLocal')) ?></button>
-        <button id="use-server" type="button" class="btn btn-primary"><?= esc(lang('Player.ui.useServer')) ?></button></div>
-    </div>
-</dialog>
-<?= $this->include('student/partials/player_templates') ?>
+
+<template id="player-blocked-template">
+    <section class="card player-error" data-tab-blocked role="alert">
+        <h2 data-slot="title"></h2>
+        <h5 style="font-size:18px; color:brown; margin:12px 0" data-slot="message"></h5>
+        <button type="button" class="btn btn-primary" data-action="retry"></button>
+    </section>
+</template>
+
 <script type="application/json" id="player-config"><?= json_encode([
-    'shareToken' => $shareToken, 'page' => $page, 'apiBase' => site_url('api/v1/player'),
-    'quizUrl' => site_url('q/' . $shareToken), 'attemptId' => $attemptId ?? null, 'ui' => lang('Player.ui'),
+    'shareToken' => $shareToken, 'page' => 'intro', 'apiBase' => site_url('api/v1/player'),
+    'quizUrl' => site_url('q/' . $shareToken), 'attemptId' => null, 'ui' => lang('Player.ui'),
 ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?></script>
 <script type="module" src="<?= esc(base_url('js/player.js') . '?v=' . filemtime(FCPATH . 'js/player.js'), 'attr') ?>"></script>
 </body>

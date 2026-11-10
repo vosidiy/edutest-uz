@@ -50,6 +50,7 @@ function persist() {
   showAlert();
 }
 function notify(message) {
+  if (!announcer) return;
   announcer.textContent = '';
   requestAnimationFrame(() => { announcer.textContent = message; });
 }
@@ -113,7 +114,10 @@ async function claim() {
   if (tabGuard.allowed) return true;
   if (await tabGuard.acquire()) return true;
   if (intro) intro.hidden = true;
-  root.replaceChildren(view.blocked(state?.quiz?.title || '', activate));
+  const retry = config.page === 'intro'
+    ? () => window.location.assign(`${config.quizUrl}/start`)
+    : activate;
+  root.replaceChildren(view.blocked(state?.quiz?.title || '', retry));
   return false;
 }
 
@@ -126,6 +130,7 @@ function updateHeader() {
 }
 
 function updateStatus() {
+  if (!statusBox) return;
   if (!state || !hasPending(state)) {
     statusBox.replaceChildren();
     return;
@@ -162,7 +167,7 @@ async function start(event) {
     state = createState(response.data);
     write(admissionKey, null);
     persist();
-    await activate(false);
+    window.location.assign(`${config.quizUrl}/start`);
   } catch (error) {
     if (['credential_expired', 'invalid_credential'].includes(error.code)) write(admissionKey, null);
     lastError = error.message;
@@ -422,13 +427,13 @@ window.addEventListener('beforeunload', event => {
 });
 window.addEventListener('pagehide', () => { persist(); tabGuard.release(); });
 
-document.querySelector('#keep-local').addEventListener('click', () => {
+document.querySelector('#keep-local')?.addEventListener('click', () => {
   worker.paused = false;
   lastError = '';
   document.querySelector('#player-conflict').close();
   worker.flush();
 });
-document.querySelector('#use-server').addEventListener('click', () => {
+document.querySelector('#use-server')?.addEventListener('click', () => {
   if (!remoteConflict || !state) return;
   state = createState(remoteConflict);
   worker.paused = false;

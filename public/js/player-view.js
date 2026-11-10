@@ -1,4 +1,4 @@
-// Markup lives in app/Views/student/partials/player_templates.php.
+// Player markup lives in app/Views/student/quiz_player.php.
 // This module fills trusted template structure with plain text and binds callbacks.
 function cloneTemplate(name) {
   const template = document.getElementById(`player-${name}-template`);
