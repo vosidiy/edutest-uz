@@ -51,7 +51,7 @@ Each Assessment attempt is the equivalent of one printed paper. Its `snapshot` c
 - Reports decode each attempt's snapshot and answers, showing correct, wrong, and skipped questions.
 - The builder exposes draw count, list/grid layout, whole-minute timer, shuffle, contact, feedback, and result-visibility settings only. A draw count larger than the current pool is stored as the whole-pool setting.
 - Image/audio media actions first save pending quiz edits when server IDs are needed.
-- Quizzes have no separate public-listing flag. Any future teacher profile listing will derive visibility from published status.
+- Teachers can create an optional public page at a unique `/user/{username}` URL, add a plain-text bio, and disable or re-enable the page without releasing the username. Public pages list every non-deleted Active quiz and have no per-quiz listing flag.
 
 ## Privacy and security
 
@@ -65,7 +65,7 @@ Each Assessment attempt is the equivalent of one printed paper. Its `snapshot` c
 
 ## Delivery milestones
 
-1. Canonical schema and destructive development reset.
+1. Canonical fresh-install schema.
 2. Single-choice builder with atomic manual Save and Draft/Active lifecycle.
 3. Attempt snapshot creation and idempotent admission.
 4. Offline-capable player with versioned progress and final synchronization.

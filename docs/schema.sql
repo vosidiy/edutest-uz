@@ -1,6 +1,6 @@
 -- 123test canonical application schema
 -- Target: MySQL 8.4, InnoDB, utf8mb4
--- Last updated: 2026-11-01
+-- Last updated: 2026-11-10
 --
 -- Fresh-install use in phpMyAdmin:
 --   1. Select the intended empty database.
@@ -16,6 +16,7 @@ CREATE TABLE users (
   email VARCHAR(254) NOT NULL,
   password_hash VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   display_name VARCHAR(120) NOT NULL,
+  username VARCHAR(30) CHARACTER SET ascii COLLATE ascii_bin NULL,
   phone VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NULL,
   bio VARCHAR(1000) NOT NULL DEFAULT '',
   timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Tashkent',
@@ -28,8 +29,16 @@ CREATE TABLE users (
   updated_at DATETIME(6) NOT NULL,
   deleted_at DATETIME(6) NULL,
   CONSTRAINT uq_users_email UNIQUE (email),
+  CONSTRAINT uq_users_username UNIQUE (username),
   INDEX ix_users_public (public_page, active, deleted_at),
+  CONSTRAINT chk_users_username CHECK (
+    username IS NULL
+    OR (
+      CHAR_LENGTH(username) BETWEEN 3 AND 30
+    )
+  ),
   CONSTRAINT chk_users_public_page CHECK (public_page IN (0, 1)),
+  CONSTRAINT chk_users_public_page_username CHECK (public_page = 0 OR username IS NOT NULL),
   CONSTRAINT chk_users_active CHECK (active IN (0, 1)),
   CONSTRAINT chk_users_reset_pair CHECK (
     (password_reset_hash IS NULL AND password_reset_expires_at IS NULL)

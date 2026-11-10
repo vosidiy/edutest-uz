@@ -6,6 +6,7 @@ use App\Models\UserModel;
 use App\Services\AuthService;
 use App\Services\AttemptSnapshotService;
 use App\Services\MediaService;
+use App\Services\PublicProfileService;
 use App\Services\QuizAuthoringService;
 use App\Services\TeacherQueryService;
 use App\Services\TeacherResultsService;
@@ -72,6 +73,15 @@ class Services extends BaseService
         }
 
         return new TeacherQueryService(null, static::media());
+    }
+
+    public static function publicProfiles(bool $getShared = true): PublicProfileService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('publicProfiles');
+        }
+
+        return new PublicProfileService(null, static::media());
     }
 
     public static function teacherResults(bool $getShared = true): TeacherResultsService

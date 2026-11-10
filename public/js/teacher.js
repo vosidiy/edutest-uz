@@ -200,6 +200,133 @@
     }
   });
 
+  function usernameAvailability(form) {
+    const input = form?.querySelector('[data-public-username]');
+    const status = form?.querySelector('[data-username-status]');
+    const submit = form?.querySelector('[data-public-page-submit]');
+    let sequence = 0;
+    let timer = null;
+    let lastValue = null;
+    let lastAvailable = null;
+
+    function render(message, state = '') {
+      if (!status) return;
+      status.textContent = message;
+      status.dataset.state = state;
+    }
+
+    async function check() {
+      if (!input) return null;
+      const value = input.value.trim().toLowerCase();
+      input.value = value;
+      lastValue = value;
+      if (!input.checkValidity()) {
+        lastAvailable = false;
+        render('Use 3–30 lowercase letters, numbers, or single hyphens.', 'unavailable');
+        return false;
+      }
+
+      const current = ++sequence;
+      render('Checking availability…', 'checking');
+      if (submit) submit.disabled = true;
+      try {
+        const result = await request(`/api/v1/account/public-page/availability?username=${encodeURIComponent(value)}`);
+        if (current !== sequence || input.value !== value) return null;
+        lastAvailable = !!result.data.valid && !!result.data.available;
+        render(lastAvailable ? 'This username is available.' : (result.data.valid ? 'That username is already in use.' : 'Use 3–30 lowercase letters, numbers, or single hyphens.'), lastAvailable ? 'available' : 'unavailable');
+        return lastAvailable;
+      } catch (_) {
+        if (current !== sequence) return null;
+        lastAvailable = null;
+        render('Availability could not be checked. Saving will check again.', 'error');
+        return null;
+      } finally {
+        if (current === sequence && submit) submit.disabled = false;
+      }
+    }
+
+    input?.addEventListener('input', () => {
+      input.value = input.value.toLowerCase();
+      sequence += 1;
+      lastValue = null;
+      lastAvailable = null;
+      clearTimeout(timer);
+      render(input.value ? 'Waiting to check…' : '');
+      timer = setTimeout(check, 300);
+    });
+
+    if (input?.value) timer = setTimeout(check, 0);
+
+    return {
+      async ensureAvailable() {
+        clearTimeout(timer);
+        const value = input?.value.trim().toLowerCase() || '';
+        if (value === lastValue && lastAvailable !== null) return lastAvailable;
+        return check();
+      }
+    };
+  }
+
+  document.querySelectorAll('[data-public-page-form]').forEach(form => usernameAvailability(form));
+
+  const publicPageDialog = document.querySelector('#public-page-dialog');
+  const publicPageForm = publicPageDialog?.querySelector('[data-public-page-dialog-form]');
+  const publicPageChecker = publicPageForm ? usernameAvailability(publicPageForm) : null;
+  let publicPageBusy = false;
+  let publicPageOpener = null;
+
+  document.querySelectorAll('[data-open-public-page]').forEach(button => button.addEventListener('click', () => {
+    publicPageOpener = button;
+    publicPageDialog?.showModal();
+    setTimeout(() => publicPageForm?.querySelector('[data-public-username]')?.focus(), 0);
+  }));
+
+  publicPageDialog?.querySelectorAll('[data-close-public-page]').forEach(button => button.addEventListener('click', event => {
+    event.preventDefault();
+    if (!publicPageBusy) publicPageDialog.close('cancel');
+  }));
+  publicPageDialog?.addEventListener('cancel', event => {
+    if (publicPageBusy) event.preventDefault();
+  });
+  publicPageDialog?.addEventListener('close', () => publicPageOpener?.focus());
+
+  publicPageForm?.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (publicPageBusy || !publicPageForm.reportValidity()) return;
+    const error = publicPageForm.querySelector('[data-public-page-error]');
+    const submit = publicPageForm.querySelector('[data-public-page-submit]');
+    error.textContent = '';
+    const available = await publicPageChecker.ensureAvailable();
+    if (available === false) return;
+
+    publicPageBusy = true;
+    publicPageForm.setAttribute('aria-busy', 'true');
+    submit.disabled = true;
+    submit.textContent = 'Creating…';
+    try {
+      const data = new FormData(publicPageForm);
+      const result = await request('/api/v1/account/public-page', {
+        method: 'PUT',
+        body: JSON.stringify({username: data.get('username'), bio: data.get('bio'), publicPage: true})
+      });
+      publicPageDialog.close('saved');
+      const action = document.querySelector('[data-public-page-action]');
+      const link = document.createElement('a');
+      link.className = 'btn btn-default';
+      link.href = result.data.url;
+      link.textContent = 'View my page';
+      action?.replaceChildren(link);
+      toast('Your public page is ready.');
+    } catch (failure) {
+      error.textContent = failure.fields?.username || failure.fields?.bio || failure.message;
+    } finally {
+      publicPageBusy = false;
+      publicPageForm.setAttribute('aria-busy', 'false');
+      submit.disabled = false;
+      submit.textContent = 'Create page';
+    }
+  });
+
   document.addEventListener('click', event => {
     const toggle = event.target.closest('[data-menu-toggle]');
     document.querySelectorAll('.action-menu .dropdown').forEach(menu => {

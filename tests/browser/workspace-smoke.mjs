@@ -11,7 +11,7 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const php = process.env.PLAYER_PHP || 'php';
 const publicId = 'a'.repeat(32);
 const newPublicId = 'b'.repeat(32);
-const user = {id:1,email:'teacher@example.test',display_name:'Teacher One',phone:null,bio:'',timezone:'Asia/Tashkent',public_page:false};
+const user = {id:1,email:'teacher@example.test',display_name:'Teacher One',username:null,phone:null,bio:'',timezone:'Asia/Tashkent',public_page:false};
 const quiz = {publicId,shareUrl:'/q/123456789',resultsAvailable:true,resultsUrl:`/results/quizzes/${publicId}`,
   status:'published',deleted:false,title:'Snapshot assessment',description:'Current authoring pool',cover:null,
   timeLimitSec:7200,timeLimitMinutes:120,askEmail:true,askPhone:false,feedback:'at_end',shuffleQuestions:true,
@@ -57,6 +57,20 @@ const server = http.createServer(async (request, response) => {
       return;
     }
     if (url.pathname === '/favicon.ico') { response.writeHead(204).end(); return; }
+    if (url.pathname === '/api/v1/account/public-page/availability' && request.method === 'GET') {
+      const username = (url.searchParams.get('username') || '').trim().toLowerCase();
+      const valid = /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(username) && username.length >= 3 && username.length <= 30;
+      response.writeHead(200, {'Content-Type':'application/json','Cache-Control':'no-store'});
+      response.end(JSON.stringify({data:{username,valid,available:valid},meta:{timestamp:new Date().toISOString()}}));
+      return;
+    }
+    if (url.pathname === '/api/v1/account/public-page' && request.method === 'PUT') {
+      const saved = await requestJson(request);
+      Object.assign(user, {username:saved.username.toLowerCase(),bio:saved.bio,public_page:!!saved.publicPage});
+      response.writeHead(200, {'Content-Type':'application/json','Cache-Control':'no-store'});
+      response.end(JSON.stringify({data:{username:user.username,bio:user.bio,publicPage:user.public_page,url:`/user/${user.username}`},meta:{timestamp:new Date().toISOString()}}));
+      return;
+    }
     if (url.pathname === '/api/v1/quizzes' && request.method === 'POST') {
       const created = await requestJson(request);
       newQuiz.title = created.title;
@@ -111,6 +125,13 @@ try {
   assert.equal(await browser.evaluate(`document.querySelector('.library-toolbar') === null`), true);
   assert.equal(await browser.evaluate(`document.querySelector('[name="status"], [name="sort"]') === null`), true);
   assert.equal(await browser.evaluate(`document.querySelector('[data-quiz-action="publish"], [data-quiz-action="unpublish"]') === null`), true);
+  await browser.evaluate(`document.querySelector('[data-open-public-page]').click()`);
+  await browser.until(() => browser.evaluate(`document.querySelector('#public-page-dialog').open`), 'public page dialog');
+  await browser.evaluate(`(() => { const input=document.querySelector('#dialog_public_username');input.value='teacher-one';input.dispatchEvent(new Event('input',{bubbles:true})); })()`);
+  await browser.until(() => browser.evaluate(`document.querySelector('#public-page-dialog [data-username-status]').dataset.state === 'available'`), 'username availability');
+  await browser.evaluate(`(() => { document.querySelector('#dialog_public_bio').value='Teacher bio';document.querySelector('#public-page-dialog [data-public-page-submit]').click(); })()`);
+  await browser.until(() => browser.evaluate(`!document.querySelector('#public-page-dialog').open && document.querySelector('[data-public-page-action] a')?.textContent.trim() === 'View my page'`), 'public page creation');
+  assert.equal(await browser.evaluate(`document.querySelector('[data-public-page-action] a').getAttribute('href')`), '/user/teacher-one');
   await browser.evaluate(`document.querySelector('[data-open-create]').click()`);
   await browser.until(() => browser.evaluate(`document.querySelector('#create-quiz-dialog').open`), 'create dialog');
   assert.equal(await browser.evaluate(`document.querySelector('#create-quiz-dialog').textContent.includes('Quiz mode')`), false);

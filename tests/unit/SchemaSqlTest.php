@@ -13,6 +13,10 @@ final class SchemaSqlTest extends CIUnitTestCase
         $this->assertIsString($sql);
         $this->assertStringContainsString('CREATE TABLE users', $sql);
         $this->assertStringContainsString('password_hash VARCHAR(255)', $sql);
+        $this->assertStringContainsString('username VARCHAR(30)', $sql);
+        $this->assertStringContainsString('CONSTRAINT uq_users_username UNIQUE (username)', $sql);
+        $this->assertStringContainsString('CONSTRAINT chk_users_public_page_username', $sql);
+        $this->assertStringNotContainsString('REGEXP BINARY', $sql);
         $this->assertStringContainsString('password_reset_hash BINARY(32)', $sql);
         $this->assertStringContainsString('user_id BIGINT UNSIGNED NOT NULL', $sql);
         $this->assertStringNotContainsString('auth_identities', $sql);
@@ -45,24 +49,4 @@ final class SchemaSqlTest extends CIUnitTestCase
         $this->assertStringNotContainsString('ALTER TABLE users', $sql);
     }
 
-    public function testDevelopmentResetPreservesUsersAndRecreatesOnlyCurrentQuizTables(): void
-    {
-        $sql = file_get_contents(ROOTPATH . 'docs/attempt-snapshot-reset.sql');
-
-        $this->assertIsString($sql);
-        $this->assertStringContainsString('SET FOREIGN_KEY_CHECKS = 0', $sql);
-        $this->assertStringContainsString('SET FOREIGN_KEY_CHECKS = 1', $sql);
-        $this->assertStringNotContainsString('DROP TABLE IF EXISTS users', $sql);
-        $this->assertStringNotContainsString('CREATE TABLE users', $sql);
-        foreach (['quizzes', 'questions', 'question_options', 'attempts'] as $table) {
-            $this->assertStringContainsString('DROP TABLE IF EXISTS ' . $table, $sql);
-            $this->assertStringContainsString('CREATE TABLE ' . $table, $sql);
-        }
-        foreach (['quiz_papers', 'attempt_answers', 'practice_keys', 'cheat_events'] as $table) {
-            $this->assertStringContainsString('DROP TABLE IF EXISTS ' . $table, $sql);
-            $this->assertStringNotContainsString('CREATE TABLE ' . $table, $sql);
-        }
-        $this->assertStringContainsString('snapshot JSON NOT NULL', $sql);
-        $this->assertStringContainsString('answers JSON NOT NULL', $sql);
-    }
 }

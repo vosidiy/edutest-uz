@@ -45,7 +45,7 @@
     <section id="quiz-introduction" class="card player-intro" aria-labelledby="quiz-title">
         <img class="player-cover" src="<?= esc($quiz['cover']['url'] ?? base_url('images/placeholder.png'), 'attr') ?>" alt="Quiz screenshot illustration">
         <div class="card-body">
-            <p><?= esc(lang('Player.ui.byTeacher')) ?> <?= esc($quiz['teacher']) ?></p>
+            <p><?= esc(lang('Player.ui.byTeacher')) ?> <?php if ($quiz['teacherProfileUrl'] !== null) : ?><a href="<?= esc($quiz['teacherProfileUrl'], 'attr') ?>"><?= esc($quiz['teacher']) ?></a><?php else : ?><?= esc($quiz['teacher']) ?><?php endif ?></p>
             <h1 class="title-intro-quiz" id="quiz-title"><?= esc($quiz['title']) ?></h1>
             <?php if ($quiz['description'] !== '') : ?><p class="player-description"><?= nl2br(esc($quiz['description'])) ?></p><?php endif ?>
             <hr>

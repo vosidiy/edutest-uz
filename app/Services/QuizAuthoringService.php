@@ -264,7 +264,7 @@ final class QuizAuthoringService
             return null;
         }
         $row = $this->db->table('quizzes q')
-            ->select('q.*, u.display_name')
+            ->select('q.*, u.display_name, u.username, u.public_page')
             ->join('users u', 'u.id = q.user_id')
             ->where('q.share_token', $shareToken)
             ->where('q.status', 'published')
@@ -286,6 +286,9 @@ final class QuizAuthoringService
             'description'      => (string) $row['description'],
             'status'           => 'published',
             'teacher'          => (string) $row['display_name'],
+            'teacherProfileUrl'=> (bool) $row['public_page'] && $row['username'] !== null
+                ? site_url('user/' . $row['username'])
+                : null,
             'questionCount'    => $row['draw_count'] === null ? $pool : min($pool, (int) $row['draw_count']),
             'timeLimitMinutes' => number_format(((int) $row['time_limit_sec']) / 60, 1, '.', ''),
             'shareToken'       => $shareToken,

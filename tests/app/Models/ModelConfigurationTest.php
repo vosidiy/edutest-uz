@@ -30,6 +30,7 @@ final class ModelConfigurationTest extends CIUnitTestCase
                 'email',
                 'password_hash',
                 'display_name',
+                'username',
                 'phone',
                 'bio',
                 'timezone',

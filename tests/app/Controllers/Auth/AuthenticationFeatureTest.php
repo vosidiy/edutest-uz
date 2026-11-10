@@ -112,6 +112,7 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
         $this->assertNotNull($user);
         $this->assertSame('ada@example.test', $user['email']);
         $this->assertSame('Ada Lovelace', $user['display_name']);
+        $this->assertNull($user['username']);
         $this->assertSame('+998901234567', $user['phone']);
         $this->assertSame('', $user['bio']);
         $this->assertSame('Asia/Tashkent', $user['timezone']);
@@ -287,6 +288,7 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
             'email' => ['type' => 'VARCHAR', 'constraint' => 254],
             'password_hash' => ['type' => 'VARCHAR', 'constraint' => 255],
             'display_name' => ['type' => 'VARCHAR', 'constraint' => 120],
+            'username' => ['type' => 'VARCHAR', 'constraint' => 30, 'null' => true],
             'phone' => ['type' => 'VARCHAR', 'constraint' => 16, 'null' => true],
             'bio' => ['type' => 'VARCHAR', 'constraint' => 1000, 'default' => ''],
             'timezone' => ['type' => 'VARCHAR', 'constraint' => 64, 'default' => 'Asia/Tashkent'],
@@ -301,6 +303,7 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
         ]);
         $this->forge->addKey('id', true);
         $this->forge->addUniqueKey('email');
+        $this->forge->addUniqueKey('username');
         $this->forge->createTable('users', true);
     }
 
@@ -358,6 +361,7 @@ final class AuthenticationFeatureTest extends CIUnitTestCase
             'email'         => $email,
             'password_hash' => password_hash($password, PASSWORD_BCRYPT, ['cost' => 4]),
             'display_name'  => 'Test Teacher',
+            'username'      => null,
             'phone'         => null,
             'bio'           => '',
             'timezone'      => 'Asia/Tashkent',

@@ -4,6 +4,7 @@ use CodeIgniter\Router\RouteCollection;
 
 /** @var RouteCollection $routes */
 $routes->get('/', 'Home::index');
+$routes->get('user/(:segment)', 'PublicSite\ProfileController::show/$1', ['as' => 'public-profile']);
 
 $routes->get('q/(:segment)', 'PublicSite\QuizController::show/$1', ['as' => 'public-quiz']);
 $routes->get('q/(:segment)/start', 'PublicSite\QuizController::start/$1');
@@ -24,6 +25,7 @@ $routes->group('', ['namespace' => 'App\Controllers\Teacher', 'filter' => 'auth'
     $routes->get('dashboard', 'DashboardController::index', ['as' => 'dashboard']);
     $routes->get('account', 'AccountController::index', ['as' => 'account']);
     $routes->post('account/profile', 'AccountController::updateProfile', ['as' => 'account-profile']);
+    $routes->post('account/public-page', 'AccountController::updatePublicPage', ['as' => 'account-public-page']);
     $routes->post('account/password', 'AccountController::updatePassword', ['as' => 'account-password']);
     $routes->get('quizzes', 'QuizController::index', ['as' => 'quizzes']);
     $routes->get('quizzes/(:segment)/edit', 'QuizController::edit/$1', ['as' => 'quiz-edit']);
@@ -34,6 +36,8 @@ $routes->group('', ['namespace' => 'App\Controllers\Teacher', 'filter' => 'auth'
 
 $routes->group('api/v1', ['namespace' => 'App\Controllers\Api', 'filter' => 'auth'], static function (RouteCollection $routes): void {
     $routes->get('csrf', 'CsrfController::show');
+    $routes->get('account/public-page/availability', 'PublicProfileController::availability');
+    $routes->put('account/public-page', 'PublicProfileController::update');
     $routes->post('quizzes', 'QuizController::create');
     $routes->get('quizzes/(:segment)', 'QuizController::show/$1');
     $routes->put('quizzes/(:segment)', 'QuizController::update/$1');

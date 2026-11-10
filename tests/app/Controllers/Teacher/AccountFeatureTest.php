@@ -6,6 +6,7 @@ namespace Tests\App\Controllers\Teacher;
 
 use App\Models\UserModel;
 use App\Services\AuthService;
+use App\Services\PublicProfileService;
 use CodeIgniter\Database\BaseConnection;
 use CodeIgniter\Database\Forge;
 use CodeIgniter\Security\Exceptions\SecurityException;
@@ -36,11 +37,13 @@ final class AccountFeatureTest extends CIUnitTestCase
         $_SESSION = [];
         Services::resetSingle('auth');
         Services::injectMock('auth', new AuthService(new UserModel($this->accountDb), service('session')));
+        Services::injectMock('publicProfiles', new PublicProfileService($this->accountDb));
     }
 
     protected function tearDown(): void
     {
         Services::resetSingle('auth');
+        Services::resetSingle('publicProfiles');
         service('session')->destroy();
         $_SESSION = [];
         if ($this->accountDb->tableExists('users')) {
@@ -60,6 +63,7 @@ final class AccountFeatureTest extends CIUnitTestCase
         $response->assertSee('My account');
         $response->assertSee('id="profileForm"');
         $response->assertSee('id="passwordForm"');
+        $response->assertSee('id="publicPageForm"');
         $response->assertSee('teacher@example.test');
         $response->assertSee(base_url('js/auth.js') . '?v=');
         $this->assertStringContainsString('no-store', $response->response()->getHeaderLine('Cache-Control'));
@@ -125,6 +129,46 @@ final class AccountFeatureTest extends CIUnitTestCase
         $this->assertSame('teacher@example.test', $user['email']);
     }
 
+    public function testPublicPageFormUpdatesOnlyTheAuthenticatedAccount(): void
+    {
+        $userId = $this->insertUser();
+        $otherId = $this->insertUser('other@example.test');
+
+        $response = $this->withoutGlobalFilters(fn () => $this->withSession([AuthService::SESSION_KEY => $userId])->post('/account/public-page', [
+            'id' => $otherId,
+            'username' => ' Ada-Lovelace ',
+            'bio' => "Teacher bio\nSecond line",
+            'publicPage' => '1',
+        ]));
+
+        $response->assertRedirectTo(site_url('account'));
+        $response->assertSessionHas('publicPageSuccess');
+        $updated = $this->accountDb->table('users')->where('id', $userId)->get()->getRowArray();
+        $other = $this->accountDb->table('users')->where('id', $otherId)->get()->getRowArray();
+        $this->assertSame('ada-lovelace', $updated['username']);
+        $this->assertSame("Teacher bio\nSecond line", $updated['bio']);
+        $this->assertSame(1, (int) $updated['public_page']);
+        $this->assertNull($other['username']);
+    }
+
+    public function testPublicPageFormRejectsInvalidAndDuplicateUsernames(): void
+    {
+        $userId = $this->insertUser();
+        $otherId = $this->insertUser('other@example.test');
+        $this->accountDb->table('users')->where('id', $otherId)->update(['username' => 'reserved-name']);
+
+        foreach (['bad--name', 'reserved-name'] as $username) {
+            $response = $this->withoutGlobalFilters(fn () => $this->withSession([AuthService::SESSION_KEY => $userId])->post('/account/public-page', [
+                'username' => $username,
+                'bio' => '',
+                'publicPage' => '1',
+            ]));
+            $response->assertSessionHas('publicPageErrors');
+        }
+
+        $this->assertNull($this->accountDb->table('users')->where('id', $userId)->get()->getRow('username'));
+    }
+
     public function testPasswordChangeRejectsIncorrectAndInvalidCredentials(): void
     {
         $userId = $this->insertUser();
@@ -179,6 +223,18 @@ final class AccountFeatureTest extends CIUnitTestCase
         ]);
     }
 
+    public function testPublicPageMutationRequiresCsrfToken(): void
+    {
+        $this->expectException(SecurityException::class);
+        $userId = $this->insertUser();
+
+        $this->withSession([AuthService::SESSION_KEY => $userId])->post('/account/public-page', [
+            'username' => 'secure-teacher',
+            'bio' => '',
+            'publicPage' => '1',
+        ]);
+    }
+
     private function createUsersTable(): void
     {
         $this->forge->addField([
@@ -186,6 +242,7 @@ final class AccountFeatureTest extends CIUnitTestCase
             'email' => ['type' => 'VARCHAR', 'constraint' => 254],
             'password_hash' => ['type' => 'VARCHAR', 'constraint' => 255],
             'display_name' => ['type' => 'VARCHAR', 'constraint' => 120],
+            'username' => ['type' => 'VARCHAR', 'constraint' => 30, 'null' => true],
             'phone' => ['type' => 'VARCHAR', 'constraint' => 16, 'null' => true],
             'bio' => ['type' => 'VARCHAR', 'constraint' => 1000, 'default' => ''],
             'timezone' => ['type' => 'VARCHAR', 'constraint' => 64, 'default' => 'Asia/Tashkent'],
@@ -200,6 +257,7 @@ final class AccountFeatureTest extends CIUnitTestCase
         ]);
         $this->forge->addKey('id', true);
         $this->forge->addUniqueKey('email');
+        $this->forge->addUniqueKey('username');
         $this->forge->createTable('users', true);
     }
 
@@ -210,6 +268,7 @@ final class AccountFeatureTest extends CIUnitTestCase
             'email' => $email,
             'password_hash' => password_hash($password, PASSWORD_BCRYPT, ['cost' => 4]),
             'display_name' => 'Test Teacher',
+            'username' => null,
             'phone' => $phone,
             'bio' => '',
             'timezone' => 'Asia/Tashkent',

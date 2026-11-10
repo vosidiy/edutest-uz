@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers\Teacher;
 
 use App\Controllers\BaseController;
+use App\Exceptions\AuthoringException;
 use App\Services\AuthService;
 use CodeIgniter\Database\Exceptions\DatabaseException;
 use CodeIgniter\HTTP\RedirectResponse;
@@ -91,6 +92,26 @@ final class AccountController extends BaseController
 
         return redirect()->route('account')
             ->with('passwordSuccess', lang('Workspace.accountPage.passwordSaved'));
+    }
+
+    public function updatePublicPage(): RedirectResponse
+    {
+        $data = [
+            'username'   => (string) $this->request->getPost('username'),
+            'bio'        => (string) $this->request->getPost('bio'),
+            'publicPage' => $this->request->getPost('publicPage') !== null,
+        ];
+
+        try {
+            service('publicProfiles')->update((int) service('auth')->id(), $data);
+        } catch (AuthoringException $exception) {
+            return redirect()->route('account')
+                ->with('publicPageErrors', $exception->fields === [] ? ['profile' => $exception->getMessage()] : $exception->fields)
+                ->with('publicPageOld', $data);
+        }
+
+        return redirect()->route('account')
+            ->with('publicPageSuccess', lang('Workspace.accountPage.publicPageSaved'));
     }
 
     /** @return array{display_name: string, email: string, phone: string} */

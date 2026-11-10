@@ -1548,6 +1548,12 @@ input[type="file"] { height: auto; padding: 8px; }
 .account-card h2 { margin-bottom: var(--space-1); }
 .account-card .alert ul { margin: 0; }
 .account-actions { display: flex;  }
+.public-url-input { display: flex; align-items: stretch; }
+.public-url-input > span { display: flex; padding: 0 10px; align-items: center; border: 1px solid var(--border-color-default); border-right: 0; border-radius: var(--border-radius-md) 0 0 var(--border-radius-md); background: var(--bg-color-lower); color: var(--text-color-secondary); font-size: .875rem; white-space: nowrap; }
+.public-url-input .form-control { min-width: 0; border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0; }
+.form-hint[data-state="available"] { color: var(--green-800); }
+.form-hint[data-state="unavailable"],
+.form-hint[data-state="error"] { color: var(--red-800); }
 
 .eyebrow {
   margin-bottom: 5px;
@@ -1588,6 +1594,7 @@ input[type="file"] { height: auto; padding: 8px; }
   color: var(--neutral-0);
   font-size: clamp(1.4rem, 2.5vw, 1.9rem);
 }
+.hero-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
 .metrics {
   display: grid;

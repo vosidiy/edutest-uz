@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Public teacher pages (2026-11-10)
+
+- Added optional `/user/{username}` teacher profiles with plain-text bios, enabled/disabled visibility, and paginated cards for every non-deleted Active quiz.
+- Added account and dashboard profile setup, advisory live username availability checks, authoritative unique saves, and teacher-profile links from quiz introductions.
+- Added the canonical nullable unique `users.username` column and public-page ownership constraint; existing databases require the documented manual phpMyAdmin `ALTER TABLE` statements.
+- Matched the canonical username check to the phpMyAdmin-applied length constraint and removed obsolete SQL dumps, reset-file references, and their stale test; `docs/schema.sql` is the only retained SQL file.
+
 ### Standalone student quiz views (2026-11-10)
 
 - Replaced the inherited student layout, thin player view, and shared player-template partial with independent quiz-form and quiz-player views that each own their document shell and header.
@@ -102,7 +109,7 @@
 - Added provisional lazy expiry and valid delayed-Finish reconciliation with `late_sync`, plus snapshot-backed teacher list/detail/CSV reporting and attempt-bound media renewal.
 - Simplified the builder/dashboard and lifecycle to draft, published, unpublish, trash, and restore; removed Practice, question types, passcodes, schedules, integrity controls, closed, and archived controls.
 - Replaced `/play` with `/start`, replaced answer/activity/integrity endpoints with versioned progress, and removed all Practice endpoints.
-- Replaced the canonical schema and added `docs/attempt-snapshot-reset.sql`, a manual destructive phpMyAdmin reset that preserves `users`. Private media cleanup remains a separate explicit filesystem operation.
+- Replaced the canonical schema for the attempt-snapshot storage model while preserving existing user accounts during the developer-applied update.
 - Removed the `quiz_papers`, `attempt_answers`, `practice_keys`, and `cheat_events` tables, models, services, and obsolete tests.
 - Updated the product plan, architecture, player, answer-storage, reporting, route, schema, PHP, JavaScript, and behavior-test documentation for the reduced MVP.
 
@@ -117,9 +124,9 @@
 - Explicit Assessment and Practice Quit controls. Assessment Quit durably finalizes the confirmed prefix with `ended_reason=quit`, waits for pending uploads before offering fresh admission, and remains safely retryable after offline use; Practice Quit stays local.
 - Authenticated student name/email projection in Assessment start/recovery state and player/result headers, with backward-compatible recovery for older local runs.
 - Teacher response progress showing received confirmations/skips and running correctness, with all statuses/newest starts as the default and clear offline/connectivity caveats.
-- Non-destructive `quit-attempt-upgrade.sql` plus canonical ended-reason support for Quit.
+- Added canonical ended-reason support for Quit with a non-destructive developer-applied database update.
 - Recoverable offline assessment synchronization: durable format-4 local progress/outbox, immediate local feedback/results, serialized resume and upload coordination, small answer acknowledgements, and direct paper grading.
-- Additive manual `offline-continuity-upgrade.sql` and canonical client activity/answer-occurrence fields plus a late-sync flag; no application-triggered database changes or data reset.
+- Added canonical client activity/answer-occurrence fields plus a late-sync flag through a manual additive update; no application-triggered database changes or data reset.
 - Provisional Abandoned results can reconcile delayed work; Completed final records remain immutable. Timeout scores exclude unconfirmed drafts. Teacher detail/CSV distinguish occurrence, receipt, finish reason, and late synchronization.
 - Persistent connection warnings, bounded automatic/manual retry, receipt-only hidden-results behavior, and preservation of unsupported old pending browser queues.
 - Meaningful-interaction eight-hour inactivity policy, capped scheduled deadlines, five-second future-clock tolerance, and documented client-trusted offline timing.
@@ -128,7 +135,7 @@
 - Exhaustive architecture database reference documenting every canonical table and column, including identifier, publication, retry, deadline, privacy, and historical-result responsibilities.
 - Explicit published-paper workflow: initial Publish and later Publish changes create immutable quiz paper schema version 3 and update `quizzes.current_paper_id`; ordinary saves edit only the teacher working copy.
 - Normalized `attempt_answers` persistence with one initialized row per assessment question, immutable confirmed answers, idempotent retries, and out-of-order-safe answer confirmations.
-- Destructive development reset SQL for installing published papers and normalized attempt answers after disposable test data has been cleared.
+- Reworked the canonical schema for published papers and normalized attempt answers after disposable test data had been cleared.
 - Updated isolated MySQL schema and 20/100/500-question storage/write measurement helper for normalized answer rows.
 
 - Same-quiz open-tab coordination for Assessment and Practice using non-waiting Web Locks, with accessible blocked/retry and unsupported-browser notices; no browser-wide identity or credential storage.
@@ -284,7 +291,7 @@
 
 - Aggregate `attempts.responses`, `attempts.settings`, `attempts.phase`, `attempts.version`, and the old assessment sync route. The offline-continuity update adds `late_sync` back as an informational recovery flag.
 
-- Removed the applied `attempt-responses-upgrade.sql`, `short-codes-integrity-upgrade.sql`, and `attempt-mvp-cleanup-upgrade.sql`; the canonical schema contains their final structure.
+- Removed applied one-time database upgrade artifacts; the canonical schema contains their final structure.
 - Teacher sidebar/mobile bottom navigation and separate quiz-library/Results-overview views; their features now live on the dashboard.
 
 - The legacy `attempt_items` table and model; assessment answers now use the current `attempt_answers` table.

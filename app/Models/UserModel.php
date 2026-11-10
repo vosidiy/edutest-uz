@@ -18,6 +18,7 @@ final class UserModel extends Model
         'email',
         'password_hash',
         'display_name',
+        'username',
         'phone',
         'bio',
         'timezone',

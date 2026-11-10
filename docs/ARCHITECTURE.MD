@@ -14,6 +14,12 @@ The CodeIgniter application timezone is Asia/Tashkent, which supplies calendar b
 
 `docs/schema.sql` is the complete fresh-install source of truth. The project does not use migrations.
 
+### `users` and public teacher pages
+
+`users.username` is an optional, lowercase public URL identifier rather than a login credential. It is 3–30 ASCII letters, digits, or single hyphen-separated segments and is unique across all accounts, including disabled and soft-deleted accounts. `public_page` can be enabled only when a username exists. Disabling a page retains and reserves its username; changing the username releases the old URL immediately, with no history or redirect.
+
+An enabled page at `/user/{username}` exposes only the teacher's display name, plain-text bio, and non-deleted published quizzes. Quiz cards are paginated in most-recently-updated order. Disabled, inactive, deleted, invalid, and unknown profiles return 404; an enabled teacher with no published quizzes receives a public empty state. Individual quiz introductions link the teacher name only when that profile is enabled.
+
 ### `quizzes`
 
 Stores the teacher-owned live definition and its lifecycle. `public_id` is the reporting/builder identifier; the nine-digit `share_token` locates the public quiz. Status is only `draft` or `published`; `deleted_at` provides trash/restore without erasing reports. There is no per-quiz listing flag or optimistic-lock counter: teacher writes are last-write-wins and `updated_at` is informational.
@@ -108,6 +114,7 @@ The server validates exact object keys, question order, option membership, order
 
 Public pages:
 
+- `GET /user/{username}` — enabled teacher profile and Active quiz listing.
 - `GET /q/{shareToken}` — introduction/admission.
 - `GET /q/{shareToken}/start` — quiz player.
 - `GET /q/{shareToken}/results` — result player view.
@@ -123,6 +130,8 @@ Player API:
 - `POST /api/v1/player/assessments/{attemptId}/finish`
 - `GET /api/v1/player/assessments/{attemptId}/results`
 - `POST /api/v1/player/assessments/{attemptId}/media`
+
+Teacher public-page settings use CSRF-protected `POST /account/public-page` for the Account form and `PUT /api/v1/account/public-page` for the dashboard dialog. Authenticated `GET /api/v1/account/public-page/availability?username=...` provides an advisory live check; the write repeats validation and treats the database unique constraint as authoritative. The dashboard creation flow always enables the page, while Account can edit the username and bio or toggle visibility.
 
 Teacher authoring uses `PUT /api/v1/quizzes/{publicId}` as the only content/status save endpoint. Its document includes storage status `draft|published` and `timeLimitMinutes`; both browser and service normalize the timer, and the service converts it to seconds before committing content, status, publication timestamp, and a refreshed `updated_at` in one transaction. Direct creation inserts a Draft, but its one-time builder URL stages Active locally, removes that flag after hydration, and marks the document unsaved without issuing a PUT; the first valid manual Save publishes it. Existing Drafts and duplicated quizzes do not receive this default. Every explicit **Save quiz** or **Saved** click performs this write. The builder has no autosave, Publish/Unpublish endpoints, version field, conflict/overwrite flow, or public-listing checkbox. Concurrent teacher writes are last-write-wins. Media actions save pending edits only when server IDs are needed; media requests carry no expected version and return refreshed `updatedAt`. Pending-cover handling, in-flight edit merging, retry states, and unsaved-navigation protection remain in force.
 
@@ -160,14 +169,4 @@ The per-quiz attempt list contains only attempts with an authoritative `finished
 - Share tokens and browser-visible answer keys are not examination-security boundaries.
 - The raw attempt public ID is intentionally an MVP-strength cookie credential. Anyone who learns it and manually reproduces the cookie can act as that attempt until the server-side grace window closes.
 
-## Development reset
-
-`docs/attempt-snapshot-reset.sql` is the manual destructive phpMyAdmin upgrade for development. It preserves `users`, drops all quiz/student tables, and recreates the canonical four quiz tables. It never runs automatically and does not touch the filesystem.
-
-After a successful reset, private quiz media can be cleared separately:
-
-```bash
-find /Applications/MAMP/htdocs/123test-uz/writable/uploads/quiz-media -mindepth 1 -delete
-```
-
-Verify the absolute path before running that destructive command. Never import `docs/schema.sql` over a non-empty database.
+For a fresh installation, import `docs/schema.sql` only into an empty database. Existing databases are updated manually through phpMyAdmin with change-specific SQL supplied to the developer; the application never runs schema changes automatically.
