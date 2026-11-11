@@ -27,9 +27,9 @@ const questions = [
   ]},
 ];
 const snapshot = () => ({schemaVersion:1,quiz:{title:'Snapshot quiz',description:'Two questions',shareToken,timeLimitSec:7200,
-  askEmail:false,askPhone:false,feedback:'after_each',showScore:true,showAnswers:true,showExplain:true},cover:null,questions});
-const summary = () => ({title:'Snapshot quiz',description:'Three questions',teacher:'Teacher',questionCount:questions.length,timeLimitMinutes:'120.0',
-  shareToken,askEmail:false,askPhone:false,cover:null});
+  askEmail:false,askPhone:false,feedback:'after_each',showAnswers:true},cover:null,questions});
+const summary = () => ({title:'Snapshot quiz',description:'Three questions',teacher:'Teacher',teacherProfileUrl:null,
+  questionCount:questions.length,timeLimitMinutes:'120.0',shareToken,askEmail:false,askPhone:false,cover:null});
 const iso = () => new Date().toISOString();
 const ack = () => ({attemptId:official.attemptId,status:official.status,answerVersion:official.answerVersion,
   lastSavedAt:official.lastSavedAt,expiresAt:official.expiresAt,finishedAt:official.finishedAt,
@@ -204,6 +204,7 @@ try {
   await browser.evaluate(`document.querySelectorAll('.player-review-item summary')[2].click()`);
   assert.equal(await browser.evaluate(`document.querySelectorAll('.player-review-item')[2].textContent.includes('Your answer')`), false);
   assert.equal(await browser.evaluate(`document.querySelectorAll('.player-review-item')[2].textContent.includes('Correct answer')`), true);
+  assert.equal(await browser.evaluate(`document.querySelectorAll('.player-review-item')[2].textContent.includes('Right is still correct.')`), true);
   assert.equal(await browser.evaluate(`JSON.parse(localStorage.getItem('edutest:player:${shareToken}')).finishPending`), true);
   assert.equal(await browser.evaluate(`document.querySelector('[data-slot="status"]').textContent.includes('Provisional')`), true);
 

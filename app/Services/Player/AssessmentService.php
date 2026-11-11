@@ -218,26 +218,22 @@ final class AssessmentService
             'finishedAt'  => PlayerStore::iso($attempt['finished_at']),
             'finishReason'=> $attempt['ended_reason'],
             'lateSync'    => (bool) $attempt['late_sync'],
+            'score'       => (int) $attempt['score'],
+            'maxScore'    => (int) $attempt['max_score'],
+            'percent'     => number_format((float) $attempt['percent'], 2, '.', ''),
             'items'       => [],
         ];
 
-        if ((bool) $settings['showScore']) {
-            $result['score'] = (int) $attempt['score'];
-            $result['maxScore'] = (int) $attempt['max_score'];
-            $result['percent'] = number_format((float) $attempt['percent'], 2, '.', '');
-        }
-        if ((bool) $settings['showScore'] || (bool) $settings['showAnswers']) {
-            foreach ($items as $item) {
-                $view = [
-                    'questionId' => $item['questionId'],
-                    'result'     => $item['result'],
-                ];
-                if ((bool) $settings['showAnswers']) {
-                    $view['answerCode'] = $item['answerCode'];
-                    $view['correctCode'] = $item['correctCode'];
-                }
-                $result['items'][] = $view;
+        foreach ($items as $item) {
+            $view = [
+                'questionId' => $item['questionId'],
+                'result'     => $item['result'],
+            ];
+            if ((bool) ($settings['showAnswers'] ?? false)) {
+                $view['answerCode'] = $item['answerCode'];
+                $view['correctCode'] = $item['correctCode'];
             }
+            $result['items'][] = $view;
         }
 
         return $result;

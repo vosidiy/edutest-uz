@@ -76,6 +76,11 @@ final class ResultsFeatureTest extends PlayerTestCase
         $review->assertSee('Capital of France?');
         $review->assertSee('Correct');
         $review->assertSee('Back to responses');
+        $review->assertSee('IP address');
+        $review->assertSee('203.0.113.42');
+        $review->assertDontSee('Connection details');
+        $review->assertDontSee('Browser user agent');
+        $review->assertDontSee('Connection data is shown only to the quiz owner.');
     }
 
     public function testNonOwnedAndMalformedQuizIdsShareTheNotFoundBoundary(): void
@@ -117,6 +122,9 @@ final class ResultsFeatureTest extends PlayerTestCase
             $attempt["attemptId"],
             $this->finishBody($attempt, $answers, 2),
         );
+        $this->db->table('attempts')
+            ->where('public_id', $attempt['attemptId'])
+            ->update(['ip' => '203.0.113.42']);
         return [$quiz, $attempt];
     }
 }

@@ -42,6 +42,7 @@ One row owns one student's assessment run:
 - `answers` is the latest ordered confirmed prefix or the complete final document.
 - `answer_version` provides monotonic replacement and idempotency.
 - `expires_at` is fixed at start and is the only countdown authority.
+- `ip` records the request IP address captured at admission for teacher review; browser user-agent metadata is not collected or stored.
 - summary columns (`score`, `max_score`, `percent`) support reports without trusting the browser.
 - the random unique `public_id` is the reporting locator, the per-quiz cookie value, and the pre-issued idempotency key used by Start.
 
@@ -66,9 +67,7 @@ The snapshot schema is:
     "askEmail": false,
     "askPhone": false,
     "feedback": "at_end",
-    "showScore": true,
-    "showAnswers": false,
-    "showExplain": false
+    "showAnswers": false
   },
   "cover": null,
   "questions": [
@@ -145,7 +144,7 @@ The countdown derives from `expiresAt`, not decrement persistence, so closing/ba
 
 Once loaded, the run works through connection loss and browser restarts. Progress is silently retried. Finish carries the full document and supersedes pending progress. There is deliberately no service worker, so opening/reopening a page requires connectivity.
 
-The active player keeps the quiz title in its own header and places `Question N of M` above the confirmed-answer progress bar. Correct feedback avoids repeating the selected and correct choice; incorrect or unanswered review feedback reveals the correct choice only when the captured visibility settings allow it. Result percentages retain full precision in data and scoring but display as truncated whole numbers. Review verdicts use distinct correct, wrong, and unanswered badges.
+The active player keeps the quiz title in its own header and places `Question N of M` above the confirmed-answer progress bar. Every terminal result shows the score, result counts, and question verdicts. Correct feedback avoids repeating the selected and correct choice; when the captured `showAnswers` setting is enabled, incorrect or unanswered feedback reveals the correct choice and every non-empty authored explanation is shown. Result percentages retain full precision in data and scoring but display as truncated whole numbers. Review verdicts use distinct correct, wrong, and unanswered badges.
 
 ## Lifecycle and reporting
 

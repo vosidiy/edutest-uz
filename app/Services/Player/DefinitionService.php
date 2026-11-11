@@ -21,8 +21,7 @@ final class DefinitionService
             && is_int($quiz['timeLimitSec'] ?? null)
             && $quiz['timeLimitSec'] >= 30
             && $quiz['timeLimitSec'] <= 7200
-            && $quiz['timeLimitSec'] % 30 === 0
-            && (! (bool) ($quiz['showExplain'] ?? false) || (bool) ($quiz['showAnswers'] ?? false));
+            && $quiz['timeLimitSec'] % 30 === 0;
 
         foreach (is_array($questions) ? $questions : [] as $question) {
             $options = is_array($question['options'] ?? null) ? $question['options'] : [];

@@ -75,6 +75,8 @@ final class ModelConfigurationTest extends CIUnitTestCase
         $this->assertSame('json-array', $this->casts(new AttemptModel())['snapshot']);
         $this->assertSame('json-array', $this->casts(new AttemptModel())['answers']);
         $this->assertSame('int-bool', $this->casts(new AttemptModel())['late_sync']);
+        $this->assertContains('ip', $this->property(new AttemptModel(), 'allowedFields'));
+        $this->assertNotContains('agent', $this->property(new AttemptModel(), 'allowedFields'));
 
         $this->assertSame('?int', $this->casts(new AttemptModel())['score']);
         $this->assertNotContains('points', $this->property(new QuestionModel(), 'allowedFields'));

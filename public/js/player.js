@@ -1,10 +1,10 @@
 import {grade, summarize} from './player-scoring.js?v=5';
 import {createState, PlayerClock, editAnswer, submitAnswer, nextQuestion, finishTimed, quitQuiz,
-  visibleDeadlines, hasPending, mergeServer, receiptOnly} from './player-state.js?v=8';
+  visibleDeadlines, hasPending, mergeServer} from './player-state.js?v=9';
 import {PlayerSync} from './player-sync.js?v=8';
 import {PlayerTabGuard} from './player-tab-guard.js';
 import {completionEmoji, resultCounts, shouldRevealCorrectAnswer, wholePercent} from './player-presentation.js?v=2';
-import {createPlayerView} from './player-view.js?v=9';
+import {createPlayerView} from './player-view.js?v=10';
 
 const config = JSON.parse(document.querySelector('#player-config').textContent);
 const root = document.querySelector('#player-root');
@@ -300,7 +300,7 @@ function feedback(question, award) {
     showAnswers,
     correctLabel: 'correctAnswer',
     correctAnswers,
-    explanation: state.quiz.settings.showAnswers && state.quiz.settings.showExplain ? question.explanation : '',
+    explanation: state.quiz.settings.showAnswers ? question.explanation : '',
   }, renderMedia);
 }
 
@@ -309,16 +309,14 @@ function renderResults() {
   const official = state.result;
   const result = official?.score !== undefined ? official : local;
   const items = official?.items?.length ? official.items : local.items;
-  const scoreVisible = Boolean(state.quiz.settings.showScore && result.percent !== undefined);
   root.append(view.results({
     title: state.quiz.title,
     identity: state.student?.name || '',
     heading: state.finishReason === 'exited' ? 'quitComplete' : 'complete',
-    emoji: scoreVisible ? completionEmoji(result.percent) : '🎉',
-    scoreVisible,
+    emoji: completionEmoji(result.percent),
     percent: wholePercent(result.percent),
     total: Number(result.maxScore ?? state.quiz.questions.length),
-    counts: scoreVisible ? resultCounts(items, state.quiz.questions.length) : null,
+    counts: resultCounts(items, state.quiz.questions.length),
     status: state.result?.official ? 'confirmed' : 'provisional',
     scoreChanged: Boolean(official?.score !== undefined && Number(official.score) !== Number(local.score)),
     reason: state.finishReason === 'completed' ? null : state.finishReason,
@@ -326,7 +324,6 @@ function renderResults() {
     starting: false,
   }, startAnother));
 
-  if (receiptOnly(state.quiz.settings)) return;
   root.append(view.review(state.quiz.questions.map((question, index) => ({
     question: question.content,
     verdict: (items[index]?.result === 'skipped' ? 'unanswered' : items[index]?.result) || 'unanswered',

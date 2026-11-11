@@ -110,9 +110,7 @@ final class AttemptSnapshotService
                 'askEmail'     => (bool) $quiz['ask_email'],
                 'askPhone'     => (bool) $quiz['ask_phone'],
                 'feedback'     => (string) $quiz['feedback'],
-                'showScore'    => (bool) $quiz['show_score'],
                 'showAnswers'  => (bool) $quiz['show_answers'],
-                'showExplain'  => (bool) $quiz['show_explain'],
             ],
             'cover'     => $this->storedMedia($quiz['cover_src'] === null ? null : 'image', $quiz['cover_src'], ['image']),
             'questions' => array_values($questions),
@@ -147,8 +145,7 @@ final class AttemptSnapshotService
             }
             unset($option);
 
-            if (! (bool) ($document['quiz']['showExplain'] ?? false)
-                || ! (bool) ($document['quiz']['showAnswers'] ?? false)) {
+            if (! (bool) ($document['quiz']['showAnswers'] ?? false)) {
                 $question['explanation'] = '';
             }
         }

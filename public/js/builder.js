@@ -22,7 +22,7 @@
     editable(quiz) {
       if (!quiz) return '';
       const fields = ['title', 'description', 'status', 'timeLimitMinutes', 'askEmail', 'askPhone', 'drawCount',
-        'shuffleQuestions', 'shuffleOptions', 'feedback', 'showScore', 'showAnswers', 'showExplain'];
+        'shuffleQuestions', 'shuffleOptions', 'feedback', 'showAnswers'];
       const value = Object.fromEntries(fields.map(key => [key, quiz[key]]));
       value.questions = (quiz.questions || []).map(q => ({id:q.id, content:q.content, optionsLayout:q.optionsLayout,
         explanation:q.explanation, options:q.options.map(o => ({id:o.id, content:o.content, isCorrect:o.isCorrect}))}));

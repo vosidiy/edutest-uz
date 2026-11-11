@@ -169,7 +169,6 @@ final class TeacherResultsService
                 'email'       => $this->nullableString($row['email']),
                 'phone'       => $this->nullableString($row['phone']),
                 'ip'          => $this->nullableString($row['ip']),
-                'agent'       => $this->nullableString($row['agent']),
                 'status'      => (string) $row['status'],
                 'finishReason'=> $this->nullableString($row['ended_reason']),
                 'lateSync'    => (bool) $row['late_sync'],
@@ -197,9 +196,7 @@ final class TeacherResultsService
             'policies' => [
                 ['label' => 'Timer', 'value' => $this->formatDuration((int) $quizSnapshot['timeLimitSec'])],
                 ['label' => 'Feedback', 'value' => $quizSnapshot['feedback'] === 'after_each' ? 'After each question' : 'At the end'],
-                ['label' => 'Show score', 'value' => $quizSnapshot['showScore'] ? 'Yes' : 'No'],
-                ['label' => 'Show correct answers', 'value' => $quizSnapshot['showAnswers'] ? 'Yes' : 'No'],
-                ['label' => 'Show explanations', 'value' => $quizSnapshot['showExplain'] ? 'Yes' : 'No'],
+                ['label' => 'Show correct answers and explanations', 'value' => $quizSnapshot['showAnswers'] ? 'Yes' : 'No'],
             ],
             'questions' => $questions,
             'timezone'  => $timezone,

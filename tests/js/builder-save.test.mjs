@@ -24,7 +24,7 @@ function fixture(search = '') {
   Object.entries(component.computed).forEach(([name,fn])=>Object.defineProperty(app,name,{get:()=>fn.call(app)}));
   const quiz={publicId:'fixture',title:'Quiz',description:'',status:'published',updatedAt:'2026-10-31T00:00:00+00:00',timeLimitSec:7200,timeLimitMinutes:120,
     askEmail:false,askPhone:false,drawCount:null,shuffleQuestions:false,shuffleOptions:false,feedback:'at_end',
-    showScore:true,showAnswers:false,showExplain:false,cover:null,mediaLimits:{imageBytes:5242880,audioBytes:20971520},
+    showAnswers:false,cover:null,mediaLimits:{imageBytes:5242880,audioBytes:20971520},
     questions:[{id:'1',content:'Question',optionsLayout:'list',explanation:'',media:null,
       options:[{id:'11',code:'a',content:'Yes',isCorrect:true,media:null},{id:'12',code:'b',content:'No',isCorrect:false,media:null}]}]};
   app.applyServerQuiz(clone(quiz)); app.loading=false; app.hydrating=false;
@@ -38,7 +38,14 @@ function response(payload) {
 }
 
 test('explicit clean saves send a request and reverting restores clean state', async()=>{
-  const {app,setRequest}=fixture();let requests=0;setRequest(async(_url,options)=>{requests++;return response(JSON.parse(options.body));});
+  const {app,setRequest}=fixture();let requests=0;setRequest(async(_url,options)=>{
+    requests++;
+    const sent=JSON.parse(options.body);
+    assert.equal('showScore' in sent,false);
+    assert.equal('showExplain' in sent,false);
+    assert.equal(sent.showAnswers,false);
+    return response(sent);
+  });
   assert.equal(app.hasChanges,false);
   assert.equal(await app.save(true),true);assert.equal(requests,1);
   assert.equal(app.quiz.updatedAt,'2026-10-31T00:00:01+00:00');

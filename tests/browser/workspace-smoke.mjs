@@ -15,7 +15,7 @@ const user = {id:1,email:'teacher@example.test',display_name:'Teacher One',usern
 const quiz = {publicId,shareUrl:'/q/123456789',resultsAvailable:true,resultsUrl:`/results/quizzes/${publicId}`,
   status:'published',deleted:false,title:'Snapshot assessment',description:'Current authoring pool',cover:null,
   timeLimitSec:7200,timeLimitMinutes:120,askEmail:true,askPhone:false,feedback:'at_end',shuffleQuestions:true,
-  shuffleOptions:false,drawCount:1,showScore:true,showAnswers:true,showExplain:true,publishedAt:new Date().toISOString(),
+  shuffleOptions:false,drawCount:1,showAnswers:true,publishedAt:new Date().toISOString(),
   updatedAt:new Date().toISOString(),mediaLimits:{imageBytes:5242880,audioBytes:20971520,serverBytes:20971520},questions:[{
     id:'1',position:1,content:'Which answer is correct?',optionsLayout:'grid',explanation:'A is correct.',media:null,
     options:[{id:'11',code:'code-a',position:1,content:'A',isCorrect:true,media:null},{id:'12',code:'code-b',position:2,content:'B',isCorrect:false,media:null}],
@@ -159,6 +159,8 @@ try {
 
   await browser.navigate(`${origin}/quizzes/${publicId}/edit`);
   await browser.until(() => browser.evaluate(`document.querySelector('#quiz-builder')?.hasAttribute('v-cloak') === false && document.body.textContent.includes('Which answer is correct?')`), 'builder hydration');
+  assert.equal(await browser.evaluate(`document.body.textContent.includes('Show correct answers and explanations')`), true);
+  assert.equal(await browser.evaluate(`document.body.textContent.includes('Show score') || document.body.textContent.includes('Show explanations')`), false);
   assert.equal(await browser.evaluate(`document.querySelector('[data-save-quiz]').textContent.trim()`), 'Saved');
   assert.equal(await browser.evaluate(`document.querySelector('[data-save-quiz]').classList.contains('btn-default')`), true);
   assert.equal(await browser.evaluate(`document.querySelector('[data-save-quiz]').disabled`), false);

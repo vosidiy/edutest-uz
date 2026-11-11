@@ -41,6 +41,9 @@ final class QuizAuthoringServiceTest extends PlayerTestCase
         self::assertArrayNotHasKey('revision', $document);
         self::assertArrayNotHasKey('version', $document);
         self::assertArrayNotHasKey('listed', $document);
+        self::assertArrayNotHasKey('showScore', $document);
+        self::assertArrayNotHasKey('showExplain', $document);
+        self::assertFalse($document['showAnswers']);
     }
 
     public function testTimerNormalizationRoundsValidValuesAndDefaultsInvalidValues(): void

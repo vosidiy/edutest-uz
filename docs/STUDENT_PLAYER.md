@@ -48,22 +48,19 @@ At zero, the player freezes input, fills every unreached question with `{answerC
 
 The Exit button performs the same tail fill with reason `exited` and the current client time. Normal completion requires every question to have a confirmed timestamp, including explicit skips.
 
-The server is authoritative. It validates the final document against the stored snapshot and returns the official score/percentage and permitted feedback. A lazy `abandoned/expired` response is provisional; the player's valid queued Finish may still replace it and become a late official result.
+The server is authoritative. It validates the final document against the stored snapshot and always returns the official score/percentage, question verdicts, and permitted answer feedback. A lazy `abandoned/expired` response is provisional; the player's valid queued Finish may still replace it and become a late official result.
 
 ## Result visibility
 
-Visibility is captured in the attempt snapshot:
+Every terminal attempt displays its score, result counts, and per-question verdicts. The captured `showAnswers` setting controls both selected/correct answer codes and non-empty authored explanations.
 
-- `showScore` controls score/percentage.
-- `showAnswers` controls selected and correct codes.
-- `showExplain` controls explanations and is valid only with `showAnswers`.
-- when all are false, the player shows only a neutral completion receipt.
+Snapshot schema version 1 stores `showAnswers` as the only result-detail visibility setting.
 
 `feedback = after_each` allows local per-question feedback from the loaded answer key. `at_end` defers feedback to the result screen. The server still calculates and stores the same official result in both cases.
 
 ## Privacy and media
 
-The assessment stores disclosed identity, IP, browser agent, snapshot, checkpoints, result, and timing. The introduction explains this collection. Player endpoints are CSRF-exempt because they do not use teacher sessions; they require the matching attempt cookie plus the player request boundary's custom header, same-origin, Origin, and Fetch Metadata checks.
+The assessment stores disclosed identity, IP address, snapshot, checkpoints, result, and timing. Browser user-agent metadata is not collected or stored. Player endpoints are CSRF-exempt because they do not use teacher sessions; they require the matching attempt cookie plus the player request boundary's custom header, same-origin, Origin, and Fetch Metadata checks.
 
 Media renewal is attempt-bound. The server resolves the requested key only inside that attempt's stored snapshot and issues a new signed URL. Editing or deleting the live quiz does not change the media references an existing attempt is authorized to request.
 

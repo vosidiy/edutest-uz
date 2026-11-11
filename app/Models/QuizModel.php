@@ -32,9 +32,7 @@ final class QuizModel extends Model
         'shuffle_options',
         'draw_count',
         'feedback',
-        'show_score',
         'show_answers',
-        'show_explain',
         'published_at',
     ];
     protected bool $allowEmptyInserts = false;
@@ -48,9 +46,7 @@ final class QuizModel extends Model
         'shuffle_questions' => 'int-bool',
         'shuffle_options'   => 'int-bool',
         'draw_count'        => '?int',
-        'show_score'        => 'int-bool',
         'show_answers'      => 'int-bool',
-        'show_explain'      => 'int-bool',
         'published_at'      => '?datetime',
         'created_at'        => 'datetime',
         'updated_at'        => 'datetime',

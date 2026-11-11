@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import {grade, summarize} from '../../public/js/player-scoring.js';
 import {
   createState, editAnswer, submitAnswer, nextQuestion, finishTimed, quitQuiz,
-  deadlines, mergeServer, hasPending, PlayerClock, receiptOnly,
+  deadlines, mergeServer, hasPending, PlayerClock,
 } from '../../public/js/player-state.js';
 import {PlayerSync} from '../../public/js/player-sync.js';
 
@@ -20,7 +20,7 @@ const questions = [
 const snapshot = () => ({
   schemaVersion:1,
   quiz:{title:'Quiz',description:'Description',shareToken:'123456789',timeLimitSec:7200,askEmail:false,askPhone:false,
-    feedback:'after_each',showScore:true,showAnswers:true,showExplain:true},
+    feedback:'after_each',showAnswers:true},
   cover:null,
   questions,
 });
@@ -154,10 +154,4 @@ test('clock resists a backwards wall-clock change', () => {
   monotonic += 10000;
   wall -= 10000;
   assert.equal(clock.now(), Date.parse(startedAt) + 10000);
-});
-
-test('receipt-only mode requires every result visibility flag to be off', () => {
-  for (const showScore of [true,false]) for (const showAnswers of [true,false]) for (const showExplain of [true,false]) {
-    assert.equal(receiptOnly({showScore,showAnswers,showExplain}), !(showScore || showAnswers || showExplain));
-  }
 });

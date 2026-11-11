@@ -48,16 +48,13 @@
                 <div><dt>Name</dt><dd><?= esc($report['attempt']['name']) ?></dd></div>
                 <div><dt>Email</dt><dd><?= esc($report['attempt']['email'] ?? lang('Results.notAvailable')) ?></dd></div>
                 <div><dt>Phone</dt><dd><?= esc($report['attempt']['phone'] ?? lang('Results.notAvailable')) ?></dd></div>
+                <div><dt>IP address</dt><dd><?= esc($report['attempt']['ip'] ?? lang('Results.notAvailable')) ?></dd></div>
                 <div><dt>Status</dt><dd><?= esc(ucwords(str_replace('_', ' ', $report['attempt']['status']))) ?></dd></div>
                 <div><dt>Finish reason</dt><dd><?= esc($report['attempt']['finishReason'] ?? lang('Results.notAvailable')) ?></dd></div>
                 <div><dt>Duration</dt><dd><?= esc($report['attempt']['duration'] ?? lang('Results.notAvailable')) ?></dd></div>
                 <div><dt>Started</dt><dd><?= esc($report['attempt']['startedAt']['display'] ?? lang('Results.notAvailable')) ?></dd></div>
                 <div><dt>Finished</dt><dd><?= esc($report['attempt']['submittedAt']['display'] ?? lang('Results.notAvailable')) ?></dd></div>
             </dl>
-            <hr>
-            <h6 id="connection-heading">Connection details</h6><p><?= esc(lang('Results.privacyNote')) ?></p>
-            IP address: <?= esc($report['attempt']['ip'] ?? lang('Results.notAvailable')) ?>
-            Browser user agent: <?= esc($report['attempt']['agent'] ?? lang('Results.notAvailable')) ?>
         </article>
 
         

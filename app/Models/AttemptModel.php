@@ -19,7 +19,6 @@ final class AttemptModel extends Model
         'email',
         'phone',
         'ip',
-        'agent',
         'snapshot',
         'answers',
         'answer_version',

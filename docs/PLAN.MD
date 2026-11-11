@@ -17,7 +17,7 @@ The teacher creates a quiz, optionally limits the random draw, chooses question/
 - `draw_count = NULL` serves the whole pool. Numeric builder input rounds to the nearest question; missing, malformed, non-finite, zero, negative, or above-pool input silently becomes the whole-pool setting. A valid positive count randomly samples that many questions for each attempt.
 - Question and option shuffling are independent.
 - Feedback is `at_end` or `after_each`.
-- Explanations can be shown only when correct answers are also shown.
+- Students always see their score and question verdicts. One combined setting controls whether correct answers and authored explanations are also shown.
 - Answer keys are intentionally present in the loaded browser document. This is not a high-security examination system.
 
 Practice mode, text answers, multiple selection, schedules, passcodes, integrity monitoring, archived/closed lifecycle states, and per-question timers are outside this MVP.
@@ -49,7 +49,7 @@ Each Assessment attempt is the equivalent of one printed paper. Its `snapshot` c
 - An Active save requires at least one question and affects only future starts. A Draft may have no questions. Moving back to Draft preserves the original publication timestamp.
 - Soft deletion keeps cookie-authorized attempts and historical reports available.
 - Reports decode each attempt's snapshot and answers, showing correct, wrong, and skipped questions.
-- The builder exposes draw count, list/grid layout, whole-minute timer, shuffle, contact, feedback, and result-visibility settings only. A draw count larger than the current pool is stored as the whole-pool setting.
+- The builder exposes draw count, list/grid layout, whole-minute timer, shuffle, contact, feedback timing, and one combined correct-answer/explanation setting only. A draw count larger than the current pool is stored as the whole-pool setting.
 - Image/audio media actions first save pending quiz edits when server IDs are needed.
 - Teachers can create an optional public page at a unique `/user/{username}` URL, add a plain-text bio, and disable or re-enable the page without releasing the username. Public pages list every non-deleted Active quiz and have no per-quiz listing flag.
 
@@ -60,6 +60,7 @@ Each Assessment attempt is the equivalent of one printed paper. Its `snapshot` c
 - Attempt API access uses one persistent HttpOnly, SameSite=Strict cookie per quiz. Its raw value is the attempt's random `public_id`; this deliberate MVP trade-off treats knowledge of that identifier as sufficient attempt access.
 - Attempt cookies expire 24 hours after the quiz deadline so delayed offline Finish requests and result reopening can complete without extending answer time.
 - Nine-digit share tokens are convenient locators, not secrets; player routes remain throttled.
+- Assessment attempts store the request IP address for teacher review, but do not collect or store browser user-agent metadata.
 - Private media stays outside `public/`; attempt projections replace stored private paths with short-lived signed URLs.
 - The application never accepts client-provided scores or correctness.
 

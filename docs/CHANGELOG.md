@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Reduced attempt connection metadata (2026-11-11)
+
+- Stopped reading, storing, and reporting the student's browser user-agent while retaining the admission request IP address.
+- Moved **IP address** into the individual attempt summary and removed the separate **Connection details** section and its obsolete privacy note.
+- Removed `attempts.agent` from the canonical schema; existing databases require the documented manual `ALTER TABLE attempts DROP COLUMN agent` after compatible application code is deployed.
+
+### Simplified feedback and results (2026-11-11)
+
+- Removed the independent Show score and Show explanations settings; every terminal attempt now shows its score, result counts, and question verdicts.
+- Combined correct-answer and explanation visibility under `showAnswers`, including immediate feedback, final review, and offline results.
+- Defined the initial schema-version-1 attempt snapshot with `showAnswers` as its only result-detail visibility setting.
+- Removed the obsolete quiz columns and checks from the canonical schema; existing databases require the supplied manual phpMyAdmin `ALTER TABLE` statement after deploying the compatible code.
+
 ### Public teacher pages (2026-11-10)
 
 - Added optional `/user/{username}` teacher profiles with plain-text bios, enabled/disabled visibility, and paginated cards for every non-deleted Active quiz.

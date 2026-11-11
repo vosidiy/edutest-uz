@@ -2,8 +2,6 @@ const copy = value => JSON.parse(JSON.stringify(value));
 const time = value => Date.parse(value);
 const nowIso = value => new Date(value).toISOString();
 
-export const receiptOnly = settings => !settings.showScore && !settings.showAnswers && !settings.showExplain;
-
 function browserQuiz(snapshot) {
   const settings = snapshot.quiz;
   return {

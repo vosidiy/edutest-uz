@@ -80,7 +80,6 @@ return [
         'complete' => 'Quiz complete',
         'completed' => 'Finished by student',
         'thanks' => 'Thank you for taking the quiz.',
-        'hiddenScore' => 'The teacher has chosen not to show a numeric score.',
         'provisional' => 'Provisional result — your work is saved in this browser and waiting to synchronize.',
         'confirmed' => 'Result confirmed and saved.',
         'saved' => 'Progress saved in this browser',

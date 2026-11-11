@@ -15,7 +15,10 @@ final class StudentPlayerTest extends PlayerTestCase
     {
         $quiz = $this->quiz(count: 3);
         $ticket = $this->player->admission->ticket($quiz['share']);
-        $first = $this->player->admission->start(['ticket' => $ticket['ticket'], 'name' => 'Alice']);
+        $first = $this->player->admission->start(
+            ['ticket' => $ticket['ticket'], 'name' => 'Alice'],
+            '203.0.113.10',
+        );
 
         $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
         $document['title'] = 'Changed after start';
@@ -26,6 +29,8 @@ final class StudentPlayerTest extends PlayerTestCase
         $row = $this->db->table('attempts')->get()->getRowArray();
         self::assertNotNull($row);
         self::assertSame('[]', $row['answers']);
+        self::assertSame('203.0.113.10', $row['ip']);
+        self::assertArrayNotHasKey('agent', $row);
         self::assertStringContainsString('Capital cities', (string) $row['snapshot']);
         self::assertStringNotContainsString('Changed after start', (string) $row['snapshot']);
     }
@@ -103,6 +108,9 @@ final class StudentPlayerTest extends PlayerTestCase
         self::assertSame('completed', $finished['status']);
         self::assertSame(1, $finished['result']['score']);
         self::assertSame('50.00', $finished['result']['percent']);
+        self::assertCount(2, $finished['result']['items']);
+        self::assertArrayNotHasKey('answerCode', $finished['result']['items'][0]);
+        self::assertArrayNotHasKey('correctCode', $finished['result']['items'][0]);
         self::assertSame($finished, $this->player->assessment->finish($attempt['attemptId'], $attempt["attemptId"], $body));
     }
 

@@ -50,9 +50,7 @@ final class QuizAuthoringService
             'shuffle_questions' => 0,
             'shuffle_options'   => 0,
             'draw_count'        => null,
-            'show_score'        => 1,
             'show_answers'      => 0,
-            'show_explain'      => 0,
             'published_at'      => null,
             'created_at'        => $now,
             'updated_at'        => $now,
@@ -113,9 +111,7 @@ final class QuizAuthoringService
                 'shuffle_questions' => (int) $document['shuffleQuestions'],
                 'shuffle_options'   => (int) $document['shuffleOptions'],
                 'draw_count'        => $document['drawCount'],
-                'show_score'        => (int) $document['showScore'],
                 'show_answers'      => (int) $document['showAnswers'],
-                'show_explain'      => (int) $document['showExplain'],
                 'updated_at'        => $now,
             ];
             if ($quiz['status'] === 'draft' && $document['status'] === 'published') {
@@ -205,9 +201,7 @@ final class QuizAuthoringService
                 'shuffle_questions' => $source['shuffle_questions'],
                 'shuffle_options'   => $source['shuffle_options'],
                 'draw_count'        => $source['draw_count'],
-                'show_score'        => $source['show_score'],
                 'show_answers'      => $source['show_answers'],
-                'show_explain'      => $source['show_explain'],
                 'updated_at'        => $this->now(),
             ]);
 
@@ -322,10 +316,6 @@ final class QuizAuthoringService
             $fields['feedback'] = 'Choose when feedback is shown.';
         }
         $showAnswers = $this->bool($payload['showAnswers'] ?? false);
-        $showExplain = $this->bool($payload['showExplain'] ?? false);
-        if ($showExplain && ! $showAnswers) {
-            $fields['showExplain'] = 'Correct answers must be shown before explanations can be shown.';
-        }
 
         $questions = $this->normalizeQuestions($payload['questions'] ?? null, $fields);
         $drawCount = $this->normalizeDrawCount($payload['drawCount'] ?? null, count($questions));
@@ -345,9 +335,7 @@ final class QuizAuthoringService
             'shuffleQuestions'  => $this->bool($payload['shuffleQuestions'] ?? false),
             'shuffleOptions'    => $this->bool($payload['shuffleOptions'] ?? false),
             'drawCount'         => $drawCount,
-            'showScore'         => $this->bool($payload['showScore'] ?? false),
             'showAnswers'       => $showAnswers,
-            'showExplain'       => $showExplain,
             'questions'         => $questions,
         ];
     }
@@ -623,9 +611,7 @@ final class QuizAuthoringService
             'shuffleQuestions'   => (bool) $quiz['shuffle_questions'],
             'shuffleOptions'     => (bool) $quiz['shuffle_options'],
             'drawCount'          => $quiz['draw_count'] === null ? null : (int) $quiz['draw_count'],
-            'showScore'          => (bool) $quiz['show_score'],
             'showAnswers'        => (bool) $quiz['show_answers'],
-            'showExplain'        => (bool) $quiz['show_explain'],
             'publishedAt'        => $this->utcAtom($quiz['published_at']),
             'updatedAt'          => $this->utcAtom($quiz['updated_at']),
             'mediaLimits'        => [

@@ -125,17 +125,10 @@ export function createPlayerView(t) {
     text(fragment, 'heading', t(model.heading));
     text(fragment, 'title', model.title);
     optionalText(fragment, 'identity', model.identity);
-    if (model.scoreVisible) {
-      text(fragment, 'score', `${model.percent}%`);
-      const stats = slot(fragment, 'stats');
-      for (const name of ['correct', 'wrong', 'unanswered']) stats.append(resultStat(name, model.counts[name]));
-      stats.append(resultStat('total', model.total));
-      slot(fragment, 'hidden-score').remove();
-    } else {
-      slot(fragment, 'score').remove();
-      slot(fragment, 'stats').remove();
-      text(fragment, 'hidden-score', t('hiddenScore'));
-    }
+    text(fragment, 'score', `${model.percent}%`);
+    const stats = slot(fragment, 'stats');
+    for (const name of ['correct', 'wrong', 'unanswered']) stats.append(resultStat(name, model.counts[name]));
+    stats.append(resultStat('total', model.total));
     optionalText(fragment, 'status', model.status ? t(model.status) : '');
     optionalText(fragment, 'warning', model.scoreChanged ? t('scoreChanged') : '');
     optionalText(fragment, 'reason', model.reason ? t(model.reason) : '');

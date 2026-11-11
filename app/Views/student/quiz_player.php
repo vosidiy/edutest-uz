@@ -124,7 +124,7 @@
     <template data-slot="media"></template>
 </template>
 
-<!-- Completion and review. Keep score-dependent content removable for hidden scores. -->
+<!-- Completion and review. -->
 <template id="player-results-template">
     <section class="card player-results-header">
         <span class="player-completion-icon" aria-hidden="true" data-slot="emoji"></span>
@@ -133,7 +133,6 @@
         <p class="player-student-identity" data-slot="identity"></p>
         <div class="player-score" data-slot="score"></div>
         <div class="player-result-stats" data-slot="stats"></div>
-        <p class="player-hidden-score" data-slot="hidden-score"></p>
         <p class="player-help" data-slot="status"></p>
         <p class="alert alert-warning" data-slot="warning"></p>
         <p data-slot="reason"></p>

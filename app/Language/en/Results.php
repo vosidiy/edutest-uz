@@ -31,9 +31,7 @@ return [
     'feedbackTiming'        => 'Feedback timing',
     'shuffleQuestions'      => 'Shuffle questions',
     'shuffleOptions'        => 'Shuffle choices',
-    'showScore'             => 'Student score visibility',
-    'showAnswers'           => 'Student answer visibility',
-    'showExplanations'      => 'Student explanation visibility',
+    'showAnswers'           => 'Student answer and explanation visibility',
     'averageDuration'       => 'Average completion',
     'noScore'               => 'No finalized scores',
     'noDuration'            => 'No completed durations',
@@ -46,5 +44,4 @@ return [
     'ungraded'              => 'Ungraded',
     'noAnswer'              => 'No saved answer',
     'noQuestionAnalytics'   => 'Question analytics will appear after finalized answers are available.',
-    'privacyNote'           => 'IP address and browser details are restricted to this owner-authorized attempt page.',
 ];

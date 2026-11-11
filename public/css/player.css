@@ -342,7 +342,6 @@ summary { cursor: pointer; user-select: none; }
 .player-result-stat-copy { display: grid; min-width: 0; gap: 2px; }
 .player-result-stat-label { color: var(--neutral-600);  }
 .player-result-stat strong { color: var(--neutral-900); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
-.player-hidden-score { max-width: 520px; margin: 20px auto 0; color: var(--neutral-600); }
 .player-results-header > .player-help { max-width: 620px; margin: 18px auto 0; }
 .player-results-header > .alert { max-width: 620px; margin: 18px auto 0; text-align: left; }
 .player-results-header > .player-actions { margin-top: 24px; }

@@ -156,6 +156,9 @@ final class TeacherResultsServiceTest extends PlayerTestCase
         $quiz = $this->quiz(settings: ['shuffleOptions' => true]);
         $attempt = $this->startQuiz($quiz);
         $this->complete($attempt);
+        $this->db->table('attempts')
+            ->where('public_id', $attempt['attemptId'])
+            ->update(['ip' => '203.0.113.42']);
         $before = array_column($attempt['quiz']['questions'][0]['options'], 'content');
 
         $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
@@ -164,6 +167,8 @@ final class TeacherResultsServiceTest extends PlayerTestCase
         $report = $this->results->attempt($quiz['owner'], $attempt['attemptId'], 'Asia/Tashkent');
 
         self::assertSame('completed', $report['attempt']['status']);
+        self::assertSame('203.0.113.42', $report['attempt']['ip']);
+        self::assertArrayNotHasKey('agent', $report['attempt']);
         self::assertSame($before, array_column($report['questions'][0]['options'], 'content'));
         self::assertSame(['A', 'B'], array_column($report['questions'][0]['options'], 'label'));
         self::assertNotNull($report['questions'][0]['answeredAt']);

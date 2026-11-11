@@ -64,9 +64,7 @@ CREATE TABLE quizzes (
   shuffle_questions TINYINT(1) NOT NULL DEFAULT 0,
   shuffle_options TINYINT(1) NOT NULL DEFAULT 0,
   draw_count SMALLINT UNSIGNED NULL,
-  show_score TINYINT(1) NOT NULL DEFAULT 1,
   show_answers TINYINT(1) NOT NULL DEFAULT 0,
-  show_explain TINYINT(1) NOT NULL DEFAULT 0,
   published_at DATETIME(6) NULL,
   created_at DATETIME(6) NOT NULL,
   updated_at DATETIME(6) NOT NULL,
@@ -81,14 +79,11 @@ CREATE TABLE quizzes (
   CONSTRAINT chk_quizzes_ask_phone CHECK (ask_phone IN (0, 1)),
   CONSTRAINT chk_quizzes_shuffle_questions CHECK (shuffle_questions IN (0, 1)),
   CONSTRAINT chk_quizzes_shuffle_options CHECK (shuffle_options IN (0, 1)),
-  CONSTRAINT chk_quizzes_show_score CHECK (show_score IN (0, 1)),
   CONSTRAINT chk_quizzes_show_answers CHECK (show_answers IN (0, 1)),
-  CONSTRAINT chk_quizzes_show_explain CHECK (show_explain IN (0, 1)),
   CONSTRAINT chk_quizzes_time_limit CHECK (
     time_limit_sec BETWEEN 30 AND 7200 AND MOD(time_limit_sec, 30) = 0
   ),
-  CONSTRAINT chk_quizzes_draw_count CHECK (draw_count IS NULL OR draw_count > 0),
-  CONSTRAINT chk_quizzes_explanation_visibility CHECK (show_explain = 0 OR show_answers = 1)
+  CONSTRAINT chk_quizzes_draw_count CHECK (draw_count IS NULL OR draw_count > 0)
 ) ENGINE=InnoDB
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_0900_ai_ci;
@@ -151,7 +146,6 @@ CREATE TABLE attempts (
   email VARCHAR(254) NULL,
   phone VARCHAR(32) NULL,
   ip VARCHAR(45) CHARACTER SET ascii COLLATE ascii_bin NULL,
-  agent VARCHAR(512) NULL,
   snapshot JSON NOT NULL,
   answers JSON NOT NULL,
   answer_version INT UNSIGNED NOT NULL DEFAULT 0,

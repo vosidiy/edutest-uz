@@ -200,15 +200,8 @@
                                 </select>
                             </label>
                             
-                            <label class="form-check check-row"><input type="checkbox" v-model="quiz.showScore"><span><strong>Show score</strong></span>
-                            </label>
-                            
                             <label class="form-check check-row">
-                                <input type="checkbox" v-model="quiz.showAnswers"><span><strong>Show correct answers</strong></span>
-                            </label>
-                            
-                            <label class="form-check check-row">
-                                <input type="checkbox" v-model="quiz.showExplain" :disabled="!quiz.showAnswers"><span><strong>Show explanations</strong></span>
+                                <input type="checkbox" v-model="quiz.showAnswers"><span><strong>Show correct answers and explanations</strong></span>
                             </label>
                         </div>
                     </details>

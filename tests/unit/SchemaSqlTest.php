@@ -24,11 +24,18 @@ final class SchemaSqlTest extends CIUnitTestCase
         $this->assertStringContainsString('share_token CHAR(9)', $sql);
         $this->assertStringContainsString('time_limit_sec SMALLINT UNSIGNED NOT NULL DEFAULT 7200', $sql);
         $this->assertStringContainsString('draw_count SMALLINT UNSIGNED NULL', $sql);
+        $this->assertStringContainsString('show_answers TINYINT(1) NOT NULL DEFAULT 0', $sql);
+        $this->assertStringNotContainsString('show_score', $sql);
+        $this->assertStringNotContainsString('show_explain', $sql);
         $this->assertStringContainsString('options_layout VARCHAR(8)', $sql);
         $this->assertStringContainsString('snapshot JSON NOT NULL', $sql);
         $this->assertStringContainsString('answers JSON NOT NULL', $sql);
         $this->assertStringContainsString('answer_version INT UNSIGNED NOT NULL DEFAULT 0', $sql);
         $this->assertStringContainsString('CONSTRAINT uq_attempts_public_id UNIQUE (public_id)', $sql);
+        preg_match('/CREATE TABLE attempts \((.*?)\) ENGINE=InnoDB/s', $sql, $attemptTable);
+        $this->assertArrayHasKey(1, $attemptTable);
+        $this->assertStringContainsString('ip VARCHAR(45)', $attemptTable[1]);
+        $this->assertStringNotContainsString('agent VARCHAR', $attemptTable[1]);
         $this->assertStringNotContainsString('token_hash', $sql);
         $this->assertStringNotContainsString('start_key', $sql);
         $this->assertStringContainsString('CONSTRAINT chk_attempts_score_percent CHECK', $sql);

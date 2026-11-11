@@ -19,7 +19,7 @@ final class PlayerController extends ApiController
     public function start(): ResponseInterface
     {
         return $this->run(function (): array {
-            $data = service('player')->admission->start($this->input(), $this->request->getIPAddress(), $this->request->getHeaderLine('User-Agent'));
+            $data = service('player')->admission->start($this->input(), $this->request->getIPAddress());
             $expires = new DateTimeImmutable($data['expiresAt'], new DateTimeZone('UTC'));
             $lifetime = max(1, $expires->getTimestamp() + AttemptSessionService::GRACE_SECONDS - time());
             $this->response->setCookie([

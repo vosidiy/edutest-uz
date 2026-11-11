@@ -4,10 +4,32 @@ declare(strict_types=1);
 
 namespace Tests\App\Services;
 
+use App\Services\AttemptSnapshotService;
 use Tests\Support\PlayerTestCase;
 
 final class AttemptSnapshotServiceTest extends PlayerTestCase
 {
+    public function testSnapshotUsesInitialCombinedAnswerVisibilityContract(): void
+    {
+        $attempt = $this->startQuiz($this->quiz(settings: ['showAnswers' => true], count: 1));
+
+        self::assertSame(1, $attempt['quiz']['schemaVersion']);
+        self::assertTrue($attempt['quiz']['quiz']['showAnswers']);
+        self::assertArrayNotHasKey('showScore', $attempt['quiz']['quiz']);
+        self::assertArrayNotHasKey('showExplain', $attempt['quiz']['quiz']);
+        self::assertSame('Paris is the capital of France.', $attempt['quiz']['questions'][0]['explanation']);
+    }
+
+    public function testDecoderRejectsUnsupportedSnapshotVersions(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        (new AttemptSnapshotService($this->db, $this->media))->decode([
+            'schemaVersion' => 2,
+            'quiz' => [],
+            'questions' => [],
+        ]);
+    }
+
     public function testRandomDrawReturnsSubsetToAuthoredOrderWhenShuffleIsOff(): void
     {
         $quiz = $this->quiz(settings: ['drawCount' => 2], count: 5);

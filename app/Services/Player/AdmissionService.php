@@ -44,7 +44,7 @@ final class AdmissionService
     }
 
     /** @return array<string, mixed> */
-    public function start(array $input, ?string $ip = null, ?string $agent = null): array
+    public function start(array $input, ?string $ip = null): array
     {
         if (! is_string($input['ticket'] ?? null)) {
             throw new PlayerException('invalid_credential', 401);
@@ -52,7 +52,7 @@ final class AdmissionService
         $claims = $this->credentials->verify($input['ticket'], 'admission');
         $this->assertClaims($claims);
 
-        return $this->store->transaction(function () use ($claims, $input, $ip, $agent): array {
+        return $this->store->transaction(function () use ($claims, $input, $ip): array {
             $quiz = $this->store->lock('quizzes', (string) $claims['quizId']);
 
             // A successful start replay wins over later quiz edits, Draft status, or deletion.
@@ -82,7 +82,6 @@ final class AdmissionService
                 'email'         => $identity['email'],
                 'phone'         => $identity['phone'],
                 'ip'            => $this->limited($ip, 45),
-                'agent'         => $this->limited($agent, 512),
                 'snapshot'      => json_encode($snapshot, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                 'answers'       => '[]',
                 'answer_version'=> 0,

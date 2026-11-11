@@ -46,7 +46,7 @@ test('page exit during acquisition cannot activate an old page or leave a lock h
 const payload=()=>({attemptId:'a',status:'in_progress',answerVersion:1,startedAt:'2026-01-01T00:00:00Z',
   expiresAt:'2026-01-01T02:00:00Z',finishReason:null,lateSync:false,result:null,student:{name:'Student'},
   answers:[{questionId:'1',answerCode:'a',answeredAt:'2026-01-01T00:01:00.000Z'}],quiz:{schemaVersion:1,cover:null,
-    quiz:{title:'Quiz',description:'',shareToken:'123456789',timeLimitSec:7200,feedback:'at_end',showScore:true,showAnswers:false,showExplain:false},
+    quiz:{title:'Quiz',description:'',shareToken:'123456789',timeLimitSec:7200,feedback:'at_end',showAnswers:false},
     questions:[{id:'1',content:'One',optionsLayout:'list',correctCode:'a',media:null,explanation:'',options:[{id:'11',code:'a',content:'A',media:null},{id:'12',code:'b',content:'B',media:null}]},
       {id:'2',content:'Two',optionsLayout:'list',correctCode:'a',media:null,explanation:'',options:[{id:'21',code:'a',content:'A',media:null},{id:'22',code:'b',content:'B',media:null}]}]}});
 test('player resumes after the stored confirmed prefix',()=>{
