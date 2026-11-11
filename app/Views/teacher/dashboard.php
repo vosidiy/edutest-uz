@@ -12,7 +12,7 @@
                 <button class="btn btn-primary" type="button" data-open-create>Create a quiz</button>
                 <span data-public-page-action>
                     <?php if (! empty($user['public_page']) && ! empty($user['username'])) : ?>
-                        <a class="btn btn-default" href="<?= esc(site_url('user/' . $user['username']), 'attr') ?>">View my page</a>
+                        <a class="btn btn-default" target="_blank" href="<?= esc(site_url('user/' . $user['username']), 'attr') ?>">View my page ↗ </a>
                     <?php else : ?>
                         <button class="btn btn-default" type="button" data-open-public-page>Create my page</button>
                     <?php endif ?>

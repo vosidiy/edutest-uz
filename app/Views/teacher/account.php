@@ -72,15 +72,20 @@ $publicPageErrors = session('publicPageErrors') ?? [];
 
                 <form id="publicPageForm" class="account-form" action="<?= site_url('account/public-page') ?>" method="post" data-public-page-form>
                     <?= csrf_field() ?>
-                    <label class="form-field" for="public_username">
-                        <span class="form-label"><?= esc(lang('Workspace.accountPage.username')) ?></span>
-                        <span class="public-url-input"><span><?= esc(site_url('user/')) ?></span><input class="form-control" id="public_username" name="username" type="text" minlength="3" maxlength="30" pattern="[a-z0-9]+(-[a-z0-9]+)*" autocomplete="off" autocapitalize="none" spellcheck="false" required value="<?= esc($publicPageValues['username'] ?? '', 'attr') ?>" data-public-username></span>
-                    </label>
-                    <p class="form-hint" data-username-status aria-live="polite"></p>
-                    <label class="form-field" for="public_bio"><span class="form-label"><?= esc(lang('Workspace.accountPage.bio')) ?></span><textarea class="form-control" id="public_bio" name="bio" maxlength="1000" rows="5"><?= esc($publicPageValues['bio'] ?? '') ?></textarea></label>
-                    <label class="label-switch" for="public_page_enabled">
+                    <div>
+                        <label class="form-field" for="public_username">
+                            <span class="form-label"><?= esc(lang('Workspace.accountPage.username')) ?></span>
+                            <span class="public-url-input"><span><?= esc(site_url('user/')) ?></span><input class="form-control" id="public_username" name="username" type="text" minlength="3" maxlength="30" pattern="[a-z0-9]+(-[a-z0-9]+)*" autocomplete="off" autocapitalize="none" spellcheck="false" required value="<?= esc($publicPageValues['username'] ?? '', 'attr') ?>" data-public-username></span>
+                        </label>
+                        <p class="form-hint" data-username-status aria-live="polite"></p>
+                    </div>
+
+                    <label class="form-field" for="public_bio"><span class="form-label"><?= esc(lang('Workspace.accountPage.bio')) ?> (about you)</span><textarea class="form-control" id="public_bio" name="bio" maxlength="1000" rows="5"><?= esc($publicPageValues['bio'] ?? '') ?></textarea></label>
+                    
+                    <label class="form-switch" for="public_page_enabled">
                         <input class="input-switch" id="public_page_enabled" name="publicPage" type="checkbox" value="1" role="switch" <?= ! empty($publicPageValues['publicPage']) ? 'checked' : '' ?>>
-                        <span><?= esc(lang('Workspace.accountPage.enablePublicPage')) ?></span>
+                        <span class="slider" aria-hidden="true"></span>
+                        <span class="label-switch"><?= esc(lang('Workspace.accountPage.enablePublicPage')) ?></span>
                     </label>
                     <div class="account-actions"><button class="btn btn-primary" type="submit" data-public-page-submit><?= esc(lang('Workspace.accountPage.savePublicPage')) ?></button></div>
                 </form>
