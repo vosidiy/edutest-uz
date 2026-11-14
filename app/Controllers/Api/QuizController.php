@@ -6,8 +6,10 @@ namespace App\Controllers\Api;
 
 use CodeIgniter\HTTP\ResponseInterface;
 
+/** Maps authenticated builder requests to QuizAuthoringService. */
 final class QuizController extends ApiController
 {
+    // Create a teacher-owned draft quiz.
     public function create(): ResponseInterface
     {
         return $this->runApi(function (): array {
@@ -22,6 +24,7 @@ final class QuizController extends ApiController
         });
     }
 
+    // Load the teacher-owned editable quiz document for the builder.
     public function show(string $publicId): ResponseInterface
     {
         return $this->runApi(fn (): array => [
@@ -29,6 +32,7 @@ final class QuizController extends ApiController
         ]);
     }
 
+    // Validate and save the complete teacher quiz document.
     public function update(string $publicId): ResponseInterface
     {
         return $this->runApi(function () use ($publicId): array {
@@ -37,6 +41,7 @@ final class QuizController extends ApiController
         });
     }
 
+    // Move a quiz through its trash or restore action.
     public function transition(string $publicId, string $action): ResponseInterface
     {
         return $this->runApi(fn (): array => service('quizAuthoring')->transition(
@@ -46,6 +51,7 @@ final class QuizController extends ApiController
         ));
     }
 
+    // Copy a quiz and its content into a new draft.
     public function duplicate(string $publicId): ResponseInterface
     {
         return $this->runApi(fn (): array => [

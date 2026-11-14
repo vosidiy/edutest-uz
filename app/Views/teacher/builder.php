@@ -76,11 +76,9 @@
                             <media-preview :media="selectedQuestion.media"></media-preview>
                             <div class="d-flex">
                                 <div class="media-actions">
-                                    <button class="btn btn-default" type="button" @click="chooseFile(selectedIndex,null)"> <svg class="mr-1" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image preview-icon"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> <span>Add media</span></button><button v-if="selectedQuestion.media" class="btn btn-red-subtle" type="button" @click="removeMedia(selectedIndex,null)">Remove</button>
-                                </div>
-                                <div class="ml-3">
-                                    <p>Question media</p>
-                                    <small class="text-secondary">One image or audio file.</small>
+                                    <button v-if="!selectedQuestion.media" class="btn btn-default" type="button" @click="chooseFile(selectedIndex,null)"> <svg class="mr-1" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image preview-icon"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> <span>Add media</span></button>
+                                    
+                                    <button v-if="selectedQuestion.media" class="btn btn-red-subtle" type="button" @click="removeMedia(selectedIndex,null)">Remove</button>
                                 </div>
                             </div>
                         </div>
@@ -90,21 +88,26 @@
                             <div class="section-label">
                                 <h5>Answer choices</h5>
                                 <div>
-                                    <select style="opacity:0.7" v-model="selectedQuestion.optionsLayout"><option value="list">List view</option><option value="grid">Grid view</option>
+                                    <select style="opacity:0.7" v-model="selectedQuestion.optionsLayout"><option value="list">List view</option><option value="grid">2 columns</option><option value="grid-3">3 columns</option><option value="grid-4">4 columns</option>
                                     </select>
                                 </div>
                             </div>
 
-                            <div class="answer-list" :class="{'answer-list-grid': selectedQuestion.optionsLayout === 'grid'}">
+                            <div class="answer-list" :class="{
+                                'answer-list-columns-1': selectedQuestion.optionsLayout === 'list',
+                                'answer-list-columns-2': selectedQuestion.optionsLayout === 'grid',
+                                'answer-list-columns-3': selectedQuestion.optionsLayout === 'grid-3',
+                                'answer-list-columns-4': selectedQuestion.optionsLayout === 'grid-4'
+                            }">
                                 <div v-for="(option,index) in selectedQuestion.options" :key="option.id || `option-${index}`" class="answer-row">
                                     <div class="answer-main-row">
                                         <span class="answer-letter">{{ optionLetter(index) }})</span>
-                                        <input class="form-control" v-model="option.content" maxlength="65535" :aria-label="`Answer ${optionLetter(index)}`">
+                                        <input class="form-control" v-model="option.content" maxlength="10000" :aria-label="`Answer ${optionLetter(index)}`">
                                         
-                                        <button class="btn btn-default" type="button" @click="chooseFile(selectedIndex,index)">
+                                        <button v-if="!option.media" class="btn btn-default" type="button" @click="chooseFile(selectedIndex,index)">
                                             <svg class="mr-1" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image preview-icon"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
                                             <span class="text">
-                                                 {{ option.media ? 'Change' : 'Image' }}
+                                                 Image
                                             </span>
                                         </button>     
                                         
@@ -114,7 +117,7 @@
                                     </div>
                                     
                                     <div v-if="option.media" class="option-media-wrap">
-                                        <button v-if="option.media" style="position:absolute; top:0; right:0" class="btn btn-sm btn-red" type="button" @click="removeMedia(selectedIndex,index)">Delete image</button>
+                                        <button v-if="option.media" style="position:absolute; top:0; right:0" class="btn btn-sm btn-red" type="button" @click="removeMedia(selectedIndex,index)">Delete pic</button>
                                         <media-preview :media="option.media"></media-preview>
                                     </div>
                                     

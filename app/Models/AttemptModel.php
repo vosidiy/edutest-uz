@@ -6,6 +6,7 @@ namespace App\Models;
 
 use CodeIgniter\Model;
 
+/** Persists assessment runs, including the frozen quiz snapshot and answer document. */
 final class AttemptModel extends Model
 {
     protected $table         = 'attempts';

@@ -2,7 +2,7 @@
 
 ## Platform
 
-123test is a server-rendered CodeIgniter 4 application running on PHP 8.4 and MySQL 8.4. It uses plain JavaScript/CSS for the student player and a pinned local Vue 3 production build for the quiz builder. There is no Node/Vite production runtime or SPA router.
+123test is a server-rendered CodeIgniter 4 application running on PHP 8.4 and MySQL 8.4. It uses plain JavaScript/CSS for the student player, loaded as ordered classic scripts through one browser namespace, and a pinned local Vue 3 production build for the quiz builder. There is no Node/Vite production runtime or SPA router.
 
 `public/` is the web root. Runtime data and quiz media live under `writable/`. Environment values and secrets belong in the untracked root `.env`.
 
@@ -28,7 +28,7 @@ The builder rounds numeric timer input to the nearest whole minute from 1–120 
 
 ### `questions` and `question_options`
 
-These tables are the mutable authoring pool. Questions are single-choice only and store `options_layout` as `list` or `grid`. The builder immediately mirrors that selection as a one-column or two-column answer editor, with a narrow-screen single-column fallback, while the same stored value controls the student player. Question text may be blank. On Save, services pad missing choices to two, replace blank choice text with `Option N`, and enforce exactly one correct option by retaining the first marked choice or selecting the first option. Option codes are stable opaque browser answer values.
+These tables are the mutable authoring pool. Questions are single-choice only and store `options_layout` as `list`, `grid`, `grid-3`, or `grid-4`; the legacy-compatible `grid` value means two columns. The builder immediately mirrors the selection as a one-, two-, three-, or four-column answer editor, and the same stored value controls the student player. Three- and four-column layouts collapse to two columns on medium widths, and all multi-column layouts collapse to one column on phones without changing stored data. Question text may be blank. On Save, services pad missing choices to two, replace blank choice text with `-`, and enforce exactly one correct option by retaining the first marked choice or selecting the first option. Option codes are stable opaque browser answer values.
 
 Question media is restricted to private images or audio; answer options and covers are image-only. The media API accepts multipart file uploads and does not accept video URLs. Video descriptors from old attempt snapshots are ignored rather than rendered, while the snapshots themselves remain immutable.
 
@@ -144,13 +144,13 @@ The countdown derives from `expiresAt`, not decrement persistence, so closing/ba
 
 Once loaded, the run works through connection loss and browser restarts. Progress is silently retried. Finish carries the full document and supersedes pending progress. There is deliberately no service worker, so opening/reopening a page requires connectivity.
 
-The active player keeps the quiz title in its own header and places `Question N of M` above the confirmed-answer progress bar. Every terminal result shows the score, result counts, and question verdicts. Correct feedback avoids repeating the selected and correct choice; when the captured `showAnswers` setting is enabled, incorrect or unanswered feedback reveals the correct choice and every non-empty authored explanation is shown. Result percentages retain full precision in data and scoring but display as truncated whole numbers. Review verdicts use distinct correct, wrong, and unanswered badges.
+The active player keeps the quiz title in its own header and places `Question N of M` above the confirmed-answer progress bar. Its dynamic markup is built from safely escaped JavaScript template literals rather than server-rendered native templates. Every terminal result shows the score, result counts, and question verdicts. When the captured `showAnswers` setting is enabled, immediate feedback and final Question review show the correct choice text for correct, wrong, and unanswered verdicts; wrong and unanswered feedback prefix it with **Correct answer**, while correct feedback shows the choice directly. Option media is not repeated inside feedback, and every non-empty authored explanation is shown. Result percentages retain full precision in data and scoring but display as truncated whole numbers. Review verdicts use distinct correct, wrong, and unanswered badges.
 
 ## Lifecycle and reporting
 
 The teacher-facing lifecycle is Draft/Active while storage remains `draft|published`. Saving Draft→Active sets `published_at`; later Active saves preserve it, and saving Active→Draft also preserves it. The same manual Save updates the authoring pool for future starts but does not touch existing attempt snapshots. Soft delete preserves the underlying status and does not revoke an existing attempt cookie.
 
-Teacher list/detail reporting reads summary columns plus `snapshot` and `answers`. Detail reconstructs presented question/option order, selected/correct answers, explanation, and media entirely from the attempt. In-progress reports can show only checkpoints already received; unsynchronized browser work is unknowable.
+Teacher attempt lists read only summary columns. Attempt detail decodes `snapshot` and `answers` to reconstruct presented question/option order, selected/correct answers, explanation, and media entirely from the attempt. In-progress reports can show only checkpoints already received; unsynchronized browser work is unknowable.
 
 The dashboard lists only non-deleted quizzes, ordered by most recently updated, with pagination but no status or sort filters. Soft-deleted quizzes remain absent from the dashboard while their historical reports remain owner-accessible.
 

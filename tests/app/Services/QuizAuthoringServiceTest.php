@@ -130,7 +130,7 @@ final class QuizAuthoringServiceTest extends PlayerTestCase
 
         $saved = $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
         self::assertSame('', $saved['questions'][0]['content']);
-        self::assertSame(['Option 1', 'Option 2'], array_column($saved['questions'][0]['options'], 'content'));
+        self::assertSame(['-', '-'], array_column($saved['questions'][0]['options'], 'content'));
         self::assertSame([true, false], array_column($saved['questions'][0]['options'], 'isCorrect'));
 
         $saved['questions'][0]['options'][] = ['id' => null, 'content' => 'Third', 'isCorrect' => true];
@@ -140,7 +140,7 @@ final class QuizAuthoringServiceTest extends PlayerTestCase
 
         $attempt = $this->startQuiz($quiz);
         self::assertSame('', $attempt['quiz']['questions'][0]['content']);
-        self::assertSame(['Option 1', 'Option 2', 'Third'], array_column($attempt['quiz']['questions'][0]['options'], 'content'));
+        self::assertSame(['-', '-', 'Third'], array_column($attempt['quiz']['questions'][0]['options'], 'content'));
     }
 
     public function testDrawCountRoundsValidValuesAndUsesWholePoolForInvalidValues(): void
@@ -176,18 +176,31 @@ final class QuizAuthoringServiceTest extends PlayerTestCase
         unset($document['questions'][0]['options']);
 
         $saved = $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
-        self::assertSame(['Option 1', 'Option 2'], array_column($saved['questions'][0]['options'], 'content'));
+        self::assertSame(['-', '-'], array_column($saved['questions'][0]['options'], 'content'));
         self::assertSame([true, false], array_column($saved['questions'][0]['options'], 'isCorrect'));
     }
 
-    public function testListAndGridLayoutsUseLastWriteWins(): void
+    public function testAnswerColumnLayoutsRoundTripAndUseLastWriteWins(): void
     {
         $quiz = $this->quiz(count: 2);
         $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
         $stale = $document;
-        $document['questions'][0]['optionsLayout'] = 'grid';
-        $saved = $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
-        self::assertSame('grid', $saved['questions'][0]['optionsLayout']);
+        foreach (['list', 'grid', 'grid-3', 'grid-4'] as $layout) {
+            $document['questions'][0]['optionsLayout'] = $layout;
+            $document = $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
+            self::assertSame($layout, $document['questions'][0]['optionsLayout']);
+        }
+
+        $invalid = $document;
+        $invalid['questions'][0]['optionsLayout'] = 'grid-5';
+        try {
+            $this->authoring->save($quiz['owner'], $quiz['publicId'], $invalid);
+            self::fail('Unknown answer layouts must be rejected.');
+        } catch (AuthoringException $error) {
+            self::assertSame('validation_failed', $error->errorCode);
+            self::assertArrayHasKey('questions.0.optionsLayout', $error->fields);
+        }
+
         $stale['title'] = 'Last writer';
         $replaced = $this->authoring->save($quiz['owner'], $quiz['publicId'], $stale);
         self::assertSame('Last writer', $replaced['title']);

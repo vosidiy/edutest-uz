@@ -9,13 +9,16 @@ use App\Exceptions\AuthoringException;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\HTTP\RedirectResponse;
 
+/** Serves the teacher quiz workspace while the API handles authoring writes. */
 final class QuizController extends BaseController
 {
+    // Show the teacher's quiz library workspace.
     public function index(): RedirectResponse
     {
         return redirect()->to(site_url('dashboard'));
     }
 
+    // Load the owned quiz document into the builder view.
     public function edit(string $publicId): string
     {
         $user = service('auth')->user();

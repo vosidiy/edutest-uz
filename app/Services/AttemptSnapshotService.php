@@ -16,6 +16,7 @@ final class AttemptSnapshotService
 
     private readonly BaseConnection $db;
 
+    // Wire the database and collaborating services used by this class.
     public function __construct(?BaseConnection $db = null, private readonly ?MediaService $media = null)
     {
         $this->db = $db ?? Database::connect();
@@ -118,6 +119,7 @@ final class AttemptSnapshotService
     }
 
     /** @return array<string, mixed> */
+    // Validate and decode the stored immutable snapshot.
     public function decode(array|string $snapshot): array
     {
         $document = is_array($snapshot) ? $snapshot : json_decode($snapshot, true);
@@ -172,6 +174,7 @@ final class AttemptSnapshotService
     }
 
     /** @return array{key:string,type:string,src:string}|null */
+    // Represent a supported stored media source in the snapshot.
     private function storedMedia(mixed $type, mixed $src, array $allowedTypes): ?array
     {
         if (! is_string($type) || ! in_array($type, $allowedTypes, true) || ! is_string($src) || $src === '') {
@@ -182,6 +185,7 @@ final class AttemptSnapshotService
     }
 
     /** @return array<string, string>|null */
+    // Convert snapshot media into a signed review URL.
     private function attemptMedia(array $attempt, mixed $stored, array $allowedTypes): ?array
     {
         if (! is_array($stored)
@@ -201,6 +205,7 @@ final class AttemptSnapshotService
     }
 
     /** @param list<mixed> $values */
+    // Randomize the order of snapshot questions or choices.
     private function shuffle(array &$values): void
     {
         for ($index = count($values) - 1; $index > 0; $index--) {
@@ -209,6 +214,7 @@ final class AttemptSnapshotService
         }
     }
 
+    // Find a private media path within nested snapshot data.
     private function containsSource(array $value, string $relative): bool
     {
         foreach ($value as $key => $child) {

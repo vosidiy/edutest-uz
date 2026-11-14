@@ -1,32 +1,41 @@
-export function completionEmoji(percent) {
-  const value = Number(percent);
-  if (!Number.isFinite(value)) return '🎉';
-  if (value >= 90) return '🏆';
-  if (value >= 80) return '🤩';
-  if (value >= 70) return '👍';
-  if (value >= 60) return '😊';
-  if (value >= 50) return '🥺';
-  return '😢';
-}
+(function (global) {
+  'use strict';
 
-export function wholePercent(percent) {
-  const value = Number(percent);
-  return Number.isFinite(value) ? Math.trunc(value) : 0;
-}
+  const player = global.EduTestPlayer = global.EduTestPlayer || {};
 
-export const shouldRevealCorrectAnswer = (verdict, showAnswers) => verdict !== 'correct' && Boolean(showAnswers);
-
-export function resultCounts(items, total) {
-  const counts = {correct: 0, wrong: 0, unanswered: 0};
-  for (const item of Array.isArray(items) ? items : []) {
-    if (item?.result === 'correct') counts.correct++;
-    else if (item?.result === 'wrong') counts.wrong++;
-    else counts.unanswered++;
+  // Pure display helpers shared by immediate feedback and the final result.
+  function completionEmoji(percent) {
+    const value = Number(percent);
+    if (!Number.isFinite(value)) return '🎉';
+    if (value >= 90) return '🏆';
+    if (value >= 80) return '🤩';
+    if (value >= 70) return '👍';
+    if (value >= 60) return '😊';
+    if (value >= 50) return '🥺';
+    return '😢';
   }
-  const maximum = Number(total);
-  if (Number.isFinite(maximum)) {
-    const missing = Math.max(0, Math.trunc(maximum) - counts.correct - counts.wrong - counts.unanswered);
-    counts.unanswered += missing;
+
+  function wholePercent(percent) {
+    const value = Number(percent);
+    return Number.isFinite(value) ? Math.trunc(value) : 0;
   }
-  return counts;
-}
+
+  const shouldRevealCorrectAnswer = (_verdict, showAnswers) => Boolean(showAnswers);
+
+  function resultCounts(items, total) {
+    const counts = {correct: 0, wrong: 0, unanswered: 0};
+    for (const item of Array.isArray(items) ? items : []) {
+      if (item?.result === 'correct') counts.correct++;
+      else if (item?.result === 'wrong') counts.wrong++;
+      else counts.unanswered++;
+    }
+    const maximum = Number(total);
+    if (Number.isFinite(maximum)) {
+      const missing = Math.max(0, Math.trunc(maximum) - counts.correct - counts.wrong - counts.unanswered);
+      counts.unanswered += missing;
+    }
+    return counts;
+  }
+
+  Object.assign(player, {completionEmoji, wholePercent, shouldRevealCorrectAnswer, resultCounts});
+})(globalThis);

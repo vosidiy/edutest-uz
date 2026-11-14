@@ -24,6 +24,23 @@ final class StudentMediaTest extends PlayerTestCase
         self::assertNotSame('2000-01-01 00:00:00.000000', $stored['updated_at']);
     }
 
+    public function testRemovingImageFromBlankAnswerStoresMinusSign(): void
+    {
+        $quiz = $this->quiz(count: 1);
+        $optionId = (int) $quiz['document']['questions'][0]['options'][0]['id'];
+        $quizRow = $this->db->table('quizzes')->where('public_id', $quiz['publicId'])->get()->getRowArray();
+        $mediaPath = 'quiz-media/' . $quiz['owner'] . '/' . $quizRow['id'] . '/' . str_repeat('e', 40) . '.png';
+        $this->db->table('question_options')->where('id', $optionId)->update([
+            'content' => '   ', 'media_type' => 'image', 'media_src' => $mediaPath,
+        ]);
+
+        $this->media->remove($quiz['owner'], $quiz['publicId'], 'option', $optionId);
+
+        $option = $this->db->table('question_options')->where('id', $optionId)->get()->getRowArray();
+        self::assertSame('-', $option['content']);
+        self::assertNull($option['media_src']);
+    }
+
     public function testAttemptMediaTokenResolvesOnlyFromStoredSnapshot(): void
     {
         $quiz = $this->quiz(count: 1);

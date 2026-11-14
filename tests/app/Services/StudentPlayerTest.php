@@ -50,6 +50,22 @@ final class StudentPlayerTest extends PlayerTestCase
         self::assertSame('Edited after ticket', $loaded['quiz']['questions'][0]['content']);
     }
 
+    public function testThreeAndFourColumnLayoutsAreCapturedInTheAttemptSnapshot(): void
+    {
+        $quiz = $this->quiz(count: 2);
+        $document = $this->authoring->document($quiz['owner'], $quiz['publicId']);
+        $document['questions'][0]['optionsLayout'] = 'grid-3';
+        $document['questions'][1]['optionsLayout'] = 'grid-4';
+        $this->authoring->save($quiz['owner'], $quiz['publicId'], $document);
+
+        $started = $this->startQuiz($quiz);
+
+        self::assertSame(
+            ['grid-3', 'grid-4'],
+            array_column($started['quiz']['questions'], 'optionsLayout'),
+        );
+    }
+
     public function testPreissuedTicketCannotStartAnUnpublishedQuiz(): void
     {
         $quiz = $this->quiz(count: 1);

@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+### Quiz code documentation (2026-11-14)
+
+- Added purpose and flow comments to quiz controllers, models, and services, plus brief guidance in the builder and student-player scripts. Runtime behavior is unchanged.
+
+### Builder media controls (2026-11-14)
+
+- Hide question and answer media upload buttons while media is attached; removing it makes the upload button available again.
+
+### Empty answer fallback (2026-11-14)
+
+- Blank or missing answer choices now save as `-` across the builder, API, and image removal flow; existing answer text remains unchanged.
+
+### Configurable answer columns (2026-11-14)
+
+- Added list, two-column, three-column, and four-column answer layouts to the builder and student player, with adaptive smaller-screen fallbacks.
+- Kept existing `grid` questions as two columns while extending the canonical question-layout constraint with `grid-3` and `grid-4`.
+
+### Player shell cleanup (2026-11-14)
+
+- Replaced the shared player-script partial with explicit cache-busted classic script tags in both student views.
+- Removed the unreachable synchronization-conflict dialog and its unused JavaScript, language, and CSS hooks while retaining conflict pausing and local-progress preservation.
+
+### Classic player rendering and streamlined reports (2026-11-12)
+
+- Replaced student-player ES-module imports and native HTML templates with cache-busted classic scripts, a single browser namespace, and safely escaped JavaScript template-literal rendering.
+- Simplified immediate and final-review feedback to show text-only correct answers for every verdict when answer visibility is enabled, without repeating answer-option media.
+- Removed the redundant Responses column and per-question state/timestamp footer from teacher reports, and stopped decoding attempt documents for list-only response counts.
+- Made dashboard public-page actions display their scheme-less host and path consistently before and after page creation.
+
 ### Reduced attempt connection metadata (2026-11-11)
 
 - Stopped reading, storing, and reporting the student's browser user-agent while retaining the admission request IP address.

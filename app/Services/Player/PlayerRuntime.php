@@ -8,12 +8,14 @@ use App\Services\AttemptSnapshotService;
 use App\Services\MediaService;
 use CodeIgniter\Database\BaseConnection;
 
+/** Wires the student player services used by its HTTP controllers. */
 final class PlayerRuntime
 {
     public readonly AdmissionService $admission;
     public readonly AssessmentService $assessment;
     public readonly AttemptSessionService $sessions;
 
+    // Wire the database and collaborating services used by this class.
     public function __construct(?BaseConnection $db = null, ?MediaService $media = null, ?AttemptSnapshotService $snapshots = null)
     {
         $store = new PlayerStore($db);

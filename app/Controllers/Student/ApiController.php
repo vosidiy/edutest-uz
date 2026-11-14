@@ -11,8 +11,10 @@ use App\Services\Player\PlayerStore;
 use CodeIgniter\HTTP\ResponseInterface;
 use Throwable;
 
+/** Provides JSON parsing and consistent error responses for student player endpoints. */
 abstract class ApiController extends BaseController
 {
+    // Convert a player operation or exception into the student JSON API format.
     protected function run(callable $operation): ResponseInterface
     {
         $status = 200;
@@ -30,6 +32,7 @@ abstract class ApiController extends BaseController
         return $this->response->setStatusCode($status)->setHeader('Cache-Control', 'no-store, private')->setJSON($body);
     }
 
+    // Read and validate the student JSON request body.
     protected function input(): array
     {
         $body = (string) $this->request->getBody();

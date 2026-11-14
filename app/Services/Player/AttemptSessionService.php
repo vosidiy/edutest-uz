@@ -6,20 +6,24 @@ namespace App\Services\Player;
 
 use App\Services\QuizShareCode;
 
+/** Resolves the per-quiz HttpOnly cookie to its matching assessment attempt. */
 final class AttemptSessionService
 {
     public const GRACE_SECONDS = 86400;
     private const COOKIE_PREFIX = 'edutest_attempt_';
 
+    // Wire the database and collaborating services used by this class.
     public function __construct(private readonly PlayerStore $store)
     {
     }
 
+    // Name the per-quiz attempt cookie.
     public function cookieName(string $shareToken): string
     {
         return self::COOKIE_PREFIX . $shareToken;
     }
 
+    // Find the owning quiz before reading its attempt cookie.
     public function cookieNameForAttempt(string $publicId): ?string
     {
         if (! $this->validPublicId($publicId)) {
@@ -58,6 +62,7 @@ final class AttemptSessionService
         return $attempt;
     }
 
+    // Enforce the post-deadline cookie grace period.
     public function authorizationExpired(array $attempt): bool
     {
         return PlayerStore::now() >= PlayerStore::due(
@@ -66,6 +71,7 @@ final class AttemptSessionService
         );
     }
 
+    // Check the attempt public ID format.
     private function validPublicId(string $publicId): bool
     {
         return preg_match('/^[a-f0-9]{32}$/D', $publicId) === 1;

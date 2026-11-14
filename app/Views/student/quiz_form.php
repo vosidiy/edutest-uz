@@ -83,18 +83,16 @@
     <div id="player-alert" class="alert alert-warning" role="alert" hidden></div>
 </main>
 
-<template id="player-blocked-template">
-    <section class="card player-error" data-tab-blocked role="alert">
-        <h2 data-slot="title"></h2>
-        <h5 style="font-size:18px; color:brown; margin:12px 0" data-slot="message"></h5>
-        <button type="button" class="btn btn-primary" data-action="retry"></button>
-    </section>
-</template>
-
 <script type="application/json" id="player-config"><?= json_encode([
     'shareToken' => $shareToken, 'page' => 'intro', 'apiBase' => site_url('api/v1/player'),
     'quizUrl' => site_url('q/' . $shareToken), 'attemptId' => null, 'ui' => lang('Player.ui'),
 ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?></script>
-<script type="module" src="<?= esc(base_url('js/player.js') . '?v=' . filemtime(FCPATH . 'js/player.js'), 'attr') ?>"></script>
+<script src="<?= esc(base_url('js/player-scoring.js') . '?v=' . filemtime(FCPATH . 'js/player-scoring.js'), 'attr') ?>"></script>
+<script src="<?= esc(base_url('js/player-state.js') . '?v=' . filemtime(FCPATH . 'js/player-state.js'), 'attr') ?>"></script>
+<script src="<?= esc(base_url('js/player-sync.js') . '?v=' . filemtime(FCPATH . 'js/player-sync.js'), 'attr') ?>"></script>
+<script src="<?= esc(base_url('js/player-tab-guard.js') . '?v=' . filemtime(FCPATH . 'js/player-tab-guard.js'), 'attr') ?>"></script>
+<script src="<?= esc(base_url('js/player-presentation.js') . '?v=' . filemtime(FCPATH . 'js/player-presentation.js'), 'attr') ?>"></script>
+<script src="<?= esc(base_url('js/player-view.js') . '?v=' . filemtime(FCPATH . 'js/player-view.js'), 'attr') ?>"></script>
+<script src="<?= esc(base_url('js/player.js') . '?v=' . filemtime(FCPATH . 'js/player.js'), 'attr') ?>"></script>
 </body>
 </html>

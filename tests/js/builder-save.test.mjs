@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const source = fs.readFileSync(new URL('../../public/js/builder.js', import.meta.url), 'utf8');
+const builderView = fs.readFileSync(new URL('../../app/Views/teacher/builder.php', import.meta.url), 'utf8');
 const clone = value => JSON.parse(JSON.stringify(value));
 function fixture(search = '') {
   let component, request;
@@ -12,10 +13,15 @@ function fixture(search = '') {
   const api = {request:(...args)=>request(...args),toast(){}};
   const revoked = [];
   const replaced = [];
+  const fileInputs = [];
   const location = {href:`https://example.test/quizzes/fixture/edit${search}`,search};
   const history = {state:null,replaceState(_state,_title,url){replaced.push(url);}};
   vm.runInNewContext(source, {Vue, EduTestApi:api, window:{Vue,EduTestApi:api,confirm:()=>true,location,history,URL},
-    document:{querySelector:()=>root}, URL:{revokeObjectURL:url=>revoked.push(url)}, FormData,
+    document:{querySelector:()=>root,createElement:()=>{
+      const input={files:null,handlers:{},addEventListener(name,handler){this.handlers[name]=handler;},click(){}};
+      fileInputs.push(input);
+      return input;
+    }}, URL:{revokeObjectURL:url=>revoked.push(url)}, FormData,
     setTimeout,clearTimeout,console});
   const app = component.data();
   app.$nextTick = async fn => {fn?.();};
@@ -24,11 +30,11 @@ function fixture(search = '') {
   Object.entries(component.computed).forEach(([name,fn])=>Object.defineProperty(app,name,{get:()=>fn.call(app)}));
   const quiz={publicId:'fixture',title:'Quiz',description:'',status:'published',updatedAt:'2026-10-31T00:00:00+00:00',timeLimitSec:7200,timeLimitMinutes:120,
     askEmail:false,askPhone:false,drawCount:null,shuffleQuestions:false,shuffleOptions:false,feedback:'at_end',
-    showAnswers:false,cover:null,mediaLimits:{imageBytes:5242880,audioBytes:20971520},
+    showAnswers:false,cover:null,mediaLimits:{imageBytes:5242880,audioBytes:20971520,serverBytes:20971520},
     questions:[{id:'1',content:'Question',optionsLayout:'list',explanation:'',media:null,
       options:[{id:'11',code:'a',content:'Yes',isCorrect:true,media:null},{id:'12',code:'b',content:'No',isCorrect:false,media:null}]}]};
   app.applyServerQuiz(clone(quiz)); app.loading=false; app.hydrating=false;
-  return {app,quiz,revoked,replaced,setRequest:fn=>{request=fn;}};
+  return {app,quiz,revoked,replaced,fileInputs,setRequest:fn=>{request=fn;}};
 }
 function deferred() {let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};}
 function response(payload) {
@@ -36,6 +42,38 @@ function response(payload) {
   quiz.questions.forEach((q,i)=>{q.id ||= String(100+i);q.options.forEach((o,j)=>{o.id ||= String(1000+i*10+j);});});
   return {data:{quiz}};
 }
+
+test('builder hides occupied media upload controls and restores them after removal', async()=>{
+  assert.match(builderView, /v-if="!selectedQuestion\.media"[^>]*@click="chooseFile\(selectedIndex,null\)"/);
+  assert.match(builderView, /v-if="!option\.media"[^>]*@click="chooseFile\(selectedIndex,index\)"/);
+  assert.doesNotMatch(builderView, /option\.media \? 'Change'/);
+
+  const {app,fileInputs,setRequest}=fixture();
+  const question=app.quiz.questions[0], option=question.options[0];
+  const calls=[];
+  setRequest(async(_url,request)=>{
+    calls.push(request.method);
+    return {data:{updatedAt:'2026-10-31T00:00:03+00:00',media:null}};
+  });
+  question.media={type:'image',url:'/question-image'};
+  option.media={type:'image',url:'/answer-image'};
+  app.chooseFile(0,null);
+  app.chooseFile(0,0);
+  assert.equal(fileInputs.length,0);
+  await app.removeMedia(0,null);
+  await app.removeMedia(0,0);
+  assert.deepEqual(calls,['DELETE','DELETE']);
+  assert.equal(question.media,null);
+  assert.equal(option.media,null);
+  app.chooseFile(0,null);
+  app.chooseFile(0,0);
+  assert.equal(fileInputs.length,2);
+
+  fileInputs[1].files=[new Blob(['image'],{type:'image/png'})];
+  option.media={type:'image',url:'/added-during-picker'};
+  await fileInputs[1].handlers.change();
+  assert.deepEqual(calls,['DELETE','DELETE']);
+});
 
 test('explicit clean saves send a request and reverting restores clean state', async()=>{
   const {app,setRequest}=fixture();let requests=0;setRequest(async(_url,options)=>{
@@ -198,7 +236,7 @@ test('manual save fills blank choices and prevents removal below two',async()=>{
   app.markDirty();
   setRequest(async(_url,options)=>response(JSON.parse(options.body)));
   assert.equal(await app.save(true),true);
-  assert.deepEqual(app.quiz.questions[0].options.map(option=>option.content),['Option 1','Option 2']);
+  assert.deepEqual(app.quiz.questions[0].options.map(option=>option.content),['-','-']);
   assert.deepEqual(app.quiz.questions[0].options.map(option=>option.isCorrect),[true,false]);
   app.removeOption(0);
   assert.equal(app.quiz.questions[0].options.length,2);

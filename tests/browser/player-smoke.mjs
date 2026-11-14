@@ -13,21 +13,27 @@ const shareToken = '123456789';
 const requests = [];
 let origin;
 let official = null;
+let showAnswers = true;
 const attemptCookie = `edutest_attempt_${shareToken}`;
 
+const firstQuestion = 'First <strong data-player-injection="question">question</strong>?';
+const firstAnswer = 'Right <em data-player-injection="option">answer</em>';
+const firstExplanation = 'Use <span data-player-injection="explanation">this</span> answer.';
+const studentName = 'Offline <b data-player-injection="identity">Student</b>';
 const questions = [
-  {id:'1',content:'First question?',optionsLayout:'list',media:null,explanation:'Right is correct.',correctCode:'right',options:[
-    {id:'11',code:'right',content:'Right',media:null},{id:'12',code:'wrong',content:'Wrong',media:null},
+  {id:'1',content:firstQuestion,optionsLayout:'list',media:null,explanation:firstExplanation,correctCode:'right',options:[
+    {id:'11',code:'right',content:firstAnswer,media:{type:'image',url:'/images/expired.png'}},
+    {id:'12',code:'wrong',content:'Wrong',media:null},
   ]},
   {id:'2',content:'Second question?',optionsLayout:'grid',media:null,explanation:'Right is correct.',correctCode:'right',options:[
     {id:'21',code:'wrong',content:'Wrong',media:null},{id:'22',code:'right',content:'Right',media:null},
   ]},
-  {id:'3',content:'Third question?',optionsLayout:'list',media:null,explanation:'Right is still correct.',correctCode:'right',options:[
+  {id:'3',content:'Third question?',optionsLayout:'grid-3',media:null,explanation:'Right is still correct.',correctCode:'right',options:[
     {id:'31',code:'right',content:'Right',media:null},{id:'32',code:'wrong',content:'Wrong',media:null},
   ]},
 ];
 const snapshot = () => ({schemaVersion:1,quiz:{title:'Snapshot quiz',description:'Two questions',shareToken,timeLimitSec:7200,
-  askEmail:false,askPhone:false,feedback:'after_each',showAnswers:true},cover:null,questions});
+  askEmail:false,askPhone:false,feedback:'after_each',showAnswers},cover:null,questions});
 const summary = () => ({title:'Snapshot quiz',description:'Three questions',teacher:'Teacher',teacherProfileUrl:null,
   questionCount:questions.length,timeLimitMinutes:'120.0',shareToken,askEmail:false,askPhone:false,cover:null});
 const iso = () => new Date().toISOString();
@@ -46,6 +52,11 @@ const server = http.createServer(async (request, response) => {
   try {
     const url = new URL(request.url, origin);
     if (/^\/(?:css|js|images|fonts)\//.test(url.pathname)) {
+      if (url.pathname === '/images/expired.png') {
+        response.writeHead(200, {'Content-Type':'image/png'});
+        response.end('expired media fixture');
+        return;
+      }
       const relative = url.pathname.slice(1);
       if (relative.includes('..')) { response.writeHead(404).end(); return; }
       const type = relative.endsWith('.css') ? 'text/css' : relative.endsWith('.js') ? 'text/javascript'
@@ -118,7 +129,10 @@ const server = http.createServer(async (request, response) => {
         lateSync:false,score,maxScore:questions.length,percent:(score * 100 / questions.length).toFixed(2),items};
       sendJson(response, official); return;
     }
-    if (url.pathname.endsWith('/media')) { sendJson(response, official); return; }
+    if (url.pathname.endsWith('/media')) {
+      official.quiz.questions[0].options[0].media = {type:'image',url:'/images/placeholder.png'};
+      sendJson(response, official); return;
+    }
     if (url.pathname.includes('/assessments/')) { sendJson(response, official); return; }
     response.writeHead(404).end();
   } catch (error) {
@@ -138,35 +152,49 @@ try {
   assert.deepEqual(await browser.evaluate(`[...document.querySelectorAll('#quiz-introduction .card-body > p > strong')].map(node => node.textContent)`), ['Questions','Time limit']);
 
   await browser.evaluate(`{
-    document.querySelector('[name="name"]').value = 'Offline Student';
+    document.querySelector('[name="name"]').value = ${JSON.stringify(studentName)};
     document.querySelector('#quiz-admission button[type="submit"]').click();
   }`);
-  await browser.until(() => browser.evaluate(`location.pathname.endsWith('/start') && document.querySelector('[data-slot="remaining"]')?.textContent.includes(':')`).catch(() => false), 'attempt start');
+  await browser.until(() => browser.evaluate(`location.pathname.endsWith('/start') && document.querySelector('.player-timer-remaining')?.textContent.includes(':')`).catch(() => false), 'attempt start');
   assert.equal(await browser.evaluate(`JSON.parse(localStorage.getItem('edutest:player:${shareToken}')).format`), 6);
   assert.equal(await browser.evaluate(`'credential' in JSON.parse(localStorage.getItem('edutest:player:${shareToken}'))`), false);
-  assert.equal(await browser.evaluate(`document.querySelector('.player-answers').classList.contains('player-answers-grid')`), false);
+  assert.equal(await browser.evaluate(`document.querySelector('.player-answers').classList.contains('player-answers-columns-1')`), true);
   assert.equal(await browser.evaluate(`document.querySelector('#player-header-title').textContent`), 'Snapshot quiz');
   assert.equal(await browser.evaluate(`document.querySelector('#player-header-progress')`), null);
   assert.equal(await browser.evaluate(`document.querySelector('.player-quiz-title, .player-current-user')`), null);
-  assert.equal(await browser.evaluate(`document.querySelector('[data-slot="progress-label"]').textContent`), 'Question 1 of 3');
+  assert.equal(await browser.evaluate(`document.querySelector('.player-progress-label').textContent`), 'Question 1 of 3');
   assert.equal(await browser.evaluate(`document.querySelector('.player-progress').getAttribute('aria-labelledby')`), 'player-progress-label');
+  assert.equal(await browser.evaluate(`document.querySelector('#current-question').textContent`), firstQuestion);
+  assert.equal(await browser.evaluate(`document.activeElement?.id`), 'current-question');
+  assert.equal(await browser.evaluate(`document.querySelector('.player-option-copy').textContent`), firstAnswer);
+  assert.equal(await browser.evaluate(`document.querySelector('[data-player-injection]')`), null);
+  assert.equal(await browser.evaluate(`!!document.querySelector('.player-option .player-media img')`), true);
+  await browser.until(() => browser.evaluate(`!!document.querySelector('.player-media-retry')`), 'expired media retry');
+  await browser.evaluate(`document.querySelector('.player-media-retry').click()`);
+  await browser.until(() => browser.evaluate(`document.querySelector('.player-option .player-media img')?.src.endsWith('/images/placeholder.png') && !document.querySelector('.player-media-retry')`), 'renewed media');
+  await browser.until(() => browser.evaluate(`document.querySelector('.player-timer-remaining')?.textContent.includes(':')`), 'timer after media renewal');
+  assert.equal(requests.filter(row => row.path.endsWith('/media')).length, 1);
   assert.ok(await browser.evaluate(`{
-    const [minutes,seconds] = document.querySelector('[data-slot="remaining"]').textContent.split(':').map(Number);
+    const [minutes,seconds] = document.querySelector('.player-timer-remaining').textContent.split(':').map(Number);
     minutes * 60 + seconds >= 7190;
   }`));
 
   await browser.evaluate(`document.querySelector('input[value="right"]').click();document.querySelector('[data-action="submit"]').click()`);
   await browser.until(() => browser.evaluate(`!!document.querySelector('.player-feedback')`), 'first feedback');
-  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback h3').textContent`), 'Correct');
+  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback h3').textContent`), 'Correct!');
   assert.equal(await browser.evaluate(`document.querySelector('.player-feedback').textContent.includes('Your answer')`), false);
   assert.equal(await browser.evaluate(`document.querySelector('.player-feedback').textContent.includes('Correct answer')`), false);
-  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback').textContent.includes('Right is correct.')`), true);
+  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback-answer').textContent`), `A) ${firstAnswer}`);
+  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback-explanation').textContent`), firstExplanation);
+  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback-explanation-label').textContent`), 'Explanation:');
+  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback [data-player-injection]')`), null);
+  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback .player-media')`), null);
   await browser.until(() => requests.some(row => row.path.endsWith('/progress')), 'first checkpoint');
   assert.equal(requests.some(row => row.authorization !== null), false);
   assert.equal(requests.filter(row => row.path.includes('/assessments/')).every(row => row.cookie === official.attemptId), true);
   await browser.evaluate(`document.querySelector('[data-action="next"]').click()`);
   await browser.until(() => browser.evaluate(`document.querySelector('#current-question').textContent === 'Second question?'`), 'second question');
-  assert.equal(await browser.evaluate(`document.querySelector('.player-answers').classList.contains('player-answers-grid')`), true);
+  assert.equal(await browser.evaluate(`document.querySelector('.player-answers').classList.contains('player-answers-columns-2')`), true);
 
   // A cookie/local mismatch preserves the old local document and reloads the cookie-owned attempt.
   const mismatchScript = await browser.command('Page.addScriptToEvaluateOnNewDocument', {source:`{
@@ -184,19 +212,24 @@ try {
 
   await browser.command('Network.emulateNetworkConditions', {offline:true,latency:0,downloadThroughput:0,uploadThroughput:0,connectionType:'none'});
   await browser.evaluate(`document.querySelector('input[value="wrong"]').click();document.querySelector('[data-action="submit"]').click()`);
-  await browser.until(() => browser.evaluate(`document.querySelector('.player-feedback h3')?.textContent === 'Incorrect'`), 'wrong feedback');
+  await browser.until(() => browser.evaluate(`document.querySelector('.player-feedback h3')?.textContent === 'Incorrect!'`), 'wrong feedback');
   assert.equal(await browser.evaluate(`document.querySelector('.player-feedback').textContent.includes('Your answer')`), false);
   assert.equal(await browser.evaluate(`document.querySelector('.player-feedback').textContent.includes('Correct answer')`), true);
   assert.equal(await browser.evaluate(`document.querySelector('.player-feedback').textContent.includes('B) Right')`), true);
   assert.equal(await browser.evaluate(`document.querySelector('.player-feedback').textContent.includes('Right is correct.')`), true);
+  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback .player-media')`), null);
   await browser.evaluate(`document.querySelector('[data-action="next"]').click()`);
   await browser.until(() => browser.evaluate(`document.querySelector('#current-question')?.textContent === 'Third question?'`), 'third question');
-  assert.equal(await browser.evaluate(`document.querySelector('[data-slot="progress-label"]').textContent`), 'Question 3 of 3');
+  assert.equal(await browser.evaluate(`document.querySelector('.player-progress-label').textContent`), 'Question 3 of 3');
+  assert.equal(await browser.evaluate(`document.querySelector('.player-answers').classList.contains('player-answers-columns-3')`), true);
   await browser.evaluate(`document.querySelector('[data-action="skip"]').click()`);
   await browser.until(() => browser.evaluate(`!!document.querySelector('.player-results-header')`), 'offline result');
   assert.equal(await browser.evaluate(`document.querySelector('.player-score').textContent`), '33%');
-  assert.deepEqual(await browser.evaluate(`[...document.querySelectorAll('.player-review-item [data-slot="verdict"]')].map(node => [node.textContent,node.classList.contains('badge-' + ({Correct:'correct',Incorrect:'wrong',Unanswered:'unanswered'}[node.textContent]))])`),
+  assert.equal(await browser.evaluate(`document.activeElement?.classList.contains('player-result-heading')`), true);
+  assert.deepEqual(await browser.evaluate(`[...document.querySelectorAll('.player-review-verdict')].map(node => [node.textContent,node.classList.contains('badge-' + ({Correct:'correct',Incorrect:'wrong',Unanswered:'unanswered'}[node.textContent]))])`),
     [['Correct',true],['Incorrect',true],['Unanswered',true]]);
+  assert.equal(await browser.evaluate(`document.querySelector('.player-student-identity').textContent`), studentName);
+  assert.equal(await browser.evaluate(`document.querySelector('[data-player-injection]')`), null);
   assert.equal(await browser.evaluate(`(() => {
     const stored=JSON.parse(localStorage.getItem('edutest:player:${shareToken}'));
     return stored.answers[2].answerCode === null && stored.answers[2].answeredAt !== null;
@@ -205,8 +238,14 @@ try {
   assert.equal(await browser.evaluate(`document.querySelectorAll('.player-review-item')[2].textContent.includes('Your answer')`), false);
   assert.equal(await browser.evaluate(`document.querySelectorAll('.player-review-item')[2].textContent.includes('Correct answer')`), true);
   assert.equal(await browser.evaluate(`document.querySelectorAll('.player-review-item')[2].textContent.includes('Right is still correct.')`), true);
+  assert.equal(await browser.evaluate(`document.querySelectorAll('.player-review-item')[2].querySelector('.player-feedback .player-media')`), null);
+  await browser.evaluate(`document.querySelectorAll('.player-review-item summary')[0].click()`);
+  assert.equal(await browser.evaluate(`document.querySelectorAll('.player-review-item')[0].querySelector('.player-feedback h3').textContent`), 'Correct!');
+  assert.equal(await browser.evaluate(`document.querySelectorAll('.player-review-item')[0].querySelector('.player-feedback-answer').textContent`), `A) ${firstAnswer}`);
+  assert.equal(await browser.evaluate(`document.querySelectorAll('.player-review-item')[0].textContent.includes('Correct answer')`), false);
+  assert.equal(await browser.evaluate(`document.querySelectorAll('.player-review-item')[0].querySelector('.player-feedback .player-media')`), null);
   assert.equal(await browser.evaluate(`JSON.parse(localStorage.getItem('edutest:player:${shareToken}')).finishPending`), true);
-  assert.equal(await browser.evaluate(`document.querySelector('[data-slot="status"]').textContent.includes('Provisional')`), true);
+  assert.equal(await browser.evaluate(`document.querySelector('.player-result-status').textContent.includes('Provisional')`), true);
 
   await browser.command('Network.emulateNetworkConditions', {offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1,connectionType:'wifi'});
   await browser.navigate(`${origin}/q/${shareToken}/start`);
@@ -216,7 +255,25 @@ try {
   await browser.until(() => browser.evaluate(`JSON.parse(localStorage.getItem('edutest:player:${shareToken}')).result?.official === true`), 'official reconciliation');
   assert.equal(requests.filter(row => row.path.endsWith('/finish')).length, 1);
   assert.equal(official.answers.length, questions.length);
-  assert.equal(await browser.evaluate(`document.querySelector('[data-slot="status"]').textContent.includes('confirmed')`), true);
+  assert.equal(await browser.evaluate(`document.querySelector('.player-result-status').textContent.includes('confirmed')`), true);
+
+  // A new attempt with answer disclosure disabled hides both answer text and explanations.
+  showAnswers = false;
+  questions[0].optionsLayout = 'grid-4';
+  await browser.evaluate(`document.querySelector('.player-restart').click()`);
+  await browser.until(() => browser.evaluate(`location.pathname === '/q/${shareToken}' && document.querySelector('#quiz-admission button[type="submit"]')?.disabled === false`), 'restart introduction');
+  await browser.evaluate(`{
+    document.querySelector('[name="name"]').value = 'Hidden answers';
+    document.querySelector('#quiz-admission button[type="submit"]').click();
+  }`);
+  await browser.until(() => browser.evaluate(`location.pathname.endsWith('/start') && document.querySelector('#current-question')`), 'hidden-answer attempt');
+  assert.equal(await browser.evaluate(`document.querySelector('.player-answers').classList.contains('player-answers-columns-4')`), true);
+  await browser.evaluate(`document.querySelector('input[value="wrong"]').click();document.querySelector('[data-action="submit"]').click()`);
+  await browser.until(() => browser.evaluate(`document.querySelector('.player-feedback h3')?.textContent === 'Incorrect!'`), 'hidden-answer feedback');
+  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback-answer')`), null);
+  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback-explanation')`), null);
+  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback').textContent.includes('Correct answer')`), false);
+  assert.equal(await browser.evaluate(`document.querySelector('.player-feedback .player-media')`), null);
   assert.deepEqual(browser.errors, []);
   console.log('Player snapshot/offline browser behavior passed.');
 } catch (error) {

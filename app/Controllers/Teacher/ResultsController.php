@@ -9,13 +9,16 @@ use App\Exceptions\ReportingException;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\HTTP\RedirectResponse;
 
+/** Serves teacher result pages built by TeacherResultsService. */
 final class ResultsController extends BaseController
 {
+    // Show the teacher's results entry page.
     public function index(): RedirectResponse
     {
         return redirect()->to(site_url('dashboard'));
     }
 
+    // Load the owned quiz's paginated attempt list.
     public function quiz(string $quizPublicId): string
     {
         $user = service('auth')->user();
@@ -42,6 +45,7 @@ final class ResultsController extends BaseController
         ]);
     }
 
+    // Load a single owned attempt and its question review.
     public function attempt(string $attemptPublicId): string
     {
         $user = service('auth')->user();
@@ -68,6 +72,7 @@ final class ResultsController extends BaseController
     }
 
     /** @return array<string, mixed> */
+    // Read search, date, and score query filters.
     private function attemptFilters(): array
     {
         return [
@@ -78,6 +83,7 @@ final class ResultsController extends BaseController
         ];
     }
 
+    // Prevent private quiz or result pages from being cached.
     private function privateResponse(): void
     {
         $this->response
@@ -85,6 +91,7 @@ final class ResultsController extends BaseController
             ->setHeader('X-Content-Type-Options', 'nosniff');
     }
 
+    // Translate a missing owned report into a public 404.
     private function notFound(ReportingException $exception): never
     {
         if ($exception->status === 404) {

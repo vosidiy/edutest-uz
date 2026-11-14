@@ -1,10 +1,28 @@
-import {grade, summarize} from './player-scoring.js?v=5';
-import {createState, PlayerClock, editAnswer, submitAnswer, nextQuestion, finishTimed, quitQuiz,
-  visibleDeadlines, hasPending, mergeServer} from './player-state.js?v=9';
-import {PlayerSync} from './player-sync.js?v=8';
-import {PlayerTabGuard} from './player-tab-guard.js';
-import {completionEmoji, resultCounts, shouldRevealCorrectAnswer, wholePercent} from './player-presentation.js?v=2';
-import {createPlayerView} from './player-view.js?v=10';
+(function (global) {
+  'use strict';
+
+// This entry point joins state, synchronization, and DOM rendering for one quiz run.
+const {
+  grade,
+  summarize,
+  createState,
+  PlayerClock,
+  editAnswer,
+  submitAnswer,
+  nextQuestion,
+  finishTimed,
+  quitQuiz,
+  visibleDeadlines,
+  hasPending,
+  mergeServer,
+  PlayerSync,
+  PlayerTabGuard,
+  completionEmoji,
+  resultCounts,
+  shouldRevealCorrectAnswer,
+  wholePercent,
+  createPlayerView,
+} = global.EduTestPlayer || {};
 
 const config = JSON.parse(document.querySelector('#player-config').textContent);
 const root = document.querySelector('#player-root');
@@ -25,6 +43,7 @@ const t = (key, values = {}) => Object.entries(values).reduce(
 );
 const view = createPlayerView(t);
 
+// Local state remains usable while offline; PlayerSync later submits its answer document.
 let storageAvailable = true;
 let state = read(storageKey);
 let clock = null;
@@ -33,7 +52,6 @@ let mediaTimer = null;
 let running = false;
 let starting = false;
 let lastError = '';
-let remoteConflict = null;
 
 function read(key) {
   try { return JSON.parse(localStorage.getItem(key) || 'null'); }
@@ -63,6 +81,7 @@ function showAlert() {
   alertBox.hidden = messages.length === 0;
 }
 
+// All student API requests use the attempt cookie and require active-tab ownership for writes.
 async function request(path, {method = 'GET', body, lock = method !== 'GET'} = {}) {
   if (lock && !tabGuard.allowed) throw Object.assign(new Error(t('tabBlocked')), {code: 'tab_inactive'});
   const headers = {'X-EduTest-Player': '1', Accept: 'application/json'};
@@ -96,11 +115,11 @@ function preserveLocal(value) {
   write(storageKey, null);
 }
 
+// Conflict callbacks leave the local document intact until the student retries.
 const worker = new PlayerSync(() => state, request, {
   canSend: () => navigator.onLine && tabGuard.allowed,
   persist,
-  conflict(server) {
-    remoteConflict = server;
+  conflict() {
     lastError = t('conflictText');
     updateStatus();
   },
@@ -139,7 +158,6 @@ function updateStatus() {
   const label = t(failed ? 'resultSaveFailed' : navigator.onLine ? 'saving' : 'offline');
   statusBox.replaceChildren(view.status(label, failed ? () => {
     worker.paused = false;
-    remoteConflict = null;
     worker.recover();
   } : null));
 }
@@ -181,6 +199,7 @@ async function start(event) {
   }
 }
 
+// Restore the loaded run, start its clock, and resume queued synchronization.
 async function activate(recover = true) {
   if (!state || state.format !== 6 || state.shareToken !== config.shareToken) {
     window.location.replace(config.quizUrl);
@@ -283,6 +302,7 @@ function advance() {
   render();
 }
 
+// Apply the snapshot's answer-visibility setting to both live and final feedback.
 function feedback(question, award) {
   const correctAnswers = [];
   const showAnswers = shouldRevealCorrectAnswer(award.result, state.quiz.settings.showAnswers);
@@ -290,9 +310,7 @@ function feedback(question, award) {
     const index = question.options.findIndex(option => option.code === question.correctCode);
     const option = question.options[index];
     if (option) correctAnswers.push({
-      text: `${optionLetter(index)}) ${option.content || t('mediaImage')}`,
-      key: `o:${option.id}`,
-      media: option.media,
+      text: `${optionLetter(index)})${option.content ? ` ${option.content}` : ''}`,
     });
   }
   return view.feedback({
@@ -301,7 +319,7 @@ function feedback(question, award) {
     correctLabel: 'correctAnswer',
     correctAnswers,
     explanation: state.quiz.settings.showAnswers ? question.explanation : '',
-  }, renderMedia);
+  });
 }
 
 function renderResults() {
@@ -348,7 +366,7 @@ function tick() {
   const now = clock.now();
   const remaining = Math.max(0, Math.ceil((Date.parse(state.expiresAt) - now) / 1000));
   for (const box of root.querySelectorAll('[data-deadline]')) {
-    box.querySelector('[data-slot="remaining"]').textContent = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`;
+    box.querySelector('.player-timer-remaining').textContent = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`;
     box.classList.toggle('is-urgent', remaining <= 30);
   }
   if (remaining > 0) return;
@@ -365,6 +383,7 @@ function renderMedia(key, descriptor) {
   return wrapper;
 }
 
+// Renew expiring signed media URLs without changing the frozen quiz content.
 async function refreshMedia() {
   if (!state || !navigator.onLine || !await claim()) return;
   const response = await request(`/assessments/${state.attemptId}/media`, {
@@ -424,22 +443,6 @@ window.addEventListener('beforeunload', event => {
 });
 window.addEventListener('pagehide', () => { persist(); tabGuard.release(); });
 
-document.querySelector('#keep-local')?.addEventListener('click', () => {
-  worker.paused = false;
-  lastError = '';
-  document.querySelector('#player-conflict').close();
-  worker.flush();
-});
-document.querySelector('#use-server')?.addEventListener('click', () => {
-  if (!remoteConflict || !state) return;
-  state = createState(remoteConflict);
-  worker.paused = false;
-  remoteConflict = null;
-  persist();
-  document.querySelector('#player-conflict').close();
-  activate(false);
-});
-
 const admissionForm = document.querySelector('#quiz-admission');
 if (admissionForm) {
   admissionForm.addEventListener('submit', start);
@@ -463,3 +466,4 @@ if (config.page === 'intro') {
   activate();
 }
 showAlert();
+})(globalThis);

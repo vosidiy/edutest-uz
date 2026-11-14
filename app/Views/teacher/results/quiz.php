@@ -22,13 +22,12 @@
         <?php if ($report['attempts'] === []) : ?>
             <div class="empty-state"><span aria-hidden="true">◎</span><h3><?= esc(lang('Results.emptyAttemptsTitle')) ?></h3><p><?= esc(lang('Results.emptyAttemptsBody')) ?></p></div>
         <?php else : ?>
-            <div class="table-wrap"><table class="table results-table"><thead><tr><th>Student</th><th>Status</th><th>Responses</th><th>Score</th><th>Duration (min)</th><th>Finished</th><th><span class="sr-only">Open</span></th></tr></thead><tbody>
+            <div class="table-wrap"><table class="table results-table"><thead><tr><th>Student</th><th>Status</th><th>Score</th><th>Duration</th><th>Finished</th><th>Review</th></tr></thead><tbody>
             <?php foreach ($report['attempts'] as $attempt) : ?>
                 <tr>
                     <td><a class="result-title-link" href="<?= esc($attempt['url'], 'attr') ?>">
                         👤 <?= esc($attempt['name']) ?></a><small><?= esc($attempt['email'] ?? $attempt['phone'] ?? 'No optional contact') ?></small></td>
                     <td><span class="badge attempt-status <?= esc($attempt['status'], 'attr') ?>"><?= esc(ucwords(str_replace('_', ' ', $attempt['status']))) ?></span><small><?= esc($attempt['finishReason'] ?? '') ?></small><?php if ($attempt['lateSync']) : ?><small><?= esc(lang('Results.lateSync')) ?></small><?php endif ?></td>
-                    <td><?= esc((string) $attempt['responsesReceived']) ?> / <?= esc($attempt['maxScore']) ?><small><?= esc((string) $attempt['correctReceived']) ?> correct</small></td>
                     <td><?= $attempt['percent'] === null ? esc(lang('Results.ungraded')) : esc($attempt['score']) . ' / ' . esc($attempt['maxScore']) . ' (' . esc($attempt['percent']) . '%)' ?></td>
                     <td><?= esc($attempt['duration'] ?? lang('Results.notAvailable')) ?></td>
                     <td><?= esc($attempt['submittedAt']['display'] ?? 'Not finished') ?></td>

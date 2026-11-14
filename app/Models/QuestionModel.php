@@ -6,6 +6,7 @@ namespace App\Models;
 
 use CodeIgniter\Model;
 
+/** Persists authored questions within a quiz's mutable question pool. */
 final class QuestionModel extends Model
 {
     protected $table          = 'questions';

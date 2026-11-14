@@ -11,15 +11,18 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Throwable;
 
+/** Centralizes transaction retries, row locks, and UTC time conversion for player writes. */
 final class PlayerStore
 {
     public readonly BaseConnection $db;
 
+    // Wire the database and collaborating services used by this class.
     public function __construct(?BaseConnection $db = null)
     {
         $this->db = $db ?? Database::connect();
     }
 
+    // Run a player mutation with contention-safe transaction retries.
     public function transaction(callable $operation): mixed
     {
         for ($try = 0; ; $try++) {
@@ -39,6 +42,7 @@ final class PlayerStore
         }
     }
 
+    // Lock a specific stored quiz or attempt row for mutation.
     public function lock(string $table, string $id, string $columns = '*'): array
     {
         if (! in_array($table, ['quizzes', 'attempts'], true)) throw new \LogicException('Invalid lock target.');
@@ -50,16 +54,19 @@ final class PlayerStore
         return $row;
     }
 
+    // Return the current database timestamp.
     public static function now(): string
     {
         return (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
     }
 
+    // Normalize a timestamp for API output.
     public static function iso(?string $value): ?string
     {
         return $value === null ? null : (new DateTimeImmutable($value, new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s.u\Z');
     }
 
+    // Format a timestamp for database storage.
     public static function date(string $value): string
     {
         if (! preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/D', $value)) throw new PlayerException('invalid_progress');
@@ -72,6 +79,7 @@ final class PlayerStore
         catch (\Exception) { throw new PlayerException('invalid_progress'); }
     }
 
+    // Calculate a deadline from a start time and duration.
     public static function due(string $start, ?int $seconds): ?string
     {
         return $seconds === null ? null : (new DateTimeImmutable($start, new DateTimeZone('UTC')))->modify('+' . $seconds . ' seconds')->format('Y-m-d H:i:s.u');

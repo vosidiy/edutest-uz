@@ -9,21 +9,25 @@ use Config\Database;
 use DateTimeImmutable;
 use DateTimeZone;
 
+/** Fetches owner-scoped quiz summaries for teacher dashboard and library pages. */
 final class TeacherQueryService
 {
     private const PAGE_SIZE = 20;
     private readonly BaseConnection $db;
 
+    // Wire the database and collaborating services used by this class.
     public function __construct(?BaseConnection $db = null, private readonly ?MediaService $media = null)
     {
         $this->db = $db ?? Database::connect();
     }
 
+    // Normalize a requested library page number.
     private function page(array $input): int
     {
         return max(1, (int) (is_scalar($input['page'] ?? null) ? $input['page'] : 1));
     }
 
+    // Page teacher-owned quizzes for the dashboard and library.
     public function library(int $userId, array $input = [], string $timezone = 'UTC'): array
     {
         $page = $this->page($input);
@@ -65,6 +69,7 @@ final class TeacherQueryService
         ];
     }
 
+    // Convert a UTC timestamp to the teacher's timezone.
     private function localDate(mixed $value, string $timezone): ?string
     {
         if ($value === null || $value === '') return null;

@@ -26,11 +26,15 @@ final class TeacherResultsServiceTest extends PlayerTestCase
         );
     }
 
-    public function testQuizReportReadsCountsAndCorrectnessFromAttemptDocuments(): void
+    public function testQuizReportUsesStoredSummaryWithoutDecodingAttemptDocuments(): void
     {
         $quiz = $this->quiz(count: 2);
         $completed = $this->startQuiz($quiz);
         $this->complete($completed);
+        $this->db->table('attempts')->where('public_id', $completed['attemptId'])->update([
+            'snapshot' => json_encode(['schemaVersion' => 999], JSON_THROW_ON_ERROR),
+            'answers'  => '[]',
+        ]);
         $this->startQuiz($quiz);
         $expired = $this->startQuiz($quiz);
         $this->db->table('attempts')->where('public_id', $expired['attemptId'])->update([
@@ -41,9 +45,13 @@ final class TeacherResultsServiceTest extends PlayerTestCase
         self::assertArrayNotHasKey('metrics', $report);
         self::assertCount(2, $report['attempts']);
         $byStatus = array_column($report['attempts'], null, 'status');
-        self::assertSame(2, $byStatus['completed']['responsesReceived']);
-        self::assertSame(2, $byStatus['completed']['correctReceived']);
-        self::assertSame(0, $byStatus['abandoned']['responsesReceived']);
+        self::assertSame('2.00', $byStatus['completed']['score']);
+        self::assertSame('2', $byStatus['completed']['maxScore']);
+        self::assertSame('100.00', $byStatus['completed']['percent']);
+        foreach ($report['attempts'] as $attempt) {
+            self::assertArrayNotHasKey('responsesReceived', $attempt);
+            self::assertArrayNotHasKey('correctReceived', $attempt);
+        }
     }
 
     public function testFiltersSearchMinimumScoreAndRollingDateWhileKeepingNewestOrder(): void
@@ -171,7 +179,9 @@ final class TeacherResultsServiceTest extends PlayerTestCase
         self::assertArrayNotHasKey('agent', $report['attempt']);
         self::assertSame($before, array_column($report['questions'][0]['options'], 'content'));
         self::assertSame(['A', 'B'], array_column($report['questions'][0]['options'], 'label'));
-        self::assertNotNull($report['questions'][0]['answeredAt']);
+        foreach (['status', 'answeredAt', 'clientAnsweredAt'] as $removedField) {
+            self::assertArrayNotHasKey($removedField, $report['questions'][0]);
+        }
         $json = json_encode($report, JSON_THROW_ON_ERROR);
         foreach (['media_src'] as $private) {
             self::assertStringNotContainsString($private, $json);
@@ -207,9 +217,11 @@ final class TeacherResultsServiceTest extends PlayerTestCase
         $report = $this->results->quiz($quiz['owner'], $quiz['publicId'], [], 'UTC');
         self::assertSame('completed', $report['attempts'][0]['status']);
         self::assertSame('exited', $report['attempts'][0]['finishReason']);
-        self::assertSame(2, $report['attempts'][0]['responsesReceived']);
-        self::assertSame(1, $report['attempts'][0]['correctReceived']);
+        self::assertSame('1.00', $report['attempts'][0]['score']);
+        self::assertSame('2', $report['attempts'][0]['maxScore']);
         self::assertSame('50.00', $report['attempts'][0]['percent']);
+        self::assertArrayNotHasKey('responsesReceived', $report['attempts'][0]);
+        self::assertArrayNotHasKey('correctReceived', $report['attempts'][0]);
     }
 
     private function complete(array $attempt): void

@@ -9,9 +9,11 @@ use App\Exceptions\AuthoringException;
 use CodeIgniter\HTTP\ResponseInterface;
 use Throwable;
 
+/** Shares JSON response and authenticated teacher identity handling across builder APIs. */
 abstract class ApiController extends BaseController
 {
     /** @param mixed $data */
+    // Wrap data in the standard teacher API response.
     protected function success($data, int $status = 200): ResponseInterface
     {
         return $this->response->setStatusCode($status)->setJSON([
@@ -20,6 +22,7 @@ abstract class ApiController extends BaseController
         ]);
     }
 
+    // Handle teacher API exceptions without exposing internal details.
     protected function runApi(callable $operation): ResponseInterface
     {
         try {
@@ -52,6 +55,7 @@ abstract class ApiController extends BaseController
     }
 
     /** @return array{csrfHeader: string, csrfToken: string, timestamp: string} */
+    // Attach a response timestamp.
     protected function meta(): array
     {
         return [
@@ -62,6 +66,7 @@ abstract class ApiController extends BaseController
     }
 
     /** @return array<string, mixed> */
+    // Require a JSON object request body.
     protected function jsonObject(): array
     {
         $data = $this->request->getJSON(true);
@@ -73,6 +78,7 @@ abstract class ApiController extends BaseController
         return $data;
     }
 
+    // Read the authenticated teacher ID from the auth service.
     protected function userId(): int
     {
         $id = service('auth')->id();

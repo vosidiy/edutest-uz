@@ -1,12 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {grade, summarize} from '../../public/js/player-scoring.js';
-import {
+import '../../public/js/player-scoring.js';
+import '../../public/js/player-state.js';
+import '../../public/js/player-sync.js';
+
+const {
+  grade, summarize,
   createState, editAnswer, submitAnswer, nextQuestion, finishTimed, quitQuiz,
   deadlines, mergeServer, hasPending, PlayerClock,
-} from '../../public/js/player-state.js';
-import {PlayerSync} from '../../public/js/player-sync.js';
+  PlayerSync,
+} = globalThis.EduTestPlayer;
 
 const cases = JSON.parse(fs.readFileSync(new URL('../fixtures/player-scoring.json', import.meta.url), 'utf8'));
 const startedAt = '2026-09-26T10:00:00.000Z';
@@ -144,6 +148,34 @@ test('server recovery detects a changed same-version document', () => {
   const before = clone(state);
   assert.equal(mergeServer(state, conflicting), false);
   assert.deepEqual(state, before);
+});
+
+test('synchronization pauses on a conflict without discarding local answers and can retry', async () => {
+  const state = fresh();
+  answer(state);
+  const before = clone(state.answers);
+  const conflicting = {...data(),answerVersion:1,answers:[{...state.answers[0],answerCode:'wrong'}]};
+  let conflict = true;
+  let conflicts = 0;
+  const worker = new PlayerSync(() => state, async () => ({
+    data: conflict ? conflicting : {
+      ...data(), answerVersion:state.answerVersion, answers:clone(state.answers),
+    },
+  }), {conflict() { conflicts++; }});
+  try {
+    await worker.recover();
+    assert.equal(worker.paused, true);
+    assert.equal(conflicts, 1);
+    assert.deepEqual(state.answers, before);
+    assert.equal(state.progressPending, true);
+
+    conflict = false;
+    worker.paused = false;
+    await worker.recover();
+    assert.equal(worker.paused, false);
+    assert.deepEqual(state.answers, before);
+    assert.equal(state.progressPending, false);
+  } finally { worker.stop(); }
 });
 
 test('clock resists a backwards wall-clock change', () => {

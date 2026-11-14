@@ -13,7 +13,13 @@ assert.doesNotMatch(source + header, /version_conflict|conflictDialog|overwriteC
 assert.match(header, /:class="hasChanges \? 'btn-primary' : 'btn-default'"/);
 assert.match(header, /hasChanges \? 'Save quiz' : 'Saved'/);
 assert.match(builder, /class="answer-list"/);
-assert.match(builder, /'answer-list-grid': selectedQuestion\.optionsLayout === 'grid'/);
+for (const [columns, layout] of [[1,'list'],[2,'grid'],[3,'grid-3'],[4,'grid-4']]) {
+  assert.match(builder, new RegExp(`'answer-list-columns-${columns}': selectedQuestion\\.optionsLayout === '${layout}'`));
+}
+assert.doesNotMatch(builder, /answer-list-grid/);
+for (const [value, label] of [['list','List view'],['grid','2 columns'],['grid-3','3 columns'],['grid-4','4 columns']]) {
+  assert.match(builder, new RegExp(`<option value="${value}">${label}<\\/option>`));
+}
 assert.match(builder, /<div class="answer-list"[\s\S]*v-for="\(option,index\) in selectedQuestion\.options"/);
 assert.match(source, /new=active/);
 assert.match(source, /stageNewQuizActive/);
@@ -42,7 +48,7 @@ const quiz = {
   }]
 };
 assert.equal(rules.repairQuestions(quiz), true);
-assert.deepEqual(quiz.questions[0].options.map(option => option.content), ['Option 1', 'Option 2']);
+assert.deepEqual(quiz.questions[0].options.map(option => option.content), ['-', '-']);
 assert.deepEqual(quiz.questions[0].options.map(option => option.isCorrect), [true, false]);
 assert.equal(rules.repairQuestions(quiz), false);
 

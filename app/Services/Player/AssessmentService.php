@@ -7,8 +7,10 @@ namespace App\Services\Player;
 use App\Exceptions\PlayerException;
 use App\Services\AttemptSnapshotService;
 
+/** Owns versioned answer progress, final grading, expiry, and student result projection. */
 final class AssessmentService
 {
+    // Wire the database and collaborating services used by this class.
     public function __construct(
         private readonly PlayerStore $store,
         private readonly AttemptSnapshotService $snapshots,
@@ -17,6 +19,7 @@ final class AssessmentService
     ) {}
 
     /** @return array<string, mixed> */
+    // Authorize the cookie-owned attempt and return its current browser projection.
     public function load(string $publicId, ?string $sessionPublicId): array
     {
         $authorized = $this->authorize($publicId, $sessionPublicId);
@@ -25,6 +28,7 @@ final class AssessmentService
     }
 
     /** @return array<string, mixed> */
+    // Validate and store the next versioned answer prefix.
     public function progress(string $publicId, ?string $sessionPublicId, array $input): array
     {
         $authorized = $this->authorize($publicId, $sessionPublicId);
@@ -69,6 +73,7 @@ final class AssessmentService
     }
 
     /** @return array<string, mixed> */
+    // Validate the complete document and commit its official score.
     public function finish(string $publicId, ?string $sessionPublicId, array $input): array
     {
         $authorized = $this->authorize($publicId, $sessionPublicId);
@@ -130,6 +135,7 @@ final class AssessmentService
     }
 
     /** @return array<string, mixed> */
+    // Return the authorized attempt's current result.
     public function results(string $publicId, ?string $sessionPublicId): array
     {
         $data = $this->load($publicId, $sessionPublicId);
@@ -146,6 +152,7 @@ final class AssessmentService
         return $this->load($publicId, $sessionPublicId);
     }
 
+    // Lazily resolve expired in-progress attempts for teacher reporting.
     public function resolveQuizOverdue(int $quizId, int $limit = 250): void
     {
         $ids = array_column(
@@ -167,6 +174,7 @@ final class AssessmentService
     }
 
     /** @return array<string, mixed> */
+    // Build the student document from the stored attempt and snapshot.
     private function serialize(array $attempt, ?array $gradedItems = null): array
     {
         $snapshot = $this->snapshots->decode($attempt['snapshot']);
@@ -194,6 +202,7 @@ final class AssessmentService
     }
 
     /** @return array<string, mixed> */
+    // Return the small checkpoint acknowledgement without the full quiz.
     private function ack(array $attempt): array
     {
         return [
@@ -209,6 +218,7 @@ final class AssessmentService
     }
 
     /** @return array<string, mixed> */
+    // Build the official or provisional score payload.
     private function result(array $attempt, array $items, array $snapshot): array
     {
         $settings = $snapshot['quiz'];
@@ -240,6 +250,7 @@ final class AssessmentService
     }
 
     /** @return list<array{questionId:string,answerCode:?string,answeredAt:?string}> */
+    // Check answer order, codes, timestamps, and prefix or final completeness.
     private function validateAnswers(mixed $value, array $questions, array $attempt, bool $final): array
     {
         if (! is_array($value) || ! array_is_list($value) || count($value) > count($questions)
@@ -288,6 +299,7 @@ final class AssessmentService
         return $answers;
     }
 
+    // Check finish reason and client time against the immutable deadline.
     private function assertFinishTiming(string $reason, string $finishedAt, array $attempt, array $answers): void
     {
         if ($reason === 'completed') {
@@ -315,6 +327,7 @@ final class AssessmentService
         }
     }
 
+    // Parse and normalize a student timestamp.
     private function clientTime(string $value, array $attempt): string
     {
         $time = PlayerStore::date($value);
@@ -326,6 +339,7 @@ final class AssessmentService
     }
 
     /** @return array{0:int,1:list<array{questionId:string,answerCode:?string,correctCode:string,result:string}>} */
+    // Score each saved answer against the captured answer key.
     private function grade(array $questions, array $answers): array
     {
         $score = 0;
@@ -359,6 +373,7 @@ final class AssessmentService
         return $answers;
     }
 
+    // Mark an overdue attempt as provisional while holding its lock.
     private function resolveExpiryLocked(array $attempt): array
     {
         if ($attempt['status'] !== 'in_progress' || PlayerStore::now() < $attempt['expires_at']) {
@@ -400,6 +415,7 @@ final class AssessmentService
         return $result;
     }
 
+    // Match the attempt ID, cookie, and grace period.
     private function authorize(string $publicId, ?string $sessionPublicId): array
     {
         if (preg_match('/^[a-f0-9]{32}$/D', $publicId) !== 1
@@ -416,6 +432,7 @@ final class AssessmentService
     }
 
     /** @return list<array<string, mixed>> */
+    // Read a saved ordered answer document.
     private function decodeAnswers(array|string $value): array
     {
         $answers = is_array($value) ? $value : json_decode($value, true);
@@ -426,17 +443,20 @@ final class AssessmentService
         return $answers;
     }
 
+    // Store the ordered answer document as JSON.
     private function encodeAnswers(array $answers): string
     {
         return json_encode($answers, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
+    // Check whether saved progress matches a final document prefix.
     private function isPrefix(array $prefix, array $complete): bool
     {
         return count($prefix) <= count($complete)
             && $prefix === array_slice($complete, 0, count($prefix));
     }
 
+    // Reject unexpected fields in an answer record.
     private function hasExactKeys(array $value, array $expected): bool
     {
         $actual = array_keys($value);

@@ -1,8 +1,12 @@
 <dialog class="dialog app-dialog" id="create-quiz-dialog" aria-labelledby="create-quiz-title">
     <form method="dialog" id="dismiss-create-quiz-form" data-dismiss-create novalidate hidden></form>
     <form method="dialog" data-create-form>
-        <div class="dialog-heading"><div><p class="eyebrow"><?= esc(lang('EduTest.createQuiz.eyebrow')) ?></p><h2 id="create-quiz-title"><?= esc(lang('EduTest.createQuiz.title')) ?></h2></div><button class="btn btn-default btn-icon" type="submit" form="dismiss-create-quiz-form" value="cancel" formnovalidate data-close-create aria-label="<?= esc(lang('EduTest.createQuiz.close'), 'attr') ?>">×</button></div>
-        <p class="dialog-copy"><?= esc(lang('EduTest.createQuiz.description')) ?></p>
+        <div class="dialog-heading"><div>
+            <h4 id="create-quiz-title"><?= esc(lang('EduTest.createQuiz.title')) ?></h4></div><button class="btn btn-default btn-icon" type="submit" form="dismiss-create-quiz-form" value="cancel" formnovalidate data-close-create aria-label="<?= esc(lang('EduTest.createQuiz.close'), 'attr') ?>">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x preview-icon"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+        </div>
+       
         <label class="form-field"><span class="form-label"><?= esc(lang('EduTest.createQuiz.quizTitle')) ?></span><input class="form-control" name="title" maxlength="200" required autocomplete="off" placeholder="<?= esc(lang('EduTest.createQuiz.placeholder'), 'attr') ?>"></label>
         <div class="create-cover-picker">
             <label class="form-field"><span class="form-label"><?= esc(lang('EduTest.createQuiz.cover')) ?></span><input class="form-control" type="file" name="cover" accept="image/jpeg,image/png,image/webp" aria-describedby="create-cover-help"></label>

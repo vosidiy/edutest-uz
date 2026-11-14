@@ -12,11 +12,13 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Throwable;
 
+/** Validates and saves teacher quiz definitions that later become attempt snapshots. */
 final class QuizAuthoringService
 {
     private readonly BaseConnection $db;
     private readonly Closure $shareCodeFactory;
 
+    // Wire the database and collaborating services used by this class.
     public function __construct(
         ?BaseConnection $db = null,
         private readonly ?MediaService $media = null,
@@ -27,6 +29,7 @@ final class QuizAuthoringService
     }
 
     /** @return array<string, string> */
+    // Create a new teacher-owned draft and its public identifiers.
     public function create(int $userId, string $title): array
     {
         $title = trim($title);
@@ -85,12 +88,14 @@ final class QuizAuthoringService
     }
 
     /** @return array<string, mixed> */
+    // Return the owned quiz in the builder's editable shape.
     public function document(int $userId, string $publicId, bool $withDeleted = false): array
     {
         return $this->serializeDocument($this->ownedQuiz($userId, $publicId, $withDeleted));
     }
 
     /** @return array<string, mixed> */
+    // Validate and transactionally persist the full authored quiz.
     public function save(int $userId, string $publicId, array $payload): array
     {
         $orphanedMedia = [];
@@ -143,6 +148,7 @@ final class QuizAuthoringService
     }
 
     /** @return array<string, mixed> */
+    // Apply a supported trash or restore action without changing quiz content.
     public function transition(int $userId, string $publicId, string $action): array
     {
         if (! in_array($action, ['trash', 'restore'], true)) {
@@ -180,6 +186,7 @@ final class QuizAuthoringService
     }
 
     /** @return array<string, string> */
+    // Copy the quiz, questions, options, and private media into a new draft.
     public function duplicate(int $userId, string $publicId): array
     {
         $source = $this->ownedQuiz($userId, $publicId);
@@ -252,6 +259,7 @@ final class QuizAuthoringService
     }
 
     /** @return array<string, mixed>|null */
+    // Return only the published details needed by the student introduction.
     public function publicSummary(string $shareToken): ?array
     {
         if (! QuizShareCode::isValid($shareToken)) {
@@ -298,6 +306,7 @@ final class QuizAuthoringService
     }
 
     /** @return array<string, mixed> */
+    // Normalize and validate the complete builder request before writing.
     private function normalize(array $payload): array
     {
         $fields = [];
@@ -340,6 +349,7 @@ final class QuizAuthoringService
         ];
     }
 
+    // Convert the builder's minute input to the supported default or range.
     private function normalizeTimerMinutes(mixed $value): int
     {
         if ((! is_int($value) && ! is_float($value) && ! is_string($value))
@@ -357,6 +367,7 @@ final class QuizAuthoringService
         return $minutes >= 1 && $minutes <= 120 ? $minutes : 120;
     }
 
+    // Choose a valid draw size or the whole-question-pool default.
     private function normalizeDrawCount(mixed $value, int $questionCount): ?int
     {
         if ($questionCount < 1
@@ -376,6 +387,7 @@ final class QuizAuthoringService
     }
 
     /** @return list<array<string, mixed>> */
+    // Validate questions and fill blank answer choices before persistence.
     private function normalizeQuestions(mixed $input, array &$fields): array
     {
         if (! is_array($input) || ! array_is_list($input) || count($input) > 1000) {
@@ -394,7 +406,9 @@ final class QuizAuthoringService
             if (mb_strlen($content) > 65535) $fields[$prefix . '.content'] = 'Question text is too long.';
             if (mb_strlen($explanation) > 900) $fields[$prefix . '.explanation'] = 'Explanation is too long.';
             $layout = is_string($question['optionsLayout'] ?? null) ? $question['optionsLayout'] : 'list';
-            if (! in_array($layout, ['list', 'grid'], true)) $fields[$prefix . '.optionsLayout'] = 'Choose list or grid.';
+            if (! in_array($layout, ['list', 'grid', 'grid-3', 'grid-4'], true)) {
+                $fields[$prefix . '.optionsLayout'] = 'Choose list, 2 columns, 3 columns, or 4 columns.';
+            }
 
             $optionsInput = $question['options'] ?? [];
             $options = [];
@@ -408,7 +422,7 @@ final class QuizAuthoringService
                     }
                     $optionContent = is_string($option['content'] ?? null) ? trim($option['content']) : '';
                     if ($optionContent === '') {
-                        $optionContent = 'Option ' . ($optionIndex + 1);
+                        $optionContent = '-';
                     }
                     if (mb_strlen($optionContent) > 65535) $fields[$prefix . '.options.' . $optionIndex] = 'Answer text is too long.';
                     $options[] = [
@@ -421,7 +435,7 @@ final class QuizAuthoringService
                     $optionIndex = count($options);
                     $options[] = [
                         'id'        => null,
-                        'content'   => 'Option ' . ($optionIndex + 1),
+                        'content'   => '-',
                         'isCorrect' => false,
                     ];
                 }
@@ -451,6 +465,7 @@ final class QuizAuthoringService
     }
 
     /** @return list<string> */
+    // Reorder, update, insert, or remove authored questions without position collisions.
     private function syncQuestions(int $quizId, array $questions, string $now): array
     {
         $existing = array_column($this->db->table('questions')->where('quiz_id', $quizId)->get()->getResultArray(), null, 'id');
@@ -508,6 +523,7 @@ final class QuizAuthoringService
     }
 
     /** @return list<string> */
+    // Synchronize each question's options while preserving stable answer codes.
     private function syncOptions(int $questionId, array $options, string $now): array
     {
         $existing = array_column($this->db->table('question_options')->where('question_id', $questionId)->get()->getResultArray(), null, 'id');
@@ -543,6 +559,7 @@ final class QuizAuthoringService
         return $orphaned;
     }
 
+    // Insert an option with its authored text and optional private media reference.
     private function insertOption(int $questionId, int $position, array $option, string $now, ?string $mediaSrc = null, ?string $mediaType = null): void
     {
         for ($try = 0; $try < 20; $try++) {
@@ -566,6 +583,7 @@ final class QuizAuthoringService
     }
 
     /** @return array<string, mixed> */
+    // Build the builder response from stored quiz and question rows.
     private function serializeDocument(array $quiz): array
     {
         $questions = [];
@@ -623,6 +641,7 @@ final class QuizAuthoringService
         ];
     }
 
+    // Reject an Active definition that cannot produce a playable attempt.
     private function assertPublishableDocument(array $document): void
     {
         $fields = [];
@@ -645,6 +664,7 @@ final class QuizAuthoringService
         }
     }
 
+    // Require ownership before reading or changing this quiz definition.
     private function ownedQuiz(int $userId, string $publicId, bool $withDeleted = false, bool $lock = false): array
     {
         if (preg_match('/^[a-f0-9]{32}$/D', $publicId) !== 1) {
@@ -658,6 +678,7 @@ final class QuizAuthoringService
         return $quiz;
     }
 
+    // Read and bound a plain-text request field.
     private function text(array $payload, string $key, int $max, array &$fields, bool $emptyAllowed = false): string
     {
         $value = is_string($payload[$key] ?? null) ? trim($payload[$key]) : '';
@@ -667,6 +688,7 @@ final class QuizAuthoringService
         return $value;
     }
 
+    // Accept only a valid persisted ID or a new-row marker.
     private function nullableId(mixed $value, string $key, array &$fields): ?int
     {
         if ($value === null || $value === '') return null;
@@ -675,17 +697,20 @@ final class QuizAuthoringService
         return null;
     }
 
+    // Normalize a builder boolean without trusting arbitrary truthy values.
     private function bool(mixed $value): bool
     {
         return $value === true || $value === 1 || $value === '1';
     }
 
+    // Read a stored private media path for duplication.
     private function rawMediaSource(string $table, int $id): ?string
     {
         $row = $this->db->table($table)->select('media_src')->where('id', $id)->get()->getRowArray();
         return $row === null || $row['media_src'] === null ? null : (string) $row['media_src'];
     }
 
+    // Copy a private file for a duplicated quiz and track cleanup.
     private function copyMedia(?string $type, ?string $src, int $userId, int $quizId, array &$copied): ?string
     {
         $target = ($this->media ?? service('media'))->copyStoredReference($type, $src, $userId, $quizId);
@@ -693,12 +718,14 @@ final class QuizAuthoringService
         return $target;
     }
 
+    // Name a duplicated quiz without losing its source title.
     private function copyTitle(string $title): string
     {
         $suffix = ' (copy)';
         return mb_substr($title, 0, 200 - mb_strlen($suffix)) . $suffix;
     }
 
+    // Convert PHP upload limit notation to bytes.
     private function iniBytes(string $value): int
     {
         $value = trim($value);
@@ -713,23 +740,27 @@ final class QuizAuthoringService
         };
     }
 
+    // Format a stored timestamp for API output.
     private function utcAtom(mixed $value): ?string
     {
         if ($value === null || $value === '') return null;
         return (new DateTimeImmutable((string) $value, new DateTimeZone('UTC')))->format(DATE_ATOM);
     }
 
+    // Recognize a database uniqueness collision.
     private function isDuplicateKey(Throwable $exception): bool
     {
         return in_array((int) $exception->getCode(), [19, 1062, 23000], true)
             || in_array((int) ($this->db->error()['code'] ?? 0), [19, 1062, 23000], true);
     }
 
+    // Raise the standard error for an unsupported quiz transition.
     private function invalidTransition(string $message): never
     {
         throw new AuthoringException('invalid_transition', $message, 409);
     }
 
+    // Return the current database timestamp.
     private function now(): string
     {
         return (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');

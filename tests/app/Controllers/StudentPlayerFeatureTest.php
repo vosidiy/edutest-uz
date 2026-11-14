@@ -31,7 +31,7 @@ final class StudentPlayerFeatureTest extends PlayerTestCase
         $response->assertSee('Phone');
         $response->assertDontSee('correctCode');
         $response->assertDontSee('Practice');
-        $response->assertDontSee('player-question-template');
+        $this->assertClassicPlayerShell((string) $response->getBody());
     }
 
     public function testStartAndResultsShellUseTheNewRoutes(): void
@@ -45,8 +45,8 @@ final class StudentPlayerFeatureTest extends PlayerTestCase
         $this->get('/q/' . $quiz['share'])->assertRedirectTo(site_url('q/' . $quiz['share'] . '/start'));
         $start = $this->get('/q/' . $quiz['share'] . '/start');
         $start->assertOK();
-        $start->assertSee('player-question-template');
         $start->assertDontSee('quiz-admission');
+        $this->assertClassicPlayerShell((string) $start->getBody());
         $this->get('/q/' . $quiz['share'] . '/results')->assertRedirectTo(site_url('q/' . $quiz['share'] . '/start'));
 
         $answer = $this->submission($attempt, 0);
@@ -57,13 +57,42 @@ final class StudentPlayerFeatureTest extends PlayerTestCase
             $this->finishBody($attempt, [$answer, $tail], 1),
         );
         $this->get('/q/' . $quiz['share'] . '/start')->assertRedirectTo(site_url('q/' . $quiz['share'] . '/results'));
-        $this->get('/q/' . $quiz['share'] . '/results')->assertOK();
+        $results = $this->get('/q/' . $quiz['share'] . '/results');
+        $results->assertOK();
+        $this->assertClassicPlayerShell((string) $results->getBody());
         $this->get('/q/' . $quiz['share'])->assertOK();
         try {
             $this->get('/q/' . $quiz['share'] . '/play');
             self::fail('The removed /play route must not resolve.');
         } catch (\CodeIgniter\Exceptions\PageNotFoundException $error) {
             self::assertSame(404, $error->getCode());
+        }
+    }
+
+    private function assertClassicPlayerShell(string $body): void
+    {
+        self::assertStringNotContainsString('<template', $body);
+        self::assertStringNotContainsString('data-slot=', $body);
+        self::assertStringNotContainsString('type="module"', $body);
+        self::assertStringNotContainsString('<script defer', $body);
+        self::assertStringNotContainsString('player-conflict', $body);
+        self::assertStringNotContainsString('keep-local', $body);
+        self::assertStringNotContainsString('use-server', $body);
+
+        $previous = -1;
+        foreach ([
+            'player-scoring.js',
+            'player-state.js',
+            'player-sync.js',
+            'player-tab-guard.js',
+            'player-presentation.js',
+            'player-view.js',
+            'player.js',
+        ] as $script) {
+            $position = strpos($body, 'js/' . $script);
+            self::assertNotFalse($position, $script . ' is included');
+            self::assertGreaterThan($previous, $position, $script . ' follows its dependencies');
+            $previous = $position;
         }
     }
 

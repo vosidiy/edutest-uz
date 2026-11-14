@@ -86,9 +86,6 @@
                         <?php endforeach ?>
                     </ul>
                     <?php if ($question['explanation'] !== null) : ?><div class="answer-explanation"><strong>Explanation</strong><p><?= nl2br(esc($question['explanation'])) ?></p></div><?php endif ?>
-                    <footer class="p-3" style="background:var(--neutral-100)">
-                        <span>State: <?= esc(ucfirst($question['status'])) ?></span><?php if ($question['answeredAt'] !== null) : ?><span>Answered at: <?= esc($question['answeredAt']['display']) ?></span><?php endif ?>
-                    </footer>
                 </article>
             <?php endforeach ?>
             <br>

@@ -8,8 +8,10 @@ use App\Exceptions\PlayerException;
 use App\Services\AttemptSnapshotService;
 use App\Services\QuizShareCode;
 
+/** Validates admission and creates one immutable assessment attempt under a quiz lock. */
 final class AdmissionService
 {
+    // Wire the database and collaborating services used by this class.
     public function __construct(
         private readonly PlayerStore $store,
         private readonly Credentials $credentials,
@@ -18,6 +20,7 @@ final class AdmissionService
     ) {}
 
     /** @return array<string, mixed> */
+    // Sign a short-lived admission ticket for the current public quiz.
     public function ticket(string $shareToken): array
     {
         if (! QuizShareCode::isValid($shareToken)) {
@@ -44,6 +47,7 @@ final class AdmissionService
     }
 
     /** @return array<string, mixed> */
+    // Validate admission, lock the quiz, and create an immutable attempt.
     public function start(array $input, ?string $ip = null): array
     {
         if (! is_string($input['ticket'] ?? null)) {
@@ -106,6 +110,7 @@ final class AdmissionService
     }
 
     /** @return array{attemptId:string,shareToken:string,expiresAt:string} */
+    // Return the identifiers and deadline needed to set the attempt cookie.
     private function startResult(array $attempt, array $quiz): array
     {
         return [
@@ -116,6 +121,7 @@ final class AdmissionService
     }
 
     /** @return array{name:string,email:?string,phone:?string} */
+    // Validate the student name and enabled optional identity fields.
     private function identity(array $input, array $quiz): array
     {
         $fields = [];
@@ -137,6 +143,7 @@ final class AdmissionService
         return ['name' => $name, 'email' => $email, 'phone' => $phone];
     }
 
+    // Read an optional identity field only when this quiz requests it.
     private function optionalIdentity(array $input, string $field, bool $enabled, int $max, array &$fields): ?string
     {
         if (! $enabled) {
@@ -150,6 +157,7 @@ final class AdmissionService
         return $value === '' ? null : $value;
     }
 
+    // Verify the admission ticket claims before starting.
     private function assertClaims(array $claims): void
     {
         if (count($claims) !== 2
@@ -160,6 +168,7 @@ final class AdmissionService
         }
     }
 
+    // Bound optional identity text to its allowed length.
     private function limited(?string $value, int $maximum): ?string
     {
         if ($value === null || $value === '') {

@@ -60,6 +60,12 @@ final class ResultsFeatureTest extends PlayerTestCase
         $report->assertDontSee('Export filtered CSV');
         $report->assertDontSee('Completed or provisionally expired');
         $body = $report->response()->getBody();
+        preg_match_all('/<th\b[^>]*>(.*?)<\/th>/si', $body, $headerMatches);
+        $headers = array_map(
+            static fn (string $header): string => trim((string) preg_replace('/\s+/', ' ', strip_tags($header))),
+            $headerMatches[1],
+        );
+        self::assertSame(['Student', 'Status', 'Score', 'Duration', 'Finished', 'Review'], $headers);
         foreach (['name="q"', 'name="minScore"', 'name="dateRange"'] as $control) {
             self::assertStringContainsString($control, $body);
         }
@@ -81,6 +87,9 @@ final class ResultsFeatureTest extends PlayerTestCase
         $review->assertDontSee('Connection details');
         $review->assertDontSee('Browser user agent');
         $review->assertDontSee('Connection data is shown only to the quiz owner.');
+        $reviewBody = $review->response()->getBody();
+        self::assertStringNotContainsString('State:', $reviewBody);
+        self::assertStringNotContainsString('Answered at:', $reviewBody);
     }
 
     public function testNonOwnedAndMalformedQuizIdsShareTheNotFoundBoundary(): void

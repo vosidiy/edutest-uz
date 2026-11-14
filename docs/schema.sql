@@ -103,7 +103,7 @@ CREATE TABLE questions (
   CONSTRAINT uq_questions_quiz_pos UNIQUE (quiz_id, pos),
   CONSTRAINT uq_questions_id_quiz UNIQUE (id, quiz_id),
   CONSTRAINT chk_questions_pos CHECK (pos > 0),
-  CONSTRAINT chk_questions_options_layout CHECK (options_layout IN ('list', 'grid')),
+  CONSTRAINT chk_questions_options_layout CHECK (options_layout IN ('list', 'grid', 'grid-3', 'grid-4')),
   CONSTRAINT chk_questions_media_type CHECK (media_type IS NULL OR media_type IN ('image', 'audio')),
   CONSTRAINT chk_questions_media_pair CHECK (
     (media_type IS NULL AND media_src IS NULL)

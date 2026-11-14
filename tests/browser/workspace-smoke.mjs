@@ -26,7 +26,9 @@ const library = {rows:[{publicId,title:quiz.title,status:'published',questionCou
   assessmentSubmissions:3,updatedAt:'26 Oct 2026, 12:00',editUrl:`/quizzes/${publicId}/edit`,resultsUrl:quiz.resultsUrl}],
   filters:{page:1},pagination:{page:1,pageSize:20,total:1,pageCount:1}};
 const report = {quiz:{publicId,title:quiz.title,builderUrl:`/quizzes/${publicId}/edit`,status:'published'},
-  attempts:[],filters:{query:'Ali',dateRange:'last_7_days',dateFromUtc:null,dateToUtc:null,minScore:50,page:1},
+  attempts:[{name:'Ali Student',email:'ali@example.test',phone:null,status:'completed',finishReason:'Completed',lateSync:false,
+    percent:'80.00',score:4,maxScore:5,duration:'1:30',submittedAt:{display:'26 Oct 2026, 12:00'},url:'/results/attempts/' + 'c'.repeat(32)}],
+  filters:{query:'Ali',dateRange:'last_7_days',dateFromUtc:null,dateToUtc:null,minScore:50,page:1},
   pagination:{page:1,pageSize:25,total:26,pageCount:2}};
 let origin;
 let quizPutCount = 0;
@@ -68,7 +70,7 @@ const server = http.createServer(async (request, response) => {
       const saved = await requestJson(request);
       Object.assign(user, {username:saved.username.toLowerCase(),bio:saved.bio,public_page:!!saved.publicPage});
       response.writeHead(200, {'Content-Type':'application/json','Cache-Control':'no-store'});
-      response.end(JSON.stringify({data:{username:user.username,bio:user.bio,publicPage:user.public_page,url:`/user/${user.username}`},meta:{timestamp:new Date().toISOString()}}));
+      response.end(JSON.stringify({data:{username:user.username,bio:user.bio,publicPage:user.public_page,url:`${origin}/user/${user.username}`},meta:{timestamp:new Date().toISOString()}}));
       return;
     }
     if (url.pathname === '/api/v1/quizzes' && request.method === 'POST') {
@@ -91,7 +93,7 @@ const server = http.createServer(async (request, response) => {
         }
         if (target === newQuiz) saved.questions = saved.questions.map((question, questionIndex) => ({...question,id:String(100 + questionIndex),
           options:question.options.map((option, optionIndex) => ({...option,id:String(1000 + optionIndex),code:`new-${optionIndex}`,
-            content:option.content || `Option ${optionIndex + 1}`}))}));
+            content:option.content || '-'}))}));
         Object.assign(target, saved, {publishedAt:saved.status === 'published' ? (target.publishedAt || new Date().toISOString()) : target.publishedAt,
           updatedAt:new Date().toISOString()});
       }
@@ -130,8 +132,17 @@ try {
   await browser.evaluate(`(() => { const input=document.querySelector('#dialog_public_username');input.value='teacher-one';input.dispatchEvent(new Event('input',{bubbles:true})); })()`);
   await browser.until(() => browser.evaluate(`document.querySelector('#public-page-dialog [data-username-status]').dataset.state === 'available'`), 'username availability');
   await browser.evaluate(`(() => { document.querySelector('#dialog_public_bio').value='Teacher bio';document.querySelector('#public-page-dialog [data-public-page-submit]').click(); })()`);
-  await browser.until(() => browser.evaluate(`!document.querySelector('#public-page-dialog').open && document.querySelector('[data-public-page-action] a')?.textContent.trim() === 'View my page'`), 'public page creation');
-  assert.equal(await browser.evaluate(`document.querySelector('[data-public-page-action] a').getAttribute('href')`), '/user/teacher-one');
+  const publicPageUrl = `${origin}/user/teacher-one`;
+  const publicPageLabel = `Open ${new URL(origin).host}/user/teacher-one ↗`;
+  await browser.until(() => browser.evaluate(`!document.querySelector('#public-page-dialog').open && document.querySelector('[data-public-page-action] a')?.textContent.trim() === ${JSON.stringify(publicPageLabel)}`), 'public page creation');
+  assert.equal(await browser.evaluate(`document.querySelector('[data-public-page-action] a').getAttribute('href')`), publicPageUrl);
+  assert.equal(await browser.evaluate(`document.querySelector('[data-public-page-action] a').getAttribute('target')`), '_blank');
+  assert.equal(await browser.evaluate(`document.querySelector('[data-public-page-action] a').getAttribute('rel')`), 'noopener');
+  await browser.navigate(`${origin}/dashboard`);
+  await browser.until(() => browser.evaluate(`document.querySelector('[data-public-page-action] a')?.textContent.trim() === ${JSON.stringify(publicPageLabel)}`), 'server-rendered public page link');
+  assert.equal(await browser.evaluate(`document.querySelector('[data-public-page-action] a').getAttribute('href')`), publicPageUrl);
+  assert.equal(await browser.evaluate(`document.querySelector('[data-public-page-action] a').getAttribute('target')`), '_blank');
+  assert.equal(await browser.evaluate(`document.querySelector('[data-public-page-action] a').getAttribute('rel')`), 'noopener');
   await browser.evaluate(`document.querySelector('[data-open-create]').click()`);
   await browser.until(() => browser.evaluate(`document.querySelector('#create-quiz-dialog').open`), 'create dialog');
   assert.equal(await browser.evaluate(`document.querySelector('#create-quiz-dialog').textContent.includes('Quiz mode')`), false);
@@ -165,14 +176,18 @@ try {
   assert.equal(await browser.evaluate(`document.querySelector('[data-save-quiz]').classList.contains('btn-default')`), true);
   assert.equal(await browser.evaluate(`document.querySelector('[data-save-quiz]').disabled`), false);
   assert.equal(quizPutCount, 0);
-  assert.equal(await browser.evaluate(`document.querySelector('.answer-list').classList.contains('answer-list-grid')`), true);
+  assert.equal(await browser.evaluate(`document.querySelector('.answer-list').classList.contains('answer-list-columns-2')`), true);
   assert.equal(await browser.evaluate(`document.querySelectorAll('.answer-list > .answer-row').length`), 2);
   await browser.evaluate(`(() => { const layoutSelect=document.querySelector('.answer-editor select');layoutSelect.value='list';layoutSelect.dispatchEvent(new Event('change',{bubbles:true})); })()`);
-  await browser.until(() => browser.evaluate(`!document.querySelector('.answer-list').classList.contains('answer-list-grid')`), 'builder list layout');
+  await browser.until(() => browser.evaluate(`document.querySelector('.answer-list').classList.contains('answer-list-columns-1')`), 'builder list layout');
   assert.equal(await browser.evaluate(`document.querySelector('[data-save-quiz]').textContent.trim()`), 'Save quiz');
   assert.equal(quizPutCount, 0);
+  await browser.evaluate(`(() => { const layoutSelect=document.querySelector('.answer-editor select');layoutSelect.value='grid-3';layoutSelect.dispatchEvent(new Event('change',{bubbles:true})); })()`);
+  await browser.until(() => browser.evaluate(`document.querySelector('.answer-list').classList.contains('answer-list-columns-3')`), 'builder three-column layout');
+  await browser.evaluate(`(() => { const layoutSelect=document.querySelector('.answer-editor select');layoutSelect.value='grid-4';layoutSelect.dispatchEvent(new Event('change',{bubbles:true})); })()`);
+  await browser.until(() => browser.evaluate(`document.querySelector('.answer-list').classList.contains('answer-list-columns-4')`), 'builder four-column layout');
   await browser.evaluate(`(() => { const layoutSelect=document.querySelector('.answer-editor select');layoutSelect.value='grid';layoutSelect.dispatchEvent(new Event('change',{bubbles:true})); })()`);
-  await browser.until(() => browser.evaluate(`document.querySelector('.answer-list').classList.contains('answer-list-grid')`), 'builder grid layout');
+  await browser.until(() => browser.evaluate(`document.querySelector('.answer-list').classList.contains('answer-list-columns-2')`), 'builder two-column layout');
   await browser.until(() => browser.evaluate(`document.querySelector('[data-save-quiz]').textContent.trim()==='Saved'`), 'restored clean layout');
   assert.equal(quizPutCount, 0);
   await browser.evaluate(`document.querySelector('[data-save-quiz]').click()`);
@@ -211,6 +226,8 @@ try {
 
   await browser.navigate(`${origin}/results/quizzes/${publicId}`);
   await browser.until(() => browser.evaluate(`document.body.textContent.includes('Attempts (26)')`), 'attempt report');
+  assert.deepEqual(await browser.evaluate(`[...document.querySelectorAll('.results-table thead th')].map(cell => cell.textContent.trim())`),
+    ['Student','Status','Score','Duration','Finished','Review']);
   assert.equal(await browser.evaluate(`document.body.textContent.includes('Paper revision')`), false);
   assert.equal(await browser.evaluate(`document.body.textContent.includes('Integrity timeline')`), false);
   assert.equal(await browser.evaluate(`document.body.textContent.includes('Completed or provisionally expired')`), false);

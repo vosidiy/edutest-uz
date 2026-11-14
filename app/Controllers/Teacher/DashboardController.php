@@ -8,8 +8,10 @@ use App\Controllers\BaseController;
 use DateTimeImmutable;
 use DateTimeZone;
 
+/** Builds the teacher dashboard from owned quiz summaries and account details. */
 final class DashboardController extends BaseController
 {
+    // Fetch this teacher's library page and render dashboard navigation.
     public function index(): string
     {
         $user = service('auth')->user();

@@ -3,6 +3,12 @@
         <?php if ($library['rows'] === []) : ?>
             <div class="card empty-state quiz-grid-empty"><span aria-hidden="true">▤</span><h3><?= esc(lang('Workspace.emptyTitle')) ?></h3><p><?= esc(lang('Workspace.emptyBody')) ?></p><button class="btn btn-primary" type="button" data-open-create><?= esc(lang('Workspace.newQuiz')) ?></button></div>
         <?php endif ?>
+        
+        <a href="#" data-open-create class="card card-create">
+            <svg width="48" height="48" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" color="currentColor" viewBox="0 0 24 24"><path fill="currentColor" d="m11.5 1.3 1.6.1.3.1 1.2 1 4.8 4.8q.8.8 1.1 1.5t.3 1.9V14q0 2.8-.2 4.5a5 5 0 0 1-1.2 2.9q-1.1 1-3 1.2-1.5.2-4.4.1l-4.5-.1a5 5 0 0 1-2.9-1.2q-1-1.1-1.2-3-.2-1.5-.1-4.4V5.5Q3.6 4 4.4 3l.7-.7q1-.8 2.6-1zm0 1.5H7.8q-1.4.3-1.8.7l-.5.5q-.5.5-.6 1.8l-.2 3.7V14q0 2.9.2 4.3t.8 2 2 .8l4.3.1h4.3q1.4-.3 2-.9.6-.5.8-2l.1-4.3V9.7h-3.6q-1.3-.2-2.3-1-.8-1-1-2.3V2.8zM10 17.3a.8.8 0 0 1 0 1.4H8a.8.8 0 0 1 0-1.4zm6 0a.8.8 0 0 1 0 1.4h-2a.8.8 0 0 1 0-1.4zm-6-4a.8.8 0 0 1 0 1.4H8a.8.8 0 0 1 0-1.4zm6 0a.8.8 0 0 1 0 1.4h-2a.8.8 0 0 1 0-1.4zm-2.2-9.5v2.4q.2 1 .6 1.4t1.4.5l2.4.1z"/></svg>
+            <p>Create quiz</p>
+        </a>
+
         <?php foreach ($library['rows'] as $quiz) : ?>
             <?php $coverUrl = $quiz['cover']['url'] ?? null; ?>
             <article class="card quiz-card" data-quiz-id="<?= esc($quiz['publicId'], 'attr') ?>">

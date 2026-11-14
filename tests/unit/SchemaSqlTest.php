@@ -28,6 +28,7 @@ final class SchemaSqlTest extends CIUnitTestCase
         $this->assertStringNotContainsString('show_score', $sql);
         $this->assertStringNotContainsString('show_explain', $sql);
         $this->assertStringContainsString('options_layout VARCHAR(8)', $sql);
+        $this->assertStringContainsString("options_layout IN ('list', 'grid', 'grid-3', 'grid-4')", $sql);
         $this->assertStringContainsString('snapshot JSON NOT NULL', $sql);
         $this->assertStringContainsString('answers JSON NOT NULL', $sql);
         $this->assertStringContainsString('answer_version INT UNSIGNED NOT NULL DEFAULT 0', $sql);

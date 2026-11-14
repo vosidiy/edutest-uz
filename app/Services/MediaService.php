@@ -13,6 +13,7 @@ use DateTimeZone;
 use RuntimeException;
 use Throwable;
 
+/** Stores private quiz media and issues signed URLs for authorized display. */
 final class MediaService
 {
     private const IMAGE_LIMIT = 5 * 1024 * 1024;
@@ -22,6 +23,7 @@ final class MediaService
     private readonly BaseConnection $db;
     private readonly string $root;
 
+    // Wire the database and collaborating services used by this class.
     public function __construct(?BaseConnection $db = null, ?string $root = null)
     {
         $this->db   = $db ?? Database::connect();
@@ -29,6 +31,7 @@ final class MediaService
     }
 
     /** @return array<string, mixed> */
+    // Validate and store uploaded private media, then update its owned reference.
     public function attachFile(
         int $userId,
         string $quizPublicId,
@@ -84,6 +87,7 @@ final class MediaService
     }
 
     /** @return array<string, mixed> */
+    // Clear an owned media reference and clean up unreferenced files.
     public function remove(
         int $userId,
         string $quizPublicId,
@@ -106,6 +110,7 @@ final class MediaService
     }
 
     /** @return array{path: string, mime: string, size: int} */
+    // Verify a signed media request before returning a private file.
     public function resolveSigned(string $token): array
     {
         $payload = $this->verifyToken($token);
@@ -144,6 +149,7 @@ final class MediaService
     }
 
     /** @return array<string, string>|null */
+    // Create a short-lived URL for teacher-visible media.
     public function descriptor(?string $type, ?string $src, string $target, int $id): ?array
     {
         if ($src === null || ! in_array($type, ['image', 'audio'], true)) {
@@ -163,6 +169,7 @@ final class MediaService
     }
 
     /** @return array<string, string>|null */
+    // Create a short-lived URL bound to one attempt snapshot.
     public function attemptDescriptor(
         string $type,
         string $src,
@@ -182,6 +189,7 @@ final class MediaService
         ];
     }
 
+    // Copy private media when a quiz is duplicated.
     public function copyStoredReference(?string $type, ?string $src, int $userId, int $quizId): ?string
     {
         if ($src === null || ! in_array($type, ['image', 'audio'], true)) {
@@ -210,6 +218,7 @@ final class MediaService
         return $relative;
     }
 
+    // Delete a file only when live quizzes and snapshots no longer use it.
     public function deleteStoredReference(string $relative): void
     {
         if ($this->storedReferenceInAttempt($relative) || $this->storedReferenceInLive($relative)) {
@@ -226,6 +235,7 @@ final class MediaService
         }
     }
 
+    // Check whether an authored row still uses this private path.
     private function storedReferenceInLive(string $relative): bool
     {
         if ($this->db->table('quizzes')->where('cover_src', $relative)->countAllResults() > 0) return true;
@@ -233,6 +243,7 @@ final class MediaService
         return $this->db->table('question_options')->where('media_src', $relative)->countAllResults() > 0;
     }
 
+    // Scan bounded historical snapshots before deleting a file.
     private function storedReferenceInAttempt(string $relative): bool
     {
         // Historical snapshots intentionally keep media alive. Bound each cleanup scan so
@@ -250,6 +261,7 @@ final class MediaService
         return count($rows) === 10000;
     }
 
+    // Search nested snapshot data for a stored path.
     private function snapshotContainsSource(array $value, string $relative): bool
     {
         foreach ($value as $key => $child) {
@@ -260,6 +272,7 @@ final class MediaService
     }
 
     /** @return array{media_type: string, media_src: string}|null */
+    // Find the snapshot media entry named by a signed key.
     private function findSnapshotMedia(array $value, string $key): ?array
     {
         if (($value['key'] ?? null) === $key && is_string($value['type'] ?? null) && is_string($value['src'] ?? null)) {
@@ -271,6 +284,7 @@ final class MediaService
         return null;
     }
 
+    // Sign a URL that is restricted to an attempt and media key.
     private function signAttemptToken(string $attemptPublicId, string $key, int $expires): string
     {
         $payload = $this->base64UrlEncode(json_encode([
@@ -280,6 +294,7 @@ final class MediaService
     }
 
     /** @return array{0: string, 1: string, 2: string} */
+    // Check actual file type, size, and allowed media formats.
     private function validateUpload(UploadedFile $file): array
     {
         if (! $file->isValid() || $file->hasMoved()) {
@@ -324,6 +339,7 @@ final class MediaService
         return [$type, $extension, $mime];
     }
 
+    // Decode and rewrite an image after validating its dimensions.
     private function reencodeImage(string $source, string $target, string $mime): void
     {
         $image = match ($mime) {
@@ -354,6 +370,7 @@ final class MediaService
     }
 
     /** @return array<string, mixed> */
+    // Atomically change a media reference and quiz update timestamp.
     private function replaceReference(
         array $record,
         string $target,
@@ -378,9 +395,9 @@ final class MediaService
             if ($current === null) throw new AuthoringException('media_not_found', 'Media target not found.', 404);
             $change = $target === 'cover' ? ['cover_src' => $src] : ['media_type' => $type, 'media_src' => $src];
             if ($target === 'option' && $src === null) {
-                $option = $this->db->table('question_options')->select('content, pos')->where('id', $targetId)->get()->getRowArray();
+                $option = $this->db->table('question_options')->select('content')->where('id', $targetId)->get()->getRowArray();
                 if ($option !== null && trim((string) $option['content']) === '') {
-                    $change['content'] = 'Option ' . (int) $option['pos'];
+                    $change['content'] = '-';
                 }
             }
             $updatedAt = $this->now();
@@ -405,6 +422,7 @@ final class MediaService
     }
 
     /** @return array<string, mixed> */
+    // Verify teacher ownership of the selected media target.
     private function ownedTarget(
         int $userId,
         string $quizPublicId,
@@ -445,11 +463,13 @@ final class MediaService
         return $row;
     }
 
+    // Allocate a private path for a newly stored file.
     private function relativePath(int $userId, int $quizId, string $extension): string
     {
         return 'quiz-media/' . $userId . '/' . $quizId . '/' . bin2hex(random_bytes(20)) . '.' . $extension;
     }
 
+    // Reject unsafe paths before resolving a private file.
     private function absolutePath(string $relative): string
     {
         if (! preg_match('~^quiz-media/[0-9]+/[0-9]+/[a-f0-9]{40}\.[a-z0-9]+$~', $relative)) {
@@ -461,6 +481,7 @@ final class MediaService
         return $this->root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $suffix);
     }
 
+    // Create the short-lived signature for authored media.
     private function signToken(string $target, int $id, int $expires): string
     {
         $payload = $this->base64UrlEncode(json_encode([
@@ -474,6 +495,7 @@ final class MediaService
     }
 
     /** @return array<string, mixed> */
+    // Reject expired or altered media tokens.
     private function verifyToken(string $token): array
     {
         $parts = explode('.', $token, 2);
@@ -499,6 +521,7 @@ final class MediaService
         return $data;
     }
 
+    // Load the configured media signing key.
     private function signingKey(): string
     {
         $key = (string) config('Encryption')->key;
@@ -514,11 +537,13 @@ final class MediaService
         return hash('sha256', $key, true);
     }
 
+    // Encode token bytes for use in a URL.
     private function base64UrlEncode(string $value): string
     {
         return rtrim(strtr(base64_encode($value), '+/', '-_'), '=');
     }
 
+    // Decode URL-safe token bytes.
     private function base64UrlDecode(string $value): ?string
     {
         $decoded = base64_decode(strtr($value, '-_', '+/'), true);
@@ -526,6 +551,7 @@ final class MediaService
         return $decoded === false ? null : $decoded;
     }
 
+    // Return the current database timestamp.
     private function now(): string
     {
         return (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');

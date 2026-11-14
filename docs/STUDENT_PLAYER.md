@@ -52,7 +52,7 @@ The server is authoritative. It validates the final document against the stored 
 
 ## Result visibility
 
-Every terminal attempt displays its score, result counts, and per-question verdicts. The captured `showAnswers` setting controls both selected/correct answer codes and non-empty authored explanations.
+Every terminal attempt displays its score, result counts, and per-question verdicts. The captured `showAnswers` setting controls correct-answer text and non-empty authored explanations. When enabled, correct-answer text is included for correct, wrong, and unanswered feedback in both the active quiz and final Question review. Feedback does not repeat answer-option media.
 
 Snapshot schema version 1 stores `showAnswers` as the only result-detail visibility setting.
 

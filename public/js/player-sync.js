@@ -1,7 +1,11 @@
-import {hasPending, mergeServer} from './player-state.js?v=8';
+(function (global) {
+  'use strict';
 
-/** Durable, latest-document synchronization for one assessment attempt. */
-export class PlayerSync {
+  const player = global.EduTestPlayer = global.EduTestPlayer || {};
+  const {hasPending, mergeServer} = player;
+
+  /** Sends the latest local answer document and pauses on version conflicts to preserve local work. */
+  class PlayerSync {
   constructor(getState, send, callbacks = {}) {
     this.getState = getState;
     this.send = send;
@@ -112,4 +116,7 @@ export class PlayerSync {
   stop() {
     this.reset();
   }
-}
+  }
+
+  player.PlayerSync = PlayerSync;
+})(globalThis);

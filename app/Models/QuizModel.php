@@ -6,6 +6,7 @@ namespace App\Models;
 
 use CodeIgniter\Model;
 
+/** Persists the mutable teacher-owned quiz; attempts keep their own historical snapshots. */
 final class QuizModel extends Model
 {
     protected $table            = 'quizzes';

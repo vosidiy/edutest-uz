@@ -1,5 +1,10 @@
-/** Origin-scoped coordination only: no identity, authorization data, or shared storage. */
-export class PlayerTabGuard {
+(function (global) {
+  'use strict';
+
+  const player = global.EduTestPlayer = global.EduTestPlayer || {};
+
+  /** Coordinates one active tab per quiz; the server cookie still determines attempt ownership. */
+  class PlayerTabGuard {
   constructor(shareCode, locks) {
     this.name = 'edutest:quiz-run:' + shareCode;
     try { this.locks = locks === undefined ? globalThis.navigator?.locks : locks; }
@@ -45,4 +50,7 @@ export class PlayerTabGuard {
     this.unlock?.();
     this.unlock = null;
   }
-}
+  }
+
+  player.PlayerTabGuard = PlayerTabGuard;
+})(globalThis);

@@ -1,7 +1,12 @@
-const copy = value => JSON.parse(JSON.stringify(value));
-const time = value => Date.parse(value);
-const nowIso = value => new Date(value).toISOString();
+(function (global) {
+  'use strict';
 
+  const player = global.EduTestPlayer = global.EduTestPlayer || {};
+  const copy = value => JSON.parse(JSON.stringify(value));
+  const time = value => Date.parse(value);
+  const nowIso = value => new Date(value).toISOString();
+
+// Keep the loaded snapshot and ordered answer prefix locally so play survives lost connectivity.
 function browserQuiz(snapshot) {
   const settings = snapshot.quiz;
   return {
@@ -32,7 +37,8 @@ function itemsFrom(quiz, answers) {
   });
 }
 
-export function createState(data) {
+// Create the durable run from the server's frozen attempt snapshot.
+function createState(data) {
   const quiz = browserQuiz(data.quiz);
   const answers = copy(data.answers || []);
   const terminal = data.status !== 'in_progress';
@@ -63,12 +69,12 @@ export function createState(data) {
   };
 }
 
-export function deadlines(state) {
+function deadlines(state) {
   return [{at: time(state.expiresAt), reason: 'expired', label: 'quizTimer'}];
 }
-export const visibleDeadlines = deadlines;
+const visibleDeadlines = deadlines;
 
-export function editAnswer(state, answerCode, now = state.lastClock) {
+function editAnswer(state, answerCode, now = state.lastClock) {
   if (state.finishReason || expireIfDue(state, now) || state.phase !== 'answering') return false;
   const question = state.quiz.questions[state.index];
   if (answerCode !== null && !question.options.some(option => option.code === answerCode)) return false;
@@ -77,7 +83,8 @@ export function editAnswer(state, answerCode, now = state.lastClock) {
   return true;
 }
 
-export function submitAnswer(state, skipped = false, now = state.lastClock) {
+// Append one confirmed answer; later edits cannot change this saved prefix.
+function submitAnswer(state, skipped = false, now = state.lastClock) {
   if (state.finishReason || expireIfDue(state, now) || state.phase !== 'answering') return false;
   if (!skipped && state.draftCode === null) return false;
   const answerCode = skipped ? null : state.draftCode;
@@ -95,7 +102,7 @@ export function submitAnswer(state, skipped = false, now = state.lastClock) {
   return true;
 }
 
-export function nextQuestion(state, now = state.lastClock) {
+function nextQuestion(state, now = state.lastClock) {
   if (state.finishReason || expireIfDue(state, now) || state.phase !== 'feedback') return false;
   if (state.index >= state.quiz.questions.length - 1) {
     finishQuiz(state, 'completed', nowIso(now));
@@ -107,6 +114,7 @@ export function nextQuestion(state, now = state.lastClock) {
   return true;
 }
 
+// Complete unanswered tail entries before queueing the final document.
 function finishQuiz(state, reason, clientFinishedAt) {
   if (state.finishReason) return false;
   while (state.answers.length < state.quiz.questions.length) {
@@ -127,24 +135,24 @@ function finishQuiz(state, reason, clientFinishedAt) {
   return true;
 }
 
-export function finishTimed(state) {
+function finishTimed(state) {
   return finishQuiz(state, 'expired', state.expiresAt);
 }
 
-export function quitQuiz(state, now = state.lastClock) {
+function quitQuiz(state, now = state.lastClock) {
   if (expireIfDue(state, now)) return true;
   return finishQuiz(state, 'exited', nowIso(now));
 }
 
-export function expireIfDue(state, now = state.lastClock) {
+function expireIfDue(state, now = state.lastClock) {
   if (!state.finishReason && now >= time(state.expiresAt)) return finishTimed(state);
   return false;
 }
 
-export function hasPending(state) {
+function hasPending(state) {
   return state?.format === 6 && (state.progressPending || state.finishPending);
 }
-export const hasUploadPending = hasPending;
+const hasUploadPending = hasPending;
 
 function sameAnswers(left, right) {
   if (left.length !== right.length) return false;
@@ -155,7 +163,8 @@ function sameAnswers(left, right) {
         && time(answer.answeredAt) === time(right[index].answeredAt))));
 }
 
-export function mergeServer(state, server) {
+// Merge an acknowledged checkpoint or official result without discarding newer local work.
+function mergeServer(state, server) {
   if (server.attemptId !== state.attemptId) return false;
   const remoteVersion = Number(server.answerVersion || 0);
   const remoteAnswers = copy(server.answers || []);
@@ -203,7 +212,8 @@ export function mergeServer(state, server) {
   return true;
 }
 
-export class PlayerClock {
+// Maintain a monotonic countdown against the immutable server deadline.
+class PlayerClock {
   constructor(state, monotonic = () => performance.now(), wall = () => Date.now()) {
     this.state = state;
     this.monotonic = monotonic;
@@ -218,3 +228,20 @@ export class PlayerClock {
   }
   iso() { return nowIso(this.now()); }
 }
+
+Object.assign(player, {
+  createState,
+  deadlines,
+  visibleDeadlines,
+  editAnswer,
+  submitAnswer,
+  nextQuestion,
+  finishTimed,
+  quitQuiz,
+  expireIfDue,
+  hasPending,
+  hasUploadPending,
+  mergeServer,
+  PlayerClock,
+});
+})(globalThis);

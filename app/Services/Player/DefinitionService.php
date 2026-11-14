@@ -6,8 +6,10 @@ namespace App\Services\Player;
 
 use App\Exceptions\PlayerException;
 
+/** Rejects published quiz definitions that cannot produce a playable attempt. */
 final class DefinitionService
 {
+    // Ensure a published quiz has a playable question and answer definition.
     public function assertReady(array $document): void
     {
         $quiz = $document['quiz'] ?? null;
@@ -27,7 +29,7 @@ final class DefinitionService
             $options = is_array($question['options'] ?? null) ? $question['options'] : [];
             $codes = [];
             $valid = $valid
-                && in_array($question['optionsLayout'] ?? null, ['list', 'grid'], true)
+                && in_array($question['optionsLayout'] ?? null, ['list', 'grid', 'grid-3', 'grid-4'], true)
                 && count($options) >= 2
                 && is_string($question['correctCode'] ?? null);
 

@@ -68,7 +68,7 @@ $pageUrl = static fn (int $page): string => site_url('user/' . $teacher['usernam
                         <a class="quiz-cover" href="<?= esc($quiz['url'], 'attr') ?>"><img src="<?= esc($quiz['cover']['url'] ?? base_url('images/icon-quiz.png'), 'attr') ?>" alt=""></a>
                         <div class="quiz-content">
                             <h3><a href="<?= esc($quiz['url'], 'attr') ?>"><?= esc($quiz['title']) ?></a></h3>
-                            <?php if ($quiz['description'] !== '') : ?><p class="quiz-description"><?= esc($quiz['description']) ?></p><?php endif ?>
+                          
                             <p class="quiz-meta"><?= esc((string) $quiz['questionCount']) ?> question<?= $quiz['questionCount'] === 1 ? '' : 's' ?> · <?= esc($quiz['timeLimit']) ?> minutes</p>
                             <a class="button" href="<?= esc($quiz['url'], 'attr') ?>">Open quiz <span aria-hidden="true">→</span></a>
                         </div>

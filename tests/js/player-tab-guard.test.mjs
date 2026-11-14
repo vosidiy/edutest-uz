@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {PlayerTabGuard} from '../../public/js/player-tab-guard.js';
-import {createState, editAnswer, submitAnswer, nextQuestion} from '../../public/js/player-state.js';
-import {PlayerSync} from '../../public/js/player-sync.js';
+import '../../public/js/player-state.js';
+import '../../public/js/player-sync.js';
+import '../../public/js/player-tab-guard.js';
+
+const {PlayerTabGuard, createState, editAnswer, submitAnswer, nextQuestion, PlayerSync} = globalThis.EduTestPlayer;
 
 const turn = () => new Promise(resolve => setImmediate(resolve));
 function manager() {

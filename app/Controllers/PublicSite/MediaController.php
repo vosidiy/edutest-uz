@@ -9,8 +9,10 @@ use App\Exceptions\AuthoringException;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\HTTP\ResponseInterface;
 
+/** Streams private quiz media after MediaService validates its signed URL. */
 final class MediaController extends BaseController
 {
+    // Serve a validated media file, including bounded byte ranges for audio playback.
     public function show(string $token): ResponseInterface
     {
         try {

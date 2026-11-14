@@ -1,6 +1,7 @@
 (() => {
   'use strict';
 
+  // Shared normalization rules keep the Vue editor and saved quiz document in sync.
   const BuilderRules = Object.freeze({
     normalizeTimerMinutes(value) {
       if ((typeof value !== 'number' && typeof value !== 'string') || (typeof value === 'string' && value.trim() === '')) return 120;
@@ -40,9 +41,9 @@
           changed = true;
         }
         let correctFound = false;
-        question.options.forEach((option, index) => {
+        question.options.forEach(option => {
           if (String(option.content || '').trim() === '') {
-            option.content = 'Option ' + (index + 1);
+            option.content = '-';
             changed = true;
           }
           if (option.isCorrect && !correctFound) {
@@ -62,9 +63,11 @@
   });
   window.EduTestBuilderRules = BuilderRules;
 
+  // The builder is the only Vue page; its API persists the complete quiz document.
   const root = document.querySelector('#quiz-builder');
   if (!root || !window.Vue || !window.EduTestApi) return;
 
+  // Preview URLs come from the private-media API and are refreshed with the quiz document.
   const MediaPreview = {
     props: { media: { type: Object, default: null } },
     template: `<div v-if="media && (media.type==='image' || media.type==='audio')" class="media-preview">
@@ -426,12 +429,14 @@
         return endpoint;
       },
       chooseFile(questionIndex, optionIndex) {
+        const target = this.targetAt(questionIndex, optionIndex);
+        if (!target || target.media) return;
         const input = document.createElement('input');
         input.type = 'file';
         const imageOnly = questionIndex === -1 || optionIndex !== null;
         input.accept = imageOnly ? 'image/jpeg,image/png,image/webp' : 'image/jpeg,image/png,image/webp,audio/mpeg,audio/mp4,audio/ogg,audio/wav';
         input.addEventListener('change', async () => {
-          if (!input.files?.[0]) return;
+          if (!input.files?.[0] || this.targetAt(questionIndex, optionIndex) !== target || target.media) return;
           const file = input.files[0];
           const appLimit = file.type.startsWith('image/') ? this.quiz.mediaLimits.imageBytes : this.quiz.mediaLimits.audioBytes;
           if (file.size > appLimit) {
@@ -443,7 +448,7 @@
             return;
           }
           const endpoint = await this.prepareMedia(questionIndex, optionIndex);
-          if (!endpoint) return;
+          if (!endpoint || this.targetAt(questionIndex, optionIndex) !== target || target.media) return;
           const form = new FormData();
           form.append('media', file);
           await this.runMedia(endpoint, { method: 'POST', body: form }, questionIndex, optionIndex);

@@ -6,6 +6,7 @@ namespace App\Models;
 
 use CodeIgniter\Model;
 
+/** Persists one authored choice, its stable answer code, and correctness flag. */
 final class QuestionOptionModel extends Model
 {
     protected $table          = 'question_options';

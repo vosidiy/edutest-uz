@@ -135,10 +135,18 @@ final class WorkspaceFeatureTest extends PlayerTestCase
         $response->assertSee('Draft');
         $response->assertSee('Total timer (minutes)');
         $response->assertSee('Questions per attempt');
-        $response->assertSee('List');
-        $response->assertSee('Grid');
+        $response->assertSee('List view');
+        $response->assertSee('2 columns');
+        $response->assertSee('3 columns');
+        $response->assertSee('4 columns');
         self::assertStringContainsString('class="answer-list"', $response->getBody());
-        self::assertStringContainsString("'answer-list-grid': selectedQuestion.optionsLayout === 'grid'", $response->getBody());
+        foreach ([1 => 'list', 2 => 'grid', 3 => 'grid-3', 4 => 'grid-4'] as $columns => $layout) {
+            self::assertStringContainsString(
+                "'answer-list-columns-{$columns}': selectedQuestion.optionsLayout === '{$layout}'",
+                $response->getBody(),
+            );
+        }
+        self::assertStringNotContainsString('answer-list-grid', $response->getBody());
         self::assertStringNotContainsString('>Publish</button>', $response->getBody());
         self::assertStringNotContainsString('>Unpublish</button>', $response->getBody());
         $response->assertDontSee('Fix validation errors');

@@ -12,11 +12,13 @@ use Config\Database;
 use DateTimeImmutable;
 use DateTimeZone;
 
+/** Builds teacher reports from attempt summaries and frozen attempt documents. */
 final class TeacherResultsService
 {
     private const PAGE_SIZE = 25;
     private readonly BaseConnection $db;
 
+    // Wire the database and collaborating services used by this class.
     public function __construct(
         ?BaseConnection $db = null,
         private readonly ?MediaService $media = null,
@@ -27,6 +29,7 @@ final class TeacherResultsService
     }
 
     /** @return array<string, mixed> */
+    // Aggregate teacher-owned quiz result metrics without reading answer documents.
     public function overview(int $userId, array $input, string $timezone): array
     {
         $rows = $this->db->table('quizzes q')
@@ -67,6 +70,7 @@ final class TeacherResultsService
     }
 
     /** @return array<string, mixed> */
+    // Page finalized attempts using summary columns and filters.
     public function quiz(int $userId, string $quizPublicId, array $input, string $timezone): array
     {
         $quiz = $this->ownedQuiz($userId, $quizPublicId);
@@ -79,20 +83,10 @@ final class TeacherResultsService
             ->limit(self::PAGE_SIZE, ($filters['page'] - 1) * self::PAGE_SIZE)
             ->get()->getResultArray();
 
-        $attempts = [];
-        foreach ($rows as $row) {
-            $snapshot = $this->decodeSnapshot($row['snapshot']);
-            $answers = $this->decodeAnswers($row['answers']);
-            $correct = 0;
-            foreach ($answers as $index => $answer) {
-                if (isset($snapshot['questions'][$index])
-                    && $answer['answerCode'] !== null
-                    && hash_equals((string) $snapshot['questions'][$index]['correctCode'], (string) $answer['answerCode'])) {
-                    $correct++;
-                }
-            }
-            $attempts[] = $this->attemptRow($row, count($answers), $correct, $timezone);
-        }
+        $attempts = array_map(
+            fn (array $row): array => $this->attemptRow($row, $timezone),
+            $rows,
+        );
 
         return [
             'quiz' => [
@@ -108,6 +102,7 @@ final class TeacherResultsService
     }
 
     /** @return array<string, mixed> */
+    // Reconstruct one attempt review from its immutable snapshot and answers.
     public function attempt(int $userId, string $attemptPublicId, string $timezone): array
     {
         if (preg_match('/^[a-f0-9]{32}$/D', $attemptPublicId) !== 1) {
@@ -149,11 +144,8 @@ final class TeacherResultsService
                 'optionsLayout'   => (string) ($question['optionsLayout'] ?? 'list'),
                 'content'         => (string) $question['content'],
                 'explanation'     => $this->nullableString($question['explanation'] ?? null),
-                'status'          => $confirmed ? 'locked' : ($row['status'] === 'in_progress' && $index === count($answers) ? 'active' : 'pending'),
                 'result'          => ! $confirmed || $answer['answerCode'] === null ? ($confirmed ? 'skipped' : null) : ($correct ? 'correct' : 'wrong'),
                 'answer'          => $selectedCode,
-                'answeredAt'      => $this->localDate($answer['answeredAt'], $timezone),
-                'clientAnsweredAt'=> $this->localDate($answer['answeredAt'], $timezone),
                 'correctAnswer'   => (string) $question['correctCode'],
                 'options'         => $options,
                 'media'           => $this->attemptMedia($row, $question['media'] ?? null, ['image', 'audio']),
@@ -203,6 +195,7 @@ final class TeacherResultsService
         ];
     }
 
+    // Apply owner-scoped attempt filters to the quiz query.
     private function attemptBuilder(int $quizId, array $filters): BaseBuilder
     {
         $builder = $this->db->table('attempts a')
@@ -217,15 +210,21 @@ final class TeacherResultsService
         return $builder;
     }
 
+    // Select only fields required for the attempt list.
     private function selectRows(BaseBuilder $builder): BaseBuilder
     {
-        return $builder->select('a.*')->orderBy('a.finished_at', 'DESC')->orderBy('a.id', 'DESC');
+        return $builder
+            ->select('a.public_id, a.name, a.email, a.phone, a.status, a.ended_reason, a.late_sync')
+            ->select('a.score, a.max_score, a.percent, a.started_at, a.finished_at')
+            ->orderBy('a.finished_at', 'DESC')
+            ->orderBy('a.id', 'DESC');
     }
 
     /** @return array<string, mixed> */
-    private function attemptRow(array $row, int $responses, int $correct, string $timezone): array
+    // Project one attempt summary for the teacher table.
+    private function attemptRow(array $row, string $timezone): array
     {
-        $duration = $this->durationSeconds($row['started_at'], $row['finished_at'] ?? $row['last_saved_at']);
+        $duration = $this->durationSeconds($row['started_at'], $row['finished_at']);
         return [
             'publicId'         => (string) $row['public_id'],
             'name'             => (string) $row['name'],
@@ -234,8 +233,6 @@ final class TeacherResultsService
             'status'           => (string) $row['status'],
             'finishReason'     => $this->nullableString($row['ended_reason']),
             'lateSync'         => (bool) $row['late_sync'],
-            'responsesReceived'=> $responses,
-            'correctReceived'  => $correct,
             'score'            => $this->decimalOrNull($row['score']),
             'maxScore'         => (string) (int) $row['max_score'],
             'percent'          => $this->decimalOrNull($row['percent']),
@@ -248,6 +245,7 @@ final class TeacherResultsService
     }
 
     /** @return array<string, mixed> */
+    // Validate report search, score, date, and page filters.
     private function normalizeFilters(array $input): array
     {
         $string = static fn (string $key): string => is_scalar($input[$key] ?? null) ? trim((string) $input[$key]) : '';
@@ -266,6 +264,7 @@ final class TeacherResultsService
         ];
     }
 
+    // Verify that the requested report belongs to this teacher.
     private function ownedQuiz(int $userId, string $publicId): array
     {
         if (preg_match('/^[a-f0-9]{32}$/D', $publicId) !== 1) throw new ReportingException('quiz_not_found', 'Quiz not found.');
@@ -274,6 +273,7 @@ final class TeacherResultsService
         return $row;
     }
 
+    // Decode the historical quiz copy for one review.
     private function decodeSnapshot(mixed $value): array
     {
         try {
@@ -283,12 +283,14 @@ final class TeacherResultsService
         }
     }
 
+    // Read a saved ordered answer document.
     private function decodeAnswers(mixed $value): array
     {
         $answers = is_array($value) ? $value : json_decode((string) $value, true);
         return is_array($answers) && array_is_list($answers) ? $answers : [];
     }
 
+    // Convert snapshot media into a signed review URL.
     private function attemptMedia(array $attempt, mixed $stored, array $allowedTypes): ?array
     {
         if (! is_array($stored) || ! is_string($stored['type'] ?? null) || ! is_string($stored['src'] ?? null) || ! is_string($stored['key'] ?? null)) return null;
@@ -301,6 +303,7 @@ final class TeacherResultsService
         );
     }
 
+    // Render an option index as a letter.
     private function optionLabel(int $index): string
     {
         $label = '';
@@ -311,6 +314,7 @@ final class TeacherResultsService
         return $label;
     }
 
+    // Compute elapsed attempt time from saved timestamps.
     private function durationSeconds(mixed $start, mixed $end): ?int
     {
         if ($start === null || $end === null) return null;
@@ -318,12 +322,14 @@ final class TeacherResultsService
             - (new DateTimeImmutable((string) $start, new DateTimeZone('UTC')))->getTimestamp());
     }
 
+    // Present elapsed seconds as a readable duration.
     private function formatDuration(?int $seconds): ?string
     {
         if ($seconds === null) return null;
         return intdiv($seconds, 60) . ':' . str_pad((string) ($seconds % 60), 2, '0', STR_PAD_LEFT);
     }
 
+    // Convert a UTC timestamp to the teacher's timezone.
     private function localDate(mixed $value, string $timezone): ?array
     {
         if ($value === null || $value === '') return null;
@@ -332,17 +338,20 @@ final class TeacherResultsService
         return ['display' => $local->format('d M Y, H:i:s'), 'iso' => $local->format(DATE_ATOM)];
     }
 
+    // Normalize an optional report field.
     private function nullableString(mixed $value): ?string
     {
         return $value === null || trim((string) $value) === '' ? null : (string) $value;
     }
 
+    // Preserve a nullable stored score or percentage.
     private function decimalOrNull(mixed $value): ?string
     {
         return $value === null || $value === '' ? null : number_format((float) $value, 2, '.', '');
     }
 
     /** @return array{0:?string,1:?string} */
+    // Convert the selected local date range to UTC query bounds.
     private function dateRangeBounds(string $range): array
     {
         if ($range === 'all') return [null, null];
@@ -366,6 +375,7 @@ final class TeacherResultsService
         return [$now->modify('-' . $hours . ' hours')->format('Y-m-d H:i:s.u'), $now->format('Y-m-d H:i:s.u')];
     }
 
+    // Validate an optional minimum score filter.
     private function scoreFilter(mixed $value): ?float
     {
         if ($value === null || $value === '' || ! is_numeric($value)) return null;

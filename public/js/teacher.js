@@ -312,9 +312,12 @@
       publicPageDialog.close('saved');
       const action = document.querySelector('[data-public-page-action]');
       const link = document.createElement('a');
+      const pageUrl = new URL(result.data.url, window.location.href);
       link.className = 'btn btn-default';
-      link.href = result.data.url;
-      link.textContent = 'View my page';
+      link.href = pageUrl.href;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = `Open ${pageUrl.host}${pageUrl.pathname} ↗`;
       action?.replaceChildren(link);
       toast('Your public page is ready.');
     } catch (failure) {

@@ -181,11 +181,18 @@ final class PublicProfileFeatureTest extends PlayerTestCase
         $savedData = json_decode((string) $saved->getJSON(), true, flags: JSON_THROW_ON_ERROR)['data'];
         self::assertSame('teacher-api', $savedData['username']);
         self::assertTrue($savedData['publicPage']);
+        $publicPageUrl = site_url('user/teacher-api');
+        $publicPageLabel = preg_replace('~^[a-z][a-z0-9+.-]*://~i', '', $publicPageUrl) ?? $publicPageUrl;
+        self::assertSame($publicPageUrl, $savedData['url']);
 
         $dashboard = $this->withSession($session)->get('/dashboard');
         $dashboard->assertOK();
-        $dashboard->assertSee('View my page');
+        $dashboard->assertSee('Open ' . $publicPageLabel . ' ↗');
         $dashboard->assertDontSee('data-open-public-page');
+        self::assertStringContainsString(
+            '<a class="btn btn-default" target="_blank" rel="noopener" href="' . $publicPageUrl . '">',
+            (string) $dashboard->getBody(),
+        );
     }
 
     public function testUnknownPublicProfileReturnsNotFound(): void
