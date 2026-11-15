@@ -38,7 +38,7 @@
                 <div class="builder-notices mb-3">
                     <div v-if="quiz.mediaLimits.serverBytes < quiz.mediaLimits.audioBytes" class="alert alert-warning builder-banner">The current PHP upload limit is {{ formatBytes(quiz.mediaLimits.serverBytes) }}. Raise <code>upload_max_filesize</code> and <code>post_max_size</code> above 20 MiB to accept the full supported audio size.</div>
 
-                    <div v-if="globalError" class="alert alert-danger builder-banner" role="alert">{{ globalError }} <button class="btn btn-link btn-sm" v-if="saveState === 'retry'" @click="save()">Retry</button>
+                    <div v-if="globalError" class="alert alert-danger builder-banner" role="alert">{{ globalError }} <button class="btn btn-link btn-sm" type="button" v-if="saveState === 'retry'" @click="reloadBuilder()">Retry</button>
                     </div>
                 </div>
                 <section v-if="selectedQuestion" class="card editor-paper">

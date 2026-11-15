@@ -495,7 +495,7 @@ final class QuizAuthoringService
                 $questionId = (int) $this->db->insertID();
             } else {
                 if (! isset($existing[$questionId])) {
-                    throw new AuthoringException('invalid_question', 'A question does not belong to this quiz.', 422);
+                    throw new AuthoringException('invalid_question', 'This question no longer exists in the quiz. Reload the page and try again.', 422);
                 }
                 $this->db->table('questions')->where('id', $questionId)->update([
                     'pos'            => $position + 1,
@@ -539,7 +539,7 @@ final class QuizAuthoringService
                 $optionId = (int) $this->db->insertID();
             } else {
                 if (! isset($existing[$optionId])) {
-                    throw new AuthoringException('invalid_option', 'An answer does not belong to this question.', 422);
+                    throw new AuthoringException('invalid_option', 'This answer option no longer exists in the question. Reload the page and try again.', 422);
                 }
                 $this->db->table('question_options')->where('id', $optionId)->update([
                     'pos'        => $position + 1,

@@ -38,7 +38,7 @@
     </div>
 </header>
 
-<main class="teacher-main d-flex flex-grow flex-center" id="auth-content" style="padding-top:3rem">
+<main class="teacher-main auth-main-wrap d-flex flex-grow flex-center" id="auth-content">
     <section class="card shadow-md w-full" style="max-width:400px">
         <div class="card-body">
             <?php $formErrors = $errors ?? session('errors') ?? []; ?>

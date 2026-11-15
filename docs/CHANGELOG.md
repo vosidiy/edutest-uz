@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Builder share-link copying (2026-11-15)
+
+- Replaced the mobile copy-link prompt with a direct selection-based clipboard fallback and an error toast when copying is unavailable.
+
+### Builder save recovery (2026-11-15)
+
+- Made the builder error-banner Retry button reload the quiz so stale question and option IDs are refreshed before saving again.
+- Clarified the server errors for question and option IDs that no longer belong to the current quiz document.
+
 ### Quiz code documentation (2026-11-14)
 
 - Added purpose and flow comments to quiz controllers, models, and services, plus brief guidance in the builder and student-player scripts. Runtime behavior is unchanged.

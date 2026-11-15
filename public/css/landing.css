@@ -224,11 +224,11 @@ h3 {
 
 .header-inner {
     position: relative;
-    min-height: 72px;
+    min-height: 60px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 28px;
+    gap: 12px;
 }
 
 .brand {
@@ -824,12 +824,12 @@ img {
     .header-actions > .button {
         min-height: 40px;
         padding-inline: 12px;
-        font-size: 13px;
+        font-size: 14px;
     }
 
     .hero-panel {
         gap: 36px;
-        padding: 34px 22px;
+        padding:8px;
         border-radius: 18px;
     }
 

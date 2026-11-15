@@ -268,6 +268,9 @@
         this.globalError = error.message;
         this.saveState = 'retry';
       },
+      reloadBuilder() {
+        window.location.reload();
+      },
       beforeUnload(event) {
         if (!this.hasChanges && !this.saving && !this.mediaBusy) return;
         event.preventDefault();
@@ -478,12 +481,36 @@
         finally { this.mediaBusy = false; }
       },
       async copyShare() {
+        const url = this.quiz.shareUrl;
         try {
-          await navigator.clipboard.writeText(this.quiz.shareUrl);
+          await navigator.clipboard.writeText(url);
           EduTestApi.toast('Share link copied.');
+          return;
+        } catch (_) {}
+
+        // Some mobile browsers deny the async Clipboard API; copy from a temporary selection instead.
+        const previousFocus = document.activeElement;
+        let field;
+        let copied = false;
+        try {
+          field = document.createElement('textarea');
+          field.value = url;
+          field.readOnly = true;
+          field.style.position = 'fixed';
+          field.style.top = '0';
+          field.style.opacity = '0';
+          document.body.appendChild(field);
+          field.focus();
+          field.select();
+          field.setSelectionRange(0, url.length);
+          copied = document.execCommand('copy') === true;
         } catch (_) {
-          window.prompt('Copy this quiz link:', this.quiz.shareUrl);
+          copied = false;
+        } finally {
+          field?.remove();
+          try { previousFocus?.focus({preventScroll: true}); } catch (_) {}
         }
+        EduTestApi.toast(copied ? 'Share link copied.' : 'Could not copy link. Select it from the field above.');
       }
     }
   });

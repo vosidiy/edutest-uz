@@ -3,7 +3,7 @@
 <?= $this->section('content') ?>
 <div class="container">
 
-    <section class="mt-5 text-white hero-strip mb-5">
+    <section class="mt-4 text-white hero-strip mb-5">
         <div>
             <p class="eyebrow"><?= esc($dateLabel) ?></p>
             <h2>Welcome back, <?= esc(explode(' ', trim((string) $user['display_name']))[0]) ?></h2>

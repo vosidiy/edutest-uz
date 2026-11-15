@@ -45,7 +45,7 @@
     <noscript><p><?= esc(lang('Player.ui.missingState')) ?></p><a href="<?= site_url('q/' . $shareToken) ?>"><?= esc(lang('Player.ui.introduction')) ?></a></noscript>
     <div id="player-root" tabindex="-1"></div>
     <div id="player-status" class="player-sync-status" role="status" aria-live="polite"></div>
-    <div id="player-alert" class="alert alert-warning" role="alert" hidden></div>
+    <div id="player-alert" class="alert alert-info alert-sm" role="alert" hidden></div>
     <div id="player-announcer" class="sr-only" role="status" aria-live="polite"></div>
 </main>
 

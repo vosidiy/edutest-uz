@@ -51,9 +51,8 @@ $pageUrl = static fn (int $page): string => site_url('user/' . $teacher['usernam
     <section aria-labelledby="profile-quizzes-title">
         <hr>
         <div class="section-heading" style="padding-top:12px; padding-bottom:12px;">
-            <div>
-                <h2 id="profile-quizzes-title">Active quizzes</h2>
-            </div>
+            <h4 class="subtitle-profile" id="profile-quizzes-title">Active quizzes</h4>
+            
             <?php if ($pagination['total'] > 0) : ?>
                 <span><?= esc((string) $pagination['total']) ?> quiz<?= $pagination['total'] === 1 ? '' : 'zes' ?>
              </span><?php endif ?>

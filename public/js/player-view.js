@@ -77,7 +77,7 @@
         </div>
         <progress class="player-progress" aria-labelledby="player-progress-label"></progress>
         <section class="card player-question" aria-labelledby="current-question">
-          <h2 id="current-question" tabindex="-1">${escapeHTML(model.question.content)}</h2>
+          <h2 id="current-question">${escapeHTML(model.question.content)}</h2>
           <span class="player-question-media-placeholder" hidden></span>
           <form class="player-answer-form" data-action="answer">
             <fieldset class="player-answers player-answers-columns-${answerColumns}">
@@ -194,7 +194,7 @@
       const fragment = markup(`
         <section class="card player-results-header">
           <span class="player-completion-icon" aria-hidden="true">${escapeHTML(model.emoji)}</span>
-          <h2 class="player-result-heading" tabindex="-1">${escapeHTML(t(model.heading))}</h2>
+          <h2 class="player-result-heading">${escapeHTML(t(model.heading))}</h2>
           <p class="player-result-title">${escapeHTML(model.title)}</p>
           ${identity}
           <div class="player-score">${escapeHTML(`${model.percent}%`)}</div>

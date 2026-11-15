@@ -10,31 +10,47 @@ function fixture(search = '') {
   let component, request;
   const Vue = {createApp(options) { component = options; return {mount() {}}; }};
   const root = {dataset:{publicId:'fixture',workspaceMessages:JSON.stringify({coverFailed:'Cover retained.',invalidTitle:'Invalid title'})}};
-  const api = {request:(...args)=>request(...args),toast(){}};
+  const toasts = [];
+  const api = {request:(...args)=>request(...args),toast:message=>toasts.push(message)};
   const revoked = [];
   const replaced = [];
+  const clipboardWrites = [];
+  const navigator = {clipboard:{writeText:async value=>{clipboardWrites.push(value);}}};
+  const prompts = [];
+  let reloads = 0;
   const fileInputs = [];
-  const location = {href:`https://example.test/quizzes/fixture/edit${search}`,search};
+  const location = {href:`https://example.test/quizzes/fixture/edit${search}`,search,reload(){reloads++;}};
   const history = {state:null,replaceState(_state,_title,url){replaced.push(url);}};
-  vm.runInNewContext(source, {Vue, EduTestApi:api, window:{Vue,EduTestApi:api,confirm:()=>true,location,history,URL},
-    document:{querySelector:()=>root,createElement:()=>{
+  const previouslyFocused = {focus(){this.restored=true;}};
+  const document = {
+    activeElement:previouslyFocused,
+    body:{appendChild(field){field.appended=true;this.lastField=field;}},
+    execCommand(){return true;},
+    querySelector:()=>root,
+    createElement:tag=>{
+      if (tag === 'textarea') return {style:{},focus(){this.focused=true;},select(){this.selected=true;},
+        setSelectionRange(start,end){this.range=[start,end];},remove(){this.removed=true;}};
       const input={files:null,handlers:{},addEventListener(name,handler){this.handlers[name]=handler;},click(){}};
       fileInputs.push(input);
       return input;
-    }}, URL:{revokeObjectURL:url=>revoked.push(url)}, FormData,
+    }
+  };
+  vm.runInNewContext(source, {Vue, EduTestApi:api, window:{Vue,EduTestApi:api,confirm:()=>true,prompt:()=>prompts.push(true),location,history,URL},
+    document,navigator, URL:{revokeObjectURL:url=>revoked.push(url)}, FormData,
     setTimeout,clearTimeout,console});
   const app = component.data();
   app.$nextTick = async fn => {fn?.();};
   app.$refs = {detailsDialog:{showModal(){},close(){}},editTitle:{focus(){}},detailsTitle:{focus(){}}};
   Object.entries(component.methods).forEach(([name,fn])=>{app[name]=fn.bind(app);});
   Object.entries(component.computed).forEach(([name,fn])=>Object.defineProperty(app,name,{get:()=>fn.call(app)}));
-  const quiz={publicId:'fixture',title:'Quiz',description:'',status:'published',updatedAt:'2026-10-31T00:00:00+00:00',timeLimitSec:7200,timeLimitMinutes:120,
+  const quiz={publicId:'fixture',shareUrl:'/q/123456789',title:'Quiz',description:'',status:'published',updatedAt:'2026-10-31T00:00:00+00:00',timeLimitSec:7200,timeLimitMinutes:120,
     askEmail:false,askPhone:false,drawCount:null,shuffleQuestions:false,shuffleOptions:false,feedback:'at_end',
     showAnswers:false,cover:null,mediaLimits:{imageBytes:5242880,audioBytes:20971520,serverBytes:20971520},
     questions:[{id:'1',content:'Question',optionsLayout:'list',explanation:'',media:null,
       options:[{id:'11',code:'a',content:'Yes',isCorrect:true,media:null},{id:'12',code:'b',content:'No',isCorrect:false,media:null}]}]};
   app.applyServerQuiz(clone(quiz)); app.loading=false; app.hydrating=false;
-  return {app,quiz,revoked,replaced,fileInputs,setRequest:fn=>{request=fn;}};
+  return {app,quiz,revoked,replaced,fileInputs,reloads:()=>reloads,navigator,document,toasts,clipboardWrites,prompts,
+    setRequest:fn=>{request=fn;}};
 }
 function deferred() {let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};}
 function response(payload) {
@@ -176,6 +192,52 @@ test('validation failures preserve local changes and use the retry state',async(
   const {app,setRequest}=fixture();app.quiz.title='';
   setRequest(async()=>{throw Object.assign(new Error('Title required'),{status:422,fields:{title:'Required'}});});
   assert.equal(await app.save(true),false);assert.equal(app.saveState,'retry');assert.equal(app.quiz.title,'');
+});
+test('error-banner Retry reloads the builder instead of sending the same stale IDs',async()=>{
+  assert.match(builderView, /v-if="saveState === 'retry'" @click="reloadBuilder\(\)"/);
+  const {app,reloads,setRequest}=fixture();
+  let requests=0;
+  setRequest(async()=>{ requests++; throw new Error('This answer option no longer exists in the question.'); });
+  app.quiz.questions[0].options[0].content='Changed';
+  assert.equal(await app.save(true),false);
+  assert.equal(app.saveState,'retry');
+  app.reloadBuilder();
+  assert.equal(reloads(),1);
+  assert.equal(requests,1);
+});
+test('Copy link uses the async clipboard without opening a dialog',async()=>{
+  const {app,clipboardWrites,toasts,document,prompts}=fixture();
+  await app.copyShare();
+  assert.deepEqual(clipboardWrites,['/q/123456789']);
+  assert.deepEqual(toasts,['Share link copied.']);
+  assert.equal(document.body.lastField,undefined);
+  assert.deepEqual(prompts,[]);
+});
+test('Copy link falls back to a temporary selection when mobile clipboard access is unavailable or denied',async()=>{
+  for (const clipboard of [undefined,{writeText:async()=>{throw new Error('Denied');}}]) {
+    const {app,navigator,document,toasts,prompts}=fixture();
+    navigator.clipboard=clipboard;
+    await app.copyShare();
+    const field=document.body.lastField;
+    assert.equal(field.value,'/q/123456789');
+    assert.equal(field.appended,true);
+    assert.equal(field.focused,true);
+    assert.equal(field.selected,true);
+    assert.deepEqual(field.range,[0,field.value.length]);
+    assert.equal(field.removed,true);
+    assert.equal(document.activeElement.restored,true);
+    assert.deepEqual(toasts,['Share link copied.']);
+    assert.deepEqual(prompts,[]);
+  }
+});
+test('Copy link reports failure without opening a dialog when both copy methods fail',async()=>{
+  const {app,navigator,document,toasts,prompts}=fixture();
+  navigator.clipboard=undefined;
+  document.execCommand=()=>false;
+  await app.copyShare();
+  assert.equal(document.body.lastField.removed,true);
+  assert.deepEqual(toasts,['Could not copy link. Select it from the field above.']);
+  assert.deepEqual(prompts,[]);
 });
 test('details cancel retains previous staged cover; URL cleanup never revokes a live preview',()=>{
   const {app,revoked}=fixture();

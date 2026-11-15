@@ -201,6 +201,13 @@ summary { cursor: pointer; user-select: none; }
   background: var(--bg-color-lower);
   color: var(--text-color-base);
 }
+
+.alert-sm{padding-top:4px!important; padding-bottom:4px!important;}
+
+.alert-info{
+  background-color:#d0edf8;
+}
+
 .form-control:hover:not(:disabled):not([readonly]) { border-color: var(--neutral-400); }
 .form-control:focus { border-color: var(--primary-500); box-shadow: var(--focus-ring); }
 .form-control[aria-invalid="true"] { border-color: var(--red-500); }
@@ -322,7 +329,7 @@ summary { cursor: pointer; user-select: none; }
 .player-results-header h1 { margin: 8px 0; font-size: clamp(2rem, 5vw, 2.6rem); }
 .player-results-header .player-actions { justify-content: center; }
 .player-completion-icon { display: block; min-height: 1em; font-size:56px; line-height: 1.05; filter: drop-shadow(0 10px 14px rgba(67, 56, 202, .15)); }
-.player-result-title { color: var(--neutral-600); font-size: 1.05rem; overflow-wrap: anywhere; }
+.player-result-title { color: var(--neutral-600);  }
 .player-results-header .player-student-identity { margin-top: 8px; }
 .player-score { margin: 8px; color: var(--primary-700); font-size:48px; font-weight: 750; }
 .player-result-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; width: min(100%, 560px); margin:12px auto; text-align: left; }
@@ -337,7 +344,7 @@ summary { cursor: pointer; user-select: none; }
 .player-result-stat strong { color: var(--neutral-900); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
 .player-results-header > .player-help { max-width: 620px; margin: 18px auto 0; }
 .player-results-header > .alert { max-width: 620px; margin: 18px auto 0; text-align: left; }
-.player-results-header > .player-actions { margin-top: 24px; }
+.player-results-header > .player-actions { margin-top:12px; }
 .player-review { margin-top: 30px; }
 .player-review-item { margin-top:8px; margin-bottom:8px; padding:12px; }
 .player-review-item:hover{border-color:var(--primary-400)}
@@ -352,27 +359,31 @@ summary { cursor: pointer; user-select: none; }
     .player-answers-columns-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
+
+  .player-score { margin: 0px;font-size:32px; }
+
     .player-answers-columns-2,
     .player-answers-columns-3,
     .player-answers-columns-4 { grid-template-columns: minmax(0, 1fr); }
     .player-intro { grid-template-columns: minmax(0, 1fr); }
-    .player-cover { height: auto; max-height: 260px; aspect-ratio: 16 / 9; }
-    .student-header-inner { min-height: 64px; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding: 10px 12px; }
+    .player-cover { display: none; }
+    .player-intro h1{ font-size: 28px; font-weight: 700;}
+    .student-header-inner { min-height:56px; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding:6px 10px; }
     .student-brand { font-size: 20px; }
     .student-brand svg { flex-basis: 32px; width: 32px; height: 32px; }
-    .student-header-context { grid-column: 1 / -1; grid-row: 2; justify-self: start; font-size: .88rem; }
+    .student-header-context { display: none;}
     .student-header-quit { grid-column: 2; grid-row: 1; }
-    .student-main { width: calc(100% - 24px); margin-top: 14px; }
-    .player-intro > .card-body, .player-question, .player-results-header { padding: 16px; }
+    .student-main { width: calc(100% - 24px); padding-left: 0; padding-right: 0; }
+    .player-admission{ gap:8px }
+    .player-intro > .card-body, .player-question, .player-results-header { padding: 10px; }
     .player-facts { gap: 14px; grid-template-columns: 1fr; }
     .player-facts > div { display: flex; justify-content: space-between; gap: 14px; }
     .player-facts dt { margin: 0; }
-    .player-option { padding: 16px 12px; gap: 10px; }
-    .player-timers { width: 100%; }
+    
     .player-fullscreen-control { align-items: flex-start; flex-direction: column; }
-    .player-timer {  font-size: .78rem; }
+  
     .player-actions > .btn { flex: 1; }
-    .player-result-stats { grid-template-columns: 1fr; }
+    .player-result-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .player-result-stat { padding: 8; }
     .player-review-item summary { flex-wrap: wrap; }
 }
