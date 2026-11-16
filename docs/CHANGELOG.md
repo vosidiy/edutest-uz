@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Domain-folder hosting instructions (2026-11-16)
+
+- Revised the deployment checklist for keeping the complete project in `public_html/<domain-name>/`, preserving entry-point and CLI paths.
+- Documented deployment-only access rules for private paths, forwarding into `public/`, and the public redirect adjustments required by this layout, including checks through any parent-site alias.
+- Updated the architecture to describe this hosting exception. Local runtime configuration is unchanged; the hosting rules still need to be applied and verified on the server.
+
+### Deployment preparation and schema alignment (2026-11-16)
+
+- Added a Namecheap shared-hosting deployment checklist covering PHP/extensions, MariaDB compatibility, private application placement, production configuration, database/media transfer, functional verification, and backups.
+- Compared all five tables with `docs/db-backup.sql` and removed the canonical schema's 33 additional `CHECK` constraints to match the export; columns, keys, indexes, auto-increment attributes, and foreign keys are unchanged. Business-rule validation remains in application services.
+- Retained explicit InnoDB/utf8mb4 table defaults because the export omits table options; documented that limitation and exact optional MySQL SQL for older installations that still have those checks. The backup and the user's database were not changed.
+- Updated the existing schema test and architecture to reflect the aligned constraints, and adjusted the SQLite fixture adapter to handle tables whose final definitions are MySQL indexes.
+
 ### Builder share-link copying (2026-11-15)
 
 - Replaced the mobile copy-link prompt with a direct selection-based clipboard fallback and an error toast when copying is unavailable.

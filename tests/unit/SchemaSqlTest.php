@@ -15,7 +15,7 @@ final class SchemaSqlTest extends CIUnitTestCase
         $this->assertStringContainsString('password_hash VARCHAR(255)', $sql);
         $this->assertStringContainsString('username VARCHAR(30)', $sql);
         $this->assertStringContainsString('CONSTRAINT uq_users_username UNIQUE (username)', $sql);
-        $this->assertStringContainsString('CONSTRAINT chk_users_public_page_username', $sql);
+        $this->assertStringNotContainsString('CONSTRAINT chk_', $sql);
         $this->assertStringNotContainsString('REGEXP BINARY', $sql);
         $this->assertStringContainsString('password_reset_hash BINARY(32)', $sql);
         $this->assertStringContainsString('user_id BIGINT UNSIGNED NOT NULL', $sql);
@@ -28,7 +28,6 @@ final class SchemaSqlTest extends CIUnitTestCase
         $this->assertStringNotContainsString('show_score', $sql);
         $this->assertStringNotContainsString('show_explain', $sql);
         $this->assertStringContainsString('options_layout VARCHAR(8)', $sql);
-        $this->assertStringContainsString("options_layout IN ('list', 'grid', 'grid-3', 'grid-4')", $sql);
         $this->assertStringContainsString('snapshot JSON NOT NULL', $sql);
         $this->assertStringContainsString('answers JSON NOT NULL', $sql);
         $this->assertStringContainsString('answer_version INT UNSIGNED NOT NULL DEFAULT 0', $sql);
@@ -39,11 +38,6 @@ final class SchemaSqlTest extends CIUnitTestCase
         $this->assertStringNotContainsString('agent VARCHAR', $attemptTable[1]);
         $this->assertStringNotContainsString('token_hash', $sql);
         $this->assertStringNotContainsString('start_key', $sql);
-        $this->assertStringContainsString('CONSTRAINT chk_attempts_score_percent CHECK', $sql);
-        $this->assertStringContainsString("CHECK (status IN ('in_progress', 'completed', 'abandoned'))", $sql);
-        $this->assertStringContainsString("ended_reason IN ('completed', 'exited', 'expired')", $sql);
-        $this->assertStringContainsString("CHECK (media_type IS NULL OR media_type = 'image')", $sql);
-        $this->assertStringContainsString("CHECK (media_type IS NULL OR media_type IN ('image', 'audio'))", $sql);
         $this->assertStringNotContainsString("media_type IN ('image', 'audio', 'video')", $sql);
         preg_match('/CREATE TABLE quizzes \((.*?)\) ENGINE=InnoDB/s', $sql, $quizTable);
         $this->assertArrayHasKey(1, $quizTable);

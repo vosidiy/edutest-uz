@@ -1,12 +1,15 @@
 -- 123test canonical application schema
 -- Target: MySQL 8.4, InnoDB, utf8mb4
--- Last updated: 2026-11-10
+-- Last updated: 2026-11-16
 --
 -- Fresh-install use in phpMyAdmin:
 --   1. Select the intended empty database.
 --   2. Import this file once.
 --
 -- This is a complete fresh-install schema, not an upgrade script.
+-- Columns and keys match docs/db-backup.sql (2026-11-16); that dump has no
+-- CHECK constraints or table options. Keep explicit InnoDB/utf8mb4 defaults
+-- here; confirm the source defaults separately before restoring the dump.
 
 SET NAMES utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 SET time_zone = '+00:00';
@@ -30,20 +33,7 @@ CREATE TABLE users (
   deleted_at DATETIME(6) NULL,
   CONSTRAINT uq_users_email UNIQUE (email),
   CONSTRAINT uq_users_username UNIQUE (username),
-  INDEX ix_users_public (public_page, active, deleted_at),
-  CONSTRAINT chk_users_username CHECK (
-    username IS NULL
-    OR (
-      CHAR_LENGTH(username) BETWEEN 3 AND 30
-    )
-  ),
-  CONSTRAINT chk_users_public_page CHECK (public_page IN (0, 1)),
-  CONSTRAINT chk_users_public_page_username CHECK (public_page = 0 OR username IS NOT NULL),
-  CONSTRAINT chk_users_active CHECK (active IN (0, 1)),
-  CONSTRAINT chk_users_reset_pair CHECK (
-    (password_reset_hash IS NULL AND password_reset_expires_at IS NULL)
-    OR (password_reset_hash IS NOT NULL AND password_reset_expires_at IS NOT NULL)
-  )
+  INDEX ix_users_public (public_page, active, deleted_at)
 ) ENGINE=InnoDB
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_0900_ai_ci;
@@ -72,18 +62,7 @@ CREATE TABLE quizzes (
   CONSTRAINT fk_quizzes_user FOREIGN KEY (user_id) REFERENCES users(id),
   CONSTRAINT uq_quizzes_public_id UNIQUE (public_id),
   CONSTRAINT uq_quizzes_share_token UNIQUE (share_token),
-  INDEX ix_quiz_user (user_id, status, deleted_at, updated_at),
-  CONSTRAINT chk_quizzes_status CHECK (status IN ('draft', 'published')),
-  CONSTRAINT chk_quizzes_feedback CHECK (feedback IN ('at_end', 'after_each')),
-  CONSTRAINT chk_quizzes_ask_email CHECK (ask_email IN (0, 1)),
-  CONSTRAINT chk_quizzes_ask_phone CHECK (ask_phone IN (0, 1)),
-  CONSTRAINT chk_quizzes_shuffle_questions CHECK (shuffle_questions IN (0, 1)),
-  CONSTRAINT chk_quizzes_shuffle_options CHECK (shuffle_options IN (0, 1)),
-  CONSTRAINT chk_quizzes_show_answers CHECK (show_answers IN (0, 1)),
-  CONSTRAINT chk_quizzes_time_limit CHECK (
-    time_limit_sec BETWEEN 30 AND 7200 AND MOD(time_limit_sec, 30) = 0
-  ),
-  CONSTRAINT chk_quizzes_draw_count CHECK (draw_count IS NULL OR draw_count > 0)
+  INDEX ix_quiz_user (user_id, status, deleted_at, updated_at)
 ) ENGINE=InnoDB
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_0900_ai_ci;
@@ -101,14 +80,7 @@ CREATE TABLE questions (
   updated_at DATETIME(6) NOT NULL,
   CONSTRAINT fk_questions_quiz FOREIGN KEY (quiz_id) REFERENCES quizzes(id),
   CONSTRAINT uq_questions_quiz_pos UNIQUE (quiz_id, pos),
-  CONSTRAINT uq_questions_id_quiz UNIQUE (id, quiz_id),
-  CONSTRAINT chk_questions_pos CHECK (pos > 0),
-  CONSTRAINT chk_questions_options_layout CHECK (options_layout IN ('list', 'grid', 'grid-3', 'grid-4')),
-  CONSTRAINT chk_questions_media_type CHECK (media_type IS NULL OR media_type IN ('image', 'audio')),
-  CONSTRAINT chk_questions_media_pair CHECK (
-    (media_type IS NULL AND media_src IS NULL)
-    OR (media_type IS NOT NULL AND media_src IS NOT NULL)
-  )
+  CONSTRAINT uq_questions_id_quiz UNIQUE (id, quiz_id)
 ) ENGINE=InnoDB
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_0900_ai_ci;
@@ -126,14 +98,7 @@ CREATE TABLE question_options (
   updated_at DATETIME(6) NOT NULL,
   CONSTRAINT fk_question_options_question FOREIGN KEY (question_id) REFERENCES questions(id),
   CONSTRAINT uq_question_options_question_pos UNIQUE (question_id, pos),
-  CONSTRAINT uq_question_options_question_code UNIQUE (question_id, code),
-  CONSTRAINT chk_question_options_pos CHECK (pos > 0),
-  CONSTRAINT chk_question_options_correct CHECK (is_correct IN (0, 1)),
-  CONSTRAINT chk_question_options_media_type CHECK (media_type IS NULL OR media_type = 'image'),
-  CONSTRAINT chk_question_options_media_pair CHECK (
-    (media_type IS NULL AND media_src IS NULL)
-    OR (media_type IS NOT NULL AND media_src IS NOT NULL)
-  )
+  CONSTRAINT uq_question_options_question_code UNIQUE (question_id, code)
 ) ENGINE=InnoDB
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_0900_ai_ci;
@@ -162,26 +127,7 @@ CREATE TABLE attempts (
   CONSTRAINT fk_attempts_quiz FOREIGN KEY (quiz_id) REFERENCES quizzes(id),
   CONSTRAINT uq_attempts_public_id UNIQUE (public_id),
   INDEX ix_attempt_report (quiz_id, status, started_at),
-  INDEX ix_attempt_expiry (status, expires_at),
-  CONSTRAINT chk_attempts_snapshot CHECK (JSON_TYPE(snapshot) = 'OBJECT'),
-  CONSTRAINT chk_attempts_answers CHECK (JSON_TYPE(answers) = 'ARRAY'),
-  CONSTRAINT chk_attempts_status CHECK (status IN ('in_progress', 'completed', 'abandoned')),
-  CONSTRAINT chk_attempts_ended_reason CHECK (
-    ended_reason IS NULL OR ended_reason IN ('completed', 'exited', 'expired')
-  ),
-  CONSTRAINT chk_attempts_late_sync CHECK (late_sync IN (0, 1)),
-  CONSTRAINT chk_attempts_terminal_fields CHECK (
-    (status = 'in_progress' AND finished_at IS NULL AND ended_reason IS NULL AND score IS NULL AND percent IS NULL)
-    OR (status IN ('completed', 'abandoned') AND finished_at IS NOT NULL AND ended_reason IS NOT NULL AND score IS NOT NULL AND percent IS NOT NULL)
-  ),
-  CONSTRAINT chk_attempts_abandoned_reason CHECK (status <> 'abandoned' OR ended_reason = 'expired'),
-  CONSTRAINT chk_attempts_max_score CHECK (max_score > 0),
-  CONSTRAINT chk_attempts_score CHECK (score IS NULL OR score <= max_score),
-  CONSTRAINT chk_attempts_percent CHECK (percent IS NULL OR percent BETWEEN 0 AND 100),
-  CONSTRAINT chk_attempts_score_percent CHECK (
-    (score IS NULL AND percent IS NULL)
-    OR (score IS NOT NULL AND percent = ROUND(score * 100 / max_score, 2))
-  )
+  INDEX ix_attempt_expiry (status, expires_at)
 ) ENGINE=InnoDB
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_0900_ai_ci;

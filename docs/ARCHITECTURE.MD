@@ -4,7 +4,7 @@
 
 123test is a server-rendered CodeIgniter 4 application running on PHP 8.4 and MySQL 8.4. It uses plain JavaScript/CSS for the student player, loaded as ordered classic scripts through one browser namespace, and a pinned local Vue 3 production build for the quiz builder. There is no Node/Vite production runtime or SPA router.
 
-`public/` is the web root. Runtime data and quiz media live under `writable/`. Environment values and secrets belong in the untracked root `.env`.
+`public/` contains the HTTP entry point and public assets. Normally it is the web root; on the constrained shared-hosting deployment, the complete project stays in `public_html/<domain-name>/`, with root access rules forwarding requests into `public/` and denying private paths. See the deployment checklist for the required hosting rules. Runtime data and quiz media live under `writable/`. Environment values and secrets belong in the untracked root `.env`.
 
 Controllers parse HTTP input and return responses. Services own validation, transactions, scoring, and state changes. Models provide narrow persistence. Explicit routes are used with automatic routing disabled.
 
@@ -13,6 +13,8 @@ The CodeIgniter application timezone is Asia/Tashkent, which supplies calendar b
 ## Data model
 
 `docs/schema.sql` is the complete fresh-install source of truth. The project does not use migrations.
+
+The schema matches the columns, primary/unique keys, indexes, auto-increment attributes, and foreign keys in the 2026-11-16 `docs/db-backup.sql` export. That export contains no `CHECK` constraints, so the canonical schema likewise relies on application services for business-rule validation. Database types, nullability, unique keys, and foreign keys still apply. The export omits table engine and default charset/collation options; the canonical schema explicitly retains InnoDB and `utf8mb4_0900_ai_ci`. Full physical parity requires confirming the source table options separately. See [schema comparison](SCHEMA_COMPARISON.md).
 
 ### `users` and public teacher pages
 
@@ -169,3 +171,5 @@ The per-quiz attempt list contains only attempts with an authoritative `finished
 - The raw attempt public ID is intentionally an MVP-strength cookie credential. Anyone who learns it and manually reproduces the cookie can act as that attempt until the server-side grace window closes.
 
 For a fresh installation, import `docs/schema.sql` only into an empty database. Existing databases are updated manually through phpMyAdmin with change-specific SQL supplied to the developer; the application never runs schema changes automatically.
+
+The [Namecheap deployment checklist](DEPLOYMENT.md) covers production configuration, the intact project structure inside a domain folder under `public_html`, HTTP access restrictions, database import, and functional launch verification. MySQL 8.4 remains the project target; Namecheap shared hosting currently advertises MariaDB, so deployment there requires a compatibility check on the assigned server before launch.

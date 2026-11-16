@@ -43,6 +43,7 @@ abstract class PlayerTestCase extends CIUnitTestCase
                 continue;
             }
             $body = preg_replace('/^\s*INDEX [^\n]*\n/m', '', $table[2]);
+            $body = preg_replace('/,\s*$/', '', $body);
             $body = str_replace('BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY', 'INTEGER PRIMARY KEY AUTOINCREMENT', $body);
             $body = preg_replace('/JSON_TYPE\(([^)]+)\)/', 'UPPER(JSON_TYPE($1))', $body);
             $body = str_replace('JSON_LENGTH(', 'JSON_ARRAY_LENGTH(', $body);
